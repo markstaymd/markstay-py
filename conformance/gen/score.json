@@ -1,0 +1,153 @@
+{
+  "category": "score",
+  "tier": "gen",
+  "vectors": [
+    {
+      "fn": "ratio",
+      "a": "the quick brown fox",
+      "b": "the quick red fox",
+      "score": 0.8333333333333334,
+      "name": "score-000"
+    },
+    {
+      "fn": "ratio",
+      "a": "",
+      "b": "x",
+      "score": 0.0,
+      "name": "score-001"
+    },
+    {
+      "fn": "ratio",
+      "a": "x",
+      "b": "",
+      "score": 0.0,
+      "name": "score-002"
+    },
+    {
+      "fn": "ratio",
+      "a": "",
+      "b": "",
+      "score": 0.0,
+      "name": "score-003"
+    },
+    {
+      "fn": "ratio",
+      "a": "same",
+      "b": "same",
+      "score": 1.0,
+      "name": "score-004"
+    },
+    {
+      "fn": "ratio",
+      "a": "tide",
+      "b": "diet",
+      "score": 0.25,
+      "name": "score-005"
+    },
+    {
+      "fn": "body_score",
+      "quote": "The validation stage checks three things.",
+      "candidate": "The validation stage checks three things.",
+      "score": 1.0,
+      "name": "score-006"
+    },
+    {
+      "fn": "body_score",
+      "quote": "A short paragraph about retries.",
+      "candidate": "A short paragraph about retries with more detail appended here.",
+      "score": 0.6736842105263158,
+      "name": "score-007"
+    },
+    {
+      "fn": "body_score",
+      "quote": "the ingest stage retries three times",
+      "candidate": "the persist stage retries five times",
+      "score": 0.8055555555555556,
+      "name": "score-008"
+    },
+    {
+      "fn": "body_score",
+      "quote": "completely unrelated text xyz",
+      "candidate": "the quick brown fox jumps",
+      "score": 0.14814814814814814,
+      "name": "score-009"
+    },
+    {
+      "fn": "body_score",
+      "quote": "contained",
+      "candidate": "this sentence has contained inside it somewhere",
+      "score": 0.32142857142857145,
+      "name": "score-010"
+    },
+    {
+      "fn": "context_bonus",
+      "prefix": "preceding context here",
+      "suffix": "following context there",
+      "prev": "...the preceding context here",
+      "next": "following context there and more...",
+      "bonus": 0.0827924273157539,
+      "name": "score-011"
+    },
+    {
+      "fn": "context_bonus",
+      "prefix": "",
+      "suffix": "suffix only",
+      "prev": "irrelevant",
+      "next": "suffix only matches",
+      "bonus": 0.03666666666666667,
+      "name": "score-012"
+    },
+    {
+      "fn": "context_bonus",
+      "prefix": "prefix only",
+      "suffix": "",
+      "prev": "a prefix only here",
+      "next": "irrelevant",
+      "bonus": 0.03793103448275862,
+      "name": "score-013"
+    },
+    {
+      "fn": "best_match",
+      "quote": "the quick brown fox jumps",
+      "prefix": "",
+      "suffix": "",
+      "candidates": [
+        "the quick brown fox jumps",
+        "a totally different sentence here",
+        "the quick brown fox leaps high"
+      ],
+      "index": 0,
+      "score": 1.0,
+      "runner_up": 0.8,
+      "name": "score-014"
+    },
+    {
+      "fn": "best_match",
+      "quote": "completely unrelated text xyz",
+      "prefix": "",
+      "suffix": "",
+      "candidates": [
+        "the quick brown fox jumps",
+        "a totally different sentence here"
+      ],
+      "index": 1,
+      "score": 0.3548387096774194,
+      "runner_up": 0.14814814814814814,
+      "name": "score-015"
+    },
+    {
+      "fn": "best_match",
+      "quote": "identical block body",
+      "prefix": "",
+      "suffix": "",
+      "candidates": [
+        "identical block body",
+        "identical block body"
+      ],
+      "index": 1,
+      "score": 1.0,
+      "runner_up": 1.0,
+      "name": "score-016"
+    }
+  ]
+}

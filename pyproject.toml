@@ -1,0 +1,55 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "markstay"
+dynamic = ["version"]
+description = "Python reference implementation of the markstay spec (v1.1): source-level block identity for Markdown"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "markstaymd", email = "markstaymd@users.noreply.github.com" }]
+keywords = [
+    "markstay",
+    "markdown",
+    "block-identity",
+    "content-addressed",
+    "diff",
+    "linter",
+    "spec",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Text Processing :: Markup :: Markdown",
+    "Topic :: Software Development :: Quality Assurance",
+]
+dependencies = []
+
+[project.optional-dependencies]
+# §5.2 CommonMark-tree segmentation (loose lists / blank-line fences as one
+# block). The default blank-line model is dependency-free; this is the opt-in.
+commonmark = ["markdown-it-py>=2"]
+
+[project.scripts]
+markstay = "markstay.cli:main"
+
+[project.urls]
+Homepage = "https://markstay.org"
+Repository = "https://github.com/markstaymd/markstay-py"
+Issues = "https://github.com/markstaymd/markstay-py/issues"
+
+[tool.hatch.version]
+path = "src/markstay/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/markstay"]
+
+[tool.hatch.build.targets.sdist]
+# Ship the importable package, the README/LICENSE, and the conformance corpus +
+# tests so `git clone && pytest` (and a downloaded sdist) verify standalone.
+include = ["src/markstay", "conformance", "tests", "README.md", "LICENSE"]

@@ -1,0 +1,126 @@
+{
+  "category": "hash",
+  "tier": "spec",
+  "vectors": [
+    {
+      "name": "crlf-to-lf",
+      "body": "line one\r\nline two\r\n",
+      "normalized": "line one\nline two",
+      "sha256": "b6858b03a6cae635deeaeab09a74e598979b72c917cbfff0bb3fe2cd05111dbc",
+      "truncations": {
+        "4": "b685",
+        "8": "b6858b03",
+        "12": "b6858b03a6ca",
+        "16": "b6858b03a6cae635"
+      }
+    },
+    {
+      "name": "lone-cr-to-lf",
+      "body": "a\rb\rc",
+      "normalized": "a\nb\nc",
+      "sha256": "ea7fb08b7a2dc4619ffb7c7bb38d95a2047935fa165d71b12efd3852a2e6d0cc",
+      "truncations": {
+        "4": "ea7f",
+        "8": "ea7fb08b",
+        "12": "ea7fb08b7a2d",
+        "16": "ea7fb08b7a2dc461"
+      }
+    },
+    {
+      "name": "trailing-ws-strip",
+      "body": "text with trailing   \nand tab\t\n",
+      "normalized": "text with trailing\nand tab",
+      "sha256": "851c9a99999809abb26848ce30836c6e0bc2f5c9d50bfef062ab46d9268fd8c2",
+      "truncations": {
+        "4": "851c",
+        "8": "851c9a99",
+        "12": "851c9a999998",
+        "16": "851c9a99999809ab"
+      }
+    },
+    {
+      "name": "leading-trailing-blanks",
+      "body": "\n\n  \nhello\nworld\n\n\n",
+      "normalized": "hello\nworld",
+      "sha256": "26c60a61d01db5836ca70fefd44a6a016620413c8ef5f259a6c5612d4f79d3b8",
+      "truncations": {
+        "4": "26c6",
+        "8": "26c60a61",
+        "12": "26c60a61d01d",
+        "16": "26c60a61d01db583"
+      }
+    },
+    {
+      "name": "fence-internal-trailing-ws",
+      "body": "```\ncode line   \n\tmore\t\n```",
+      "normalized": "```\ncode line\n\tmore\n```",
+      "sha256": "656ab155122e645c254fa3af257d4028a7e56ceddacee33369f704834663bfe5",
+      "truncations": {
+        "4": "656a",
+        "8": "656ab155",
+        "12": "656ab155122e",
+        "16": "656ab155122e645c"
+      }
+    },
+    {
+      "name": "non-ascii-utf8",
+      "body": "café au lait",
+      "normalized": "café au lait",
+      "sha256": "7c413039fbb2248e2b18b98e7a8d4d85bdcac7cd79b9477a0923f97e3a1f2b50",
+      "truncations": {
+        "4": "7c41",
+        "8": "7c413039",
+        "12": "7c413039fbb2",
+        "16": "7c413039fbb2248e"
+      }
+    },
+    {
+      "name": "truncation-precision",
+      "body": "The paragraph being identified.",
+      "normalized": "The paragraph being identified.",
+      "sha256": "370fbf063537584c44c6aa81671b9e726c6e379749168d1cb245f698da9ff074",
+      "truncations": {
+        "4": "370f",
+        "8": "370fbf06",
+        "12": "370fbf063537",
+        "16": "370fbf063537584c"
+      }
+    },
+    {
+      "name": "empty-body",
+      "body": "",
+      "normalized": "",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "truncations": {
+        "4": "e3b0",
+        "8": "e3b0c442",
+        "12": "e3b0c44298fc",
+        "16": "e3b0c44298fc1c14"
+      }
+    },
+    {
+      "name": "whitespace-only",
+      "body": "   \n  \n",
+      "normalized": "",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "truncations": {
+        "4": "e3b0",
+        "8": "e3b0c442",
+        "12": "e3b0c44298fc",
+        "16": "e3b0c44298fc1c14"
+      }
+    },
+    {
+      "name": "ascii-trailing-ws-stripped-nbsp-kept",
+      "body": "line with tab\t\nline with nbsp \nline with both  \t",
+      "normalized": "line with tab\nline with nbsp \nline with both  ",
+      "sha256": "ca1a610cb36730454c5a9c0a487e697ef9b324e18055cbdddc1d7d2bef7f40c8",
+      "truncations": {
+        "4": "ca1a",
+        "8": "ca1a610c",
+        "12": "ca1a610cb367",
+        "16": "ca1a610cb3673045"
+      }
+    }
+  ]
+}

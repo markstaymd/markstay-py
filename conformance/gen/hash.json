@@ -1,0 +1,174 @@
+{
+  "category": "hash",
+  "tier": "gen",
+  "vectors": [
+    {
+      "body": "A single normalized paragraph.",
+      "normalized": "A single normalized paragraph.",
+      "sha256": "23d8cab5b86a660888effcf0c4371a2aadb5a30beb1be8b4e14c8bfc51739154",
+      "truncations": {
+        "4": "23d8",
+        "8": "23d8cab5",
+        "12": "23d8cab5b86a",
+        "16": "23d8cab5b86a6608"
+      },
+      "name": "hash-000"
+    },
+    {
+      "body": "trailing spaces here   \nand a tab\there\t",
+      "normalized": "trailing spaces here\nand a tab\there",
+      "sha256": "7b5e1ac324fa21ecc3523b342bb2c4d16a8a54a16d58d904f9dfd12243f6c5d3",
+      "truncations": {
+        "4": "7b5e",
+        "8": "7b5e1ac3",
+        "12": "7b5e1ac324fa",
+        "16": "7b5e1ac324fa21ec"
+      },
+      "name": "hash-001"
+    },
+    {
+      "body": "windows\r\nline\r\nendings",
+      "normalized": "windows\nline\nendings",
+      "sha256": "0ce3289bdb1ff9c4923c4edb0d37e54292ce18e647611419a9117909fb602249",
+      "truncations": {
+        "4": "0ce3",
+        "8": "0ce3289b",
+        "12": "0ce3289bdb1f",
+        "16": "0ce3289bdb1ff9c4"
+      },
+      "name": "hash-002"
+    },
+    {
+      "body": "lone\rcarriage\rreturns",
+      "normalized": "lone\ncarriage\nreturns",
+      "sha256": "33c5d7f8e9e24720f276c251b18d28c80b1bf6c8d60deb39b01167bf5685e7c2",
+      "truncations": {
+        "4": "33c5",
+        "8": "33c5d7f8",
+        "12": "33c5d7f8e9e2",
+        "16": "33c5d7f8e9e24720"
+      },
+      "name": "hash-003"
+    },
+    {
+      "body": "\n\n\nleading and trailing blank lines\n\n\n",
+      "normalized": "leading and trailing blank lines",
+      "sha256": "88354b446814a0b4c0e33cb99cd60418104bc44438f62ff6096000189ce3450f",
+      "truncations": {
+        "4": "8835",
+        "8": "88354b44",
+        "12": "88354b446814",
+        "16": "88354b446814a0b4"
+      },
+      "name": "hash-004"
+    },
+    {
+      "body": "   \n  leading blank-ish lines with whitespace\nbody line\n   \n",
+      "normalized": "  leading blank-ish lines with whitespace\nbody line",
+      "sha256": "85c6052d5f101575261ccf0cdeb93436e5929104f3107408261915971d5bb83b",
+      "truncations": {
+        "4": "85c6",
+        "8": "85c6052d",
+        "12": "85c6052d5f10",
+        "16": "85c6052d5f101575"
+      },
+      "name": "hash-005"
+    },
+    {
+      "body": "```\ncode with trailing ws   \n\tindented\t\n```",
+      "normalized": "```\ncode with trailing ws\n\tindented\n```",
+      "sha256": "08af614812a08ac12d45b113e923f040667a69bdba12a22ba169b9db69a40072",
+      "truncations": {
+        "4": "08af",
+        "8": "08af6148",
+        "12": "08af614812a0",
+        "16": "08af614812a08ac1"
+      },
+      "name": "hash-006"
+    },
+    {
+      "body": "café au lait , non-ASCII UTF-8 body",
+      "normalized": "café au lait , non-ASCII UTF-8 body",
+      "sha256": "60627234380043936d04070735bd0b17793e13373af36c734a6fae6a5d5fd850",
+      "truncations": {
+        "4": "6062",
+        "8": "60627234",
+        "12": "606272343800",
+        "16": "6062723438004393"
+      },
+      "name": "hash-007"
+    },
+    {
+      "body": "emoji body 😀 stays stable",
+      "normalized": "emoji body 😀 stays stable",
+      "sha256": "11f515982f0d3bde2de3245f973436fdb2f7d051c244857bc567866cbea8ccab",
+      "truncations": {
+        "4": "11f5",
+        "8": "11f51598",
+        "12": "11f515982f0d",
+        "16": "11f515982f0d3bde"
+      },
+      "name": "hash-008"
+    },
+    {
+      "body": "line one\nline two\nline three",
+      "normalized": "line one\nline two\nline three",
+      "sha256": "26a5cd654e540e91433a2f237e2709743fc4753e764deb74ed37299c2f338ece",
+      "truncations": {
+        "4": "26a5",
+        "8": "26a5cd65",
+        "12": "26a5cd654e54",
+        "16": "26a5cd654e540e91"
+      },
+      "name": "hash-009"
+    },
+    {
+      "body": "",
+      "normalized": "",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "truncations": {
+        "4": "e3b0",
+        "8": "e3b0c442",
+        "12": "e3b0c44298fc",
+        "16": "e3b0c44298fc1c14"
+      },
+      "name": "hash-010"
+    },
+    {
+      "body": "   ",
+      "normalized": "",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "truncations": {
+        "4": "e3b0",
+        "8": "e3b0c442",
+        "12": "e3b0c44298fc",
+        "16": "e3b0c44298fc1c14"
+      },
+      "name": "hash-011"
+    },
+    {
+      "body": "\n\n",
+      "normalized": "",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "truncations": {
+        "4": "e3b0",
+        "8": "e3b0c442",
+        "12": "e3b0c44298fc",
+        "16": "e3b0c44298fc1c14"
+      },
+      "name": "hash-012"
+    },
+    {
+      "body": "one",
+      "normalized": "one",
+      "sha256": "7692c3ad3540bb803c020b3aee66cd8887123234ea0c6e7143c0add73ff431ed",
+      "truncations": {
+        "4": "7692",
+        "8": "7692c3ad",
+        "12": "7692c3ad3540",
+        "16": "7692c3ad3540bb80"
+      },
+      "name": "hash-013"
+    }
+  ]
+}

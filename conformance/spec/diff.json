@@ -1,0 +1,53 @@
+{
+  "category": "diff",
+  "tier": "spec",
+  "vectors": [
+    {
+      "name": "dropped-id",
+      "before": "A.\n<!-- stay:a -->\n\nB.\n<!-- stay:b -->\n",
+      "after": "A.\n<!-- stay:a -->\n\nB rewritten without its marker.\n",
+      "findings": [
+        { "level": "error", "code": "DROPPED_ID", "id": "b" }
+      ]
+    },
+    {
+      "name": "duplicated-id",
+      "before": "A.\n<!-- stay:a -->\n",
+      "after": "A.\n<!-- stay:a -->\n\nCopy of A.\n<!-- stay:a -->\n",
+      "findings": [
+        { "level": "error", "code": "DUPLICATED_ID", "id": "a" }
+      ]
+    },
+    {
+      "name": "new-id-is-info",
+      "before": "A.\n<!-- stay:a -->\n",
+      "after": "A.\n<!-- stay:a -->\n\nBrand new block.\n<!-- stay:c -->\n",
+      "findings": [
+        { "level": "info", "code": "NEW_ID", "id": "c" }
+      ]
+    },
+    {
+      "name": "relocation-swap",
+      "before": "Alpha content.\n<!-- stay:aaa -->\n\nBeta content.\n<!-- stay:bbb -->\n",
+      "after": "Beta content.\n<!-- stay:aaa -->\n\nAlpha content.\n<!-- stay:bbb -->\n",
+      "findings": [
+        { "level": "error", "code": "RELOCATED_ID", "id": "aaa" },
+        { "level": "error", "code": "RELOCATED_ID", "id": "bbb" }
+      ]
+    },
+    {
+      "name": "inplace-edit-is-drift-not-relocation",
+      "before": "Alpha content.\n<!-- stay:aaa -->\n",
+      "after": "Alpha content, now revised.\n<!-- stay:aaa -->\n",
+      "findings": [
+        { "level": "warn", "code": "HASH_DRIFT", "id": "aaa" }
+      ]
+    },
+    {
+      "name": "unchanged-is-clean",
+      "before": "Keep me.\n<!-- stay:k -->\n",
+      "after": "Keep me.\n<!-- stay:k -->\n",
+      "findings": []
+    }
+  ]
+}

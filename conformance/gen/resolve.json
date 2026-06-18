@@ -1,0 +1,96 @@
+{
+  "category": "resolve",
+  "tier": "gen",
+  "vectors": [
+    {
+      "before": "First paragraph here.\n<!-- stay:p1 -->\n\nSecond paragraph here.\n<!-- stay:p2 -->\n",
+      "after": "Second paragraph here.\n<!-- stay:p2 -->\n\nFirst paragraph here.\n<!-- stay:p1 -->\n",
+      "threshold": 0.5,
+      "margin": 0.05,
+      "resolutions": {
+        "p1": {
+          "method": "marker",
+          "target": 1,
+          "score": 1.0
+        },
+        "p2": {
+          "method": "marker",
+          "target": 0,
+          "score": 1.0
+        }
+      },
+      "name": "resolve-000"
+    },
+    {
+      "before": "First paragraph here.\n<!-- stay:p1 -->\n\nSecond paragraph here.\n<!-- stay:p2 -->\n",
+      "after": "Second paragraph here.\n\nFirst paragraph here.\n",
+      "threshold": 0.5,
+      "margin": 0.05,
+      "resolutions": {
+        "p1": {
+          "method": "hash",
+          "target": 1,
+          "score": 1.0
+        },
+        "p2": {
+          "method": "hash",
+          "target": 0,
+          "score": 1.0
+        }
+      },
+      "name": "resolve-001"
+    },
+    {
+      "before": "First paragraph here.\n<!-- stay:p1 -->\n\nSecond paragraph here.\n<!-- stay:p2 -->\n",
+      "after": "First paragraph here.\n",
+      "threshold": 0.5,
+      "margin": 0.05,
+      "resolutions": {
+        "p1": {
+          "method": "hash",
+          "target": 0,
+          "score": 1.0
+        },
+        "p2": {
+          "method": "quote",
+          "target": 0,
+          "score": 0.7906976744186046
+        }
+      },
+      "name": "resolve-002"
+    },
+    {
+      "before": "The order pipeline ingests and normalizes partner messages.\n<!-- stay:ing -->\n\nInvalid payloads route to a dead-letter queue for replay.\n<!-- stay:dlq -->\n",
+      "after": "Partner messages are ingested and normalized by the pipeline.\n\nBad payloads are sent to a dead-letter queue so they can be replayed.\n",
+      "threshold": 0.5,
+      "margin": 0.05,
+      "resolutions": {
+        "ing": {
+          "method": "detached",
+          "target": null,
+          "score": 0.3208333333333333
+        },
+        "dlq": {
+          "method": "quote",
+          "target": 1,
+          "score": 0.7740691292093161
+        }
+      },
+      "name": "resolve-003"
+    },
+    {
+      "before": "# Retry Policy Reference\n\n<!-- stay:pre -->\nThe ingest stage retries failed operations three times with exponential backoff before routing the message to the dead-letter queue for manual review.\n\nThe persist stage retries failed operations five times with exponential backoff before routing the message to the dead-letter queue for manual review.\n\nThe dispatch stage retries failed operations seven times with exponential backoff before routing the message to the dead-letter queue for manual review.\n\nOperators can override these defaults per partner, but every override expires after thirty days so that stale tuning never silently persists in production.\n\nThe checklist before a deployment is short and must be completed in order without skipping any step.\n\nThe checklist before a rollback is short and must be completed in order without skipping any step.\n\nEach completed run is recorded in the audit log together with the operator name, the affected partner, and the exact timestamp of the change.\n",
+      "after": "# Retry Policy Reference\n\nThe ingest stage retries failed operations three times with exponential backoff before routing the message to the dead-letter queue for manual review.\n\nThe persist stage retries failed operations five times with exponential backoff before routing the message to the dead-letter queue for manual review.\n\nThe dispatch stage retries failed operations seven times with exponential backoff before routing the message to the dead-letter queue for manual review.\n\nOperators can override these defaults per partner, but every override expires after thirty days so that stale tuning never silently persists in production.\n\nThe checklist before a deployment is short and must be completed in order without skipping any step.\n\nThe checklist before a rollback is short and must be completed in order without skipping any step.\n\nEach completed run is recorded in the audit log together with the operator name, the affected partner, and the exact timestamp of the change.\n",
+      "threshold": 0.5,
+      "margin": 0.05,
+      "resolutions": {
+        "pre": {
+          "method": "hash",
+          "target": 1,
+          "score": 1.0
+        }
+      },
+      "name": "resolve-004"
+    }
+  ]
+}

@@ -1,0 +1,173 @@
+{
+  "category": "markers",
+  "tier": "gen",
+  "vectors": [
+    {
+      "text": "Para.\n<!-- stay:8f24 hash=sha256:7a9c -->",
+      "markers": [
+        {
+          "id": "8f24",
+          "hash": "7a9c",
+          "raw": "<!-- stay:8f24 hash=sha256:7a9c -->",
+          "syntax": "html",
+          "line": 2,
+          "malformed": false
+        }
+      ],
+      "name": "markers-000"
+    },
+    {
+      "text": "Para.\n<!-- stay:a1b2 -->",
+      "markers": [
+        {
+          "id": "a1b2",
+          "hash": null,
+          "raw": "<!-- stay:a1b2 -->",
+          "syntax": "html",
+          "line": 2,
+          "malformed": false
+        }
+      ],
+      "name": "markers-001"
+    },
+    {
+      "text": "MDX.\n{/* stay:mdx1 hash=sha256:ABCD */}",
+      "markers": [
+        {
+          "id": "mdx1",
+          "hash": "abcd",
+          "raw": "{/* stay:mdx1 hash=sha256:ABCD */}",
+          "syntax": "mdx",
+          "line": 2,
+          "malformed": false
+        }
+      ],
+      "name": "markers-002"
+    },
+    {
+      "text": "<!-- stay:note=hello -->",
+      "markers": [
+        {
+          "id": null,
+          "hash": null,
+          "raw": "<!-- stay:note=hello -->",
+          "syntax": "html",
+          "line": 1,
+          "malformed": true
+        }
+      ],
+      "name": "markers-003"
+    },
+    {
+      "text": "<!-- stay:id1 x-acme-author=\"jo\" hash=sha256:dead -->",
+      "markers": [
+        {
+          "id": "id1",
+          "hash": "dead",
+          "raw": "<!-- stay:id1 x-acme-author=\"jo\" hash=sha256:dead -->",
+          "syntax": "html",
+          "line": 1,
+          "malformed": false
+        }
+      ],
+      "name": "markers-004"
+    },
+    {
+      "text": "<!-- stay:id2 hash=sha256:DEADbeef extra=1 -->",
+      "markers": [
+        {
+          "id": "id2",
+          "hash": "deadbeef",
+          "raw": "<!-- stay:id2 hash=sha256:DEADbeef extra=1 -->",
+          "syntax": "html",
+          "line": 1,
+          "malformed": false
+        }
+      ],
+      "name": "markers-005"
+    },
+    {
+      "text": "reordered\n<!-- stay:r1 hash=sha256:abcd k=v -->\nmore",
+      "markers": [
+        {
+          "id": "r1",
+          "hash": "abcd",
+          "raw": "<!-- stay:r1 hash=sha256:abcd k=v -->",
+          "syntax": "html",
+          "line": 2,
+          "malformed": false
+        }
+      ],
+      "name": "markers-006"
+    },
+    {
+      "text": "line0\nline1\n<!-- stay:onln2 -->\nline3",
+      "markers": [
+        {
+          "id": "onln2",
+          "hash": null,
+          "raw": "<!-- stay:onln2 -->",
+          "syntax": "html",
+          "line": 3,
+          "malformed": false
+        }
+      ],
+      "name": "markers-007"
+    },
+    {
+      "text": "```\n<!-- stay:infence hash=sha256:1234 -->\n```",
+      "markers": [
+        {
+          "id": "infence",
+          "hash": "1234",
+          "raw": "<!-- stay:infence hash=sha256:1234 -->",
+          "syntax": "html",
+          "line": 2,
+          "malformed": false
+        }
+      ],
+      "name": "markers-008"
+    },
+    {
+      "text": "two\n<!-- stay:m1 -->\n<!-- stay:m2 hash=sha256:beef -->",
+      "markers": [
+        {
+          "id": "m1",
+          "hash": null,
+          "raw": "<!-- stay:m1 -->",
+          "syntax": "html",
+          "line": 2,
+          "malformed": false
+        },
+        {
+          "id": "m2",
+          "hash": "beef",
+          "raw": "<!-- stay:m2 hash=sha256:beef -->",
+          "syntax": "html",
+          "line": 3,
+          "malformed": false
+        }
+      ],
+      "name": "markers-009"
+    },
+    {
+      "text": "<!-- stay:multi\nhash=sha256:cafe -->",
+      "markers": [
+        {
+          "id": "multi",
+          "hash": "cafe",
+          "raw": "<!-- stay:multi\nhash=sha256:cafe -->",
+          "syntax": "html",
+          "line": 1,
+          "malformed": false
+        }
+      ],
+      "name": "markers-010"
+    },
+    {
+      "text": "no markers here at all",
+      "markers": [],
+      "name": "markers-011"
+    }
+  ]
+}

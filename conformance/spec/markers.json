@@ -1,0 +1,70 @@
+{
+  "category": "markers",
+  "tier": "spec",
+  "vectors": [
+    {
+      "name": "html-basic",
+      "text": "Para.\n<!-- stay:8f24 hash=sha256:7a9c -->",
+      "markers": [
+        { "id": "8f24", "hash": "7a9c", "raw": "<!-- stay:8f24 hash=sha256:7a9c -->", "syntax": "html", "line": 2, "malformed": false }
+      ]
+    },
+    {
+      "name": "id-only-no-hash",
+      "text": "Para.\n<!-- stay:a1b2 -->",
+      "markers": [
+        { "id": "a1b2", "hash": null, "raw": "<!-- stay:a1b2 -->", "syntax": "html", "line": 2, "malformed": false }
+      ]
+    },
+    {
+      "name": "mdx-uppercase-hash-lowered",
+      "text": "An MDX block.\n{/* stay:mdx1 hash=sha256:ABCD */}",
+      "markers": [
+        { "id": "mdx1", "hash": "abcd", "raw": "{/* stay:mdx1 hash=sha256:ABCD */}", "syntax": "mdx", "line": 2, "malformed": false }
+      ]
+    },
+    {
+      "name": "malformed-no-id",
+      "text": "<!-- stay:note=hello -->",
+      "markers": [
+        { "id": null, "hash": null, "raw": "<!-- stay:note=hello -->", "syntax": "html", "line": 1, "malformed": true }
+      ]
+    },
+    {
+      "name": "reordered-attrs-free-order",
+      "text": "Body.\n<!-- stay:r1 hash=sha256:dead k=v -->",
+      "markers": [
+        { "id": "r1", "hash": "dead", "raw": "<!-- stay:r1 hash=sha256:dead k=v -->", "syntax": "html", "line": 2, "malformed": false }
+      ]
+    },
+    {
+      "name": "quoted-attr-before-hash",
+      "text": "Body.\n<!-- stay:r2 x-acme-author=\"jo\" hash=sha256:beef -->",
+      "markers": [
+        { "id": "r2", "hash": "beef", "raw": "<!-- stay:r2 x-acme-author=\"jo\" hash=sha256:beef -->", "syntax": "html", "line": 2, "malformed": false }
+      ]
+    },
+    {
+      "name": "two-markers-position-order",
+      "text": "two\n<!-- stay:m1 -->\n<!-- stay:m2 hash=sha256:beef -->",
+      "markers": [
+        { "id": "m1", "hash": null, "raw": "<!-- stay:m1 -->", "syntax": "html", "line": 2, "malformed": false },
+        { "id": "m2", "hash": "beef", "raw": "<!-- stay:m2 hash=sha256:beef -->", "syntax": "html", "line": 3, "malformed": false }
+      ]
+    },
+    {
+      "name": "first-token-with-equals-is-malformed-no-rescue",
+      "text": "<!-- stay:note=hello stay:ok -->",
+      "markers": [
+        { "id": null, "hash": null, "raw": "<!-- stay:note=hello stay:ok -->", "syntax": "html", "line": 1, "malformed": true }
+      ]
+    },
+    {
+      "name": "first-token-with-equals-malformed-across-newline",
+      "text": "<!-- stay:bad=1\nstay:ok -->",
+      "markers": [
+        { "id": null, "hash": null, "raw": "<!-- stay:bad=1\nstay:ok -->", "syntax": "html", "line": 1, "malformed": true }
+      ]
+    }
+  ]
+}

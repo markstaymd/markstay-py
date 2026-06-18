@@ -1,0 +1,245 @@
+{
+  "category": "parse",
+  "tier": "gen",
+  "vectors": [
+    {
+      "doc": "Just one paragraph.\n<!-- stay:p1 -->\n",
+      "blocks": [
+        {
+          "content": "Just one paragraph.",
+          "index": 0,
+          "ids": [
+            "p1"
+          ],
+          "line": 1,
+          "orphan": false
+        }
+      ],
+      "name": "parse-000"
+    },
+    {
+      "doc": "Some content.\n\n<!-- stay:x -->\n",
+      "blocks": [
+        {
+          "content": "Some content.",
+          "index": 0,
+          "ids": [
+            "x"
+          ],
+          "line": 1,
+          "orphan": false
+        }
+      ],
+      "name": "parse-001"
+    },
+    {
+      "doc": "<!-- stay:loose -->\n\nReal content below.\n",
+      "blocks": [
+        {
+          "content": "",
+          "index": -1,
+          "ids": [
+            "loose"
+          ],
+          "line": 1,
+          "orphan": true
+        },
+        {
+          "content": "Real content below.",
+          "index": 0,
+          "ids": [],
+          "line": 3,
+          "orphan": false
+        }
+      ],
+      "name": "parse-002"
+    },
+    {
+      "doc": "A.\n<!-- stay:a -->\n\nB.\n<!-- stay:b -->\n",
+      "blocks": [
+        {
+          "content": "A.",
+          "index": 0,
+          "ids": [
+            "a"
+          ],
+          "line": 1,
+          "orphan": false
+        },
+        {
+          "content": "B.",
+          "index": 1,
+          "ids": [
+            "b"
+          ],
+          "line": 4,
+          "orphan": false
+        }
+      ],
+      "name": "parse-003"
+    },
+    {
+      "doc": "Block one.\n<!-- stay:dup -->\n\nBlock two.\n<!-- stay:dup -->\n",
+      "blocks": [
+        {
+          "content": "Block one.",
+          "index": 0,
+          "ids": [
+            "dup"
+          ],
+          "line": 1,
+          "orphan": false
+        },
+        {
+          "content": "Block two.",
+          "index": 1,
+          "ids": [
+            "dup"
+          ],
+          "line": 4,
+          "orphan": false
+        }
+      ],
+      "name": "parse-004"
+    },
+    {
+      "doc": "first\n\nsecond\n\nthird\n",
+      "blocks": [
+        {
+          "content": "first",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        },
+        {
+          "content": "second",
+          "index": 1,
+          "ids": [],
+          "line": 3,
+          "orphan": false
+        },
+        {
+          "content": "third",
+          "index": 2,
+          "ids": [],
+          "line": 5,
+          "orphan": false
+        }
+      ],
+      "name": "parse-005"
+    },
+    {
+      "doc": "windows\r\nendings\r\n\r\nsecond block\r\n",
+      "blocks": [
+        {
+          "content": "windows\nendings",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        },
+        {
+          "content": "second block",
+          "index": 1,
+          "ids": [],
+          "line": 4,
+          "orphan": false
+        }
+      ],
+      "name": "parse-006"
+    },
+    {
+      "doc": "trailing marker chunk\n\n<!-- stay:t1 -->\n<!-- stay:t2 -->\n",
+      "blocks": [
+        {
+          "content": "trailing marker chunk",
+          "index": 0,
+          "ids": [
+            "t1",
+            "t2"
+          ],
+          "line": 1,
+          "orphan": false
+        }
+      ],
+      "name": "parse-007"
+    },
+    {
+      "doc": "# Order Pipeline Overview\n\nThe order pipeline ingests messages from external partners, normalizes them, and writes them to the transactional store. Each stage emits a structured event so downstream consumers can react without polling.\n\nMessages arrive on a queue and are validated before any persistence happens. Invalid payloads are routed to a dead-letter queue with the original headers preserved for replay.\n\nThe validation stage checks three things:\n\n- The partner identifier resolves to an active organization.\n- The order references a known product catalogue entry.\n- Pricing fields are present and internally consistent.\n\nA failed check produces a typed error rather than a generic exception, which lets the dispatcher decide whether to retry or quarantine.\n\n```python\ndef validate(order):\n    org = resolve_org(order.partner_id)\n    if not org.active:\n        raise InactiveOrg(order.partner_id)\n    return order\n```\n\nThe table below summarizes the retry policy applied at each stage.\n\n| Stage | Retries | Backoff |\n|-------|---------|---------|\n| ingest | 3 | exponential |\n| persist | 5 | exponential |\n\nOperators can override the defaults per partner when a partner has known latency problems, but overrides expire after thirty days to avoid silent drift.\n",
+      "blocks": [
+        {
+          "content": "# Order Pipeline Overview",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        },
+        {
+          "content": "The order pipeline ingests messages from external partners, normalizes them, and writes them to the transactional store. Each stage emits a structured event so downstream consumers can react without polling.",
+          "index": 1,
+          "ids": [],
+          "line": 3,
+          "orphan": false
+        },
+        {
+          "content": "Messages arrive on a queue and are validated before any persistence happens. Invalid payloads are routed to a dead-letter queue with the original headers preserved for replay.",
+          "index": 2,
+          "ids": [],
+          "line": 5,
+          "orphan": false
+        },
+        {
+          "content": "The validation stage checks three things:",
+          "index": 3,
+          "ids": [],
+          "line": 7,
+          "orphan": false
+        },
+        {
+          "content": "- The partner identifier resolves to an active organization.\n- The order references a known product catalogue entry.\n- Pricing fields are present and internally consistent.",
+          "index": 4,
+          "ids": [],
+          "line": 9,
+          "orphan": false
+        },
+        {
+          "content": "A failed check produces a typed error rather than a generic exception, which lets the dispatcher decide whether to retry or quarantine.",
+          "index": 5,
+          "ids": [],
+          "line": 13,
+          "orphan": false
+        },
+        {
+          "content": "```python\ndef validate(order):\n    org = resolve_org(order.partner_id)\n    if not org.active:\n        raise InactiveOrg(order.partner_id)\n    return order\n```",
+          "index": 6,
+          "ids": [],
+          "line": 15,
+          "orphan": false
+        },
+        {
+          "content": "The table below summarizes the retry policy applied at each stage.",
+          "index": 7,
+          "ids": [],
+          "line": 23,
+          "orphan": false
+        },
+        {
+          "content": "| Stage | Retries | Backoff |\n|-------|---------|---------|\n| ingest | 3 | exponential |\n| persist | 5 | exponential |",
+          "index": 8,
+          "ids": [],
+          "line": 25,
+          "orphan": false
+        },
+        {
+          "content": "Operators can override the defaults per partner when a partner has known latency problems, but overrides expire after thirty days to avoid silent drift.",
+          "index": 9,
+          "ids": [],
+          "line": 30,
+          "orphan": false
+        }
+      ],
+      "name": "parse-008"
+    }
+  ]
+}

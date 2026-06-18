@@ -1,0 +1,2935 @@
+{
+  "category": "seqmatch",
+  "tier": "gen",
+  "vectors": [
+    {
+      "a": "",
+      "b": "",
+      "ratio": 1.0,
+      "matching_blocks": [
+        [
+          0,
+          0,
+          0
+        ]
+      ],
+      "name": "seqmatch-000"
+    },
+    {
+      "a": "a",
+      "b": "",
+      "ratio": 0.0,
+      "matching_blocks": [
+        [
+          1,
+          0,
+          0
+        ]
+      ],
+      "name": "seqmatch-001"
+    },
+    {
+      "a": "",
+      "b": "a",
+      "ratio": 0.0,
+      "matching_blocks": [
+        [
+          0,
+          1,
+          0
+        ]
+      ],
+      "name": "seqmatch-002"
+    },
+    {
+      "a": "abc",
+      "b": "abc",
+      "ratio": 1.0,
+      "matching_blocks": [
+        [
+          0,
+          0,
+          3
+        ],
+        [
+          3,
+          3,
+          0
+        ]
+      ],
+      "name": "seqmatch-003"
+    },
+    {
+      "a": "tide",
+      "b": "diet",
+      "ratio": 0.25,
+      "matching_blocks": [
+        [
+          0,
+          3,
+          1
+        ],
+        [
+          4,
+          4,
+          0
+        ]
+      ],
+      "name": "seqmatch-004"
+    },
+    {
+      "a": "diet",
+      "b": "tide",
+      "ratio": 0.5,
+      "matching_blocks": [
+        [
+          0,
+          2,
+          1
+        ],
+        [
+          2,
+          3,
+          1
+        ],
+        [
+          4,
+          4,
+          0
+        ]
+      ],
+      "name": "seqmatch-005"
+    },
+    {
+      "a": "aaaa",
+      "b": "aa",
+      "ratio": 0.6666666666666666,
+      "matching_blocks": [
+        [
+          0,
+          0,
+          2
+        ],
+        [
+          4,
+          2,
+          0
+        ]
+      ],
+      "name": "seqmatch-006"
+    },
+    {
+      "a": "aa",
+      "b": "aaaa",
+      "ratio": 0.6666666666666666,
+      "matching_blocks": [
+        [
+          0,
+          0,
+          2
+        ],
+        [
+          2,
+          4,
+          0
+        ]
+      ],
+      "name": "seqmatch-007"
+    },
+    {
+      "a": "abcabcabc",
+      "b": "abcabc",
+      "ratio": 0.8,
+      "matching_blocks": [
+        [
+          0,
+          0,
+          6
+        ],
+        [
+          9,
+          6,
+          0
+        ]
+      ],
+      "name": "seqmatch-008"
+    },
+    {
+      "a": "the quick brown fox",
+      "b": "the quick red fox",
+      "ratio": 0.8333333333333334,
+      "matching_blocks": [
+        [
+          0,
+          0,
+          10
+        ],
+        [
+          11,
+          10,
+          1
+        ],
+        [
+          15,
+          13,
+          4
+        ],
+        [
+          19,
+          17,
+          0
+        ]
+      ],
+      "name": "seqmatch-009"
+    },
+    {
+      "a": "banana",
+      "b": "ananas",
+      "ratio": 0.8333333333333334,
+      "matching_blocks": [
+        [
+          1,
+          0,
+          5
+        ],
+        [
+          6,
+          6,
+          0
+        ]
+      ],
+      "name": "seqmatch-010"
+    },
+    {
+      "a": "abcdef",
+      "b": "fedcba",
+      "ratio": 0.16666666666666666,
+      "matching_blocks": [
+        [
+          0,
+          5,
+          1
+        ],
+        [
+          6,
+          6,
+          0
+        ]
+      ],
+      "name": "seqmatch-011"
+    },
+    {
+      "a": "xxxxyyyy",
+      "b": "yyyyxxxx",
+      "ratio": 0.5,
+      "matching_blocks": [
+        [
+          0,
+          4,
+          4
+        ],
+        [
+          8,
+          8,
+          0
+        ]
+      ],
+      "name": "seqmatch-012"
+    },
+    {
+      "a": "hello world",
+      "b": "hello cruel world",
+      "ratio": 0.7857142857142857,
+      "matching_blocks": [
+        [
+          0,
+          0,
+          6
+        ],
+        [
+          6,
+          12,
+          5
+        ],
+        [
+          11,
+          17,
+          0
+        ]
+      ],
+      "name": "seqmatch-013"
+    },
+    {
+      "a": "aXbXcXd",
+      "b": "abcd",
+      "ratio": 0.7272727272727273,
+      "matching_blocks": [
+        [
+          0,
+          0,
+          1
+        ],
+        [
+          2,
+          1,
+          1
+        ],
+        [
+          4,
+          2,
+          1
+        ],
+        [
+          6,
+          3,
+          1
+        ],
+        [
+          7,
+          4,
+          0
+        ]
+      ],
+      "name": "seqmatch-014"
+    },
+    {
+      "a": "mississippi",
+      "b": "missouri",
+      "ratio": 0.5263157894736842,
+      "matching_blocks": [
+        [
+          0,
+          0,
+          4
+        ],
+        [
+          4,
+          7,
+          1
+        ],
+        [
+          11,
+          8,
+          0
+        ]
+      ],
+      "name": "seqmatch-015"
+    },
+    {
+      "a": "aaaaaa",
+      "b": "aaa",
+      "ratio": 0.6666666666666666,
+      "matching_blocks": [
+        [
+          0,
+          0,
+          3
+        ],
+        [
+          6,
+          3,
+          0
+        ]
+      ],
+      "name": "seqmatch-016"
+    },
+    {
+      "a": "the ingest stage retries failed operations three times",
+      "b": "the persist stage retries failed operations five times",
+      "ratio": 0.8703703703703703,
+      "matching_blocks": [
+        [
+          0,
+          0,
+          4
+        ],
+        [
+          4,
+          8,
+          1
+        ],
+        [
+          8,
+          9,
+          35
+        ],
+        [
+          47,
+          47,
+          7
+        ],
+        [
+          54,
+          54,
+          0
+        ]
+      ],
+      "name": "seqmatch-017"
+    },
+    {
+      "a": "😀😁",
+      "b": "😁😀",
+      "ratio": 0.5,
+      "matching_blocks": [
+        [
+          0,
+          1,
+          1
+        ],
+        [
+          2,
+          2,
+          0
+        ]
+      ],
+      "name": "seqmatch-018"
+    },
+    {
+      "a": "a😀b",
+      "b": "ab",
+      "ratio": 0.8,
+      "matching_blocks": [
+        [
+          0,
+          0,
+          1
+        ],
+        [
+          2,
+          1,
+          1
+        ],
+        [
+          3,
+          2,
+          0
+        ]
+      ],
+      "name": "seqmatch-019"
+    },
+    {
+      "a": "💩x💩",
+      "b": "x💩x",
+      "ratio": 0.6666666666666666,
+      "matching_blocks": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          3,
+          3,
+          0
+        ]
+      ],
+      "name": "seqmatch-020"
+    },
+    {
+      "a": "café",
+      "b": "cafe",
+      "ratio": 0.75,
+      "matching_blocks": [
+        [
+          0,
+          0,
+          3
+        ],
+        [
+          4,
+          4,
+          0
+        ]
+      ],
+      "name": "seqmatch-021"
+    },
+    {
+      "a": "naïve",
+      "b": "naive",
+      "ratio": 0.8,
+      "matching_blocks": [
+        [
+          0,
+          0,
+          2
+        ],
+        [
+          3,
+          3,
+          2
+        ],
+        [
+          5,
+          5,
+          0
+        ]
+      ],
+      "name": "seqmatch-022"
+    },
+    {
+      "a": "😀dé e😀bac😀😀c",
+      "b": "b a d😀😀dea",
+      "ratio": 0.36363636363636365,
+      "matching_blocks": [
+        [
+          0,
+          6,
+          2
+        ],
+        [
+          4,
+          8,
+          1
+        ],
+        [
+          7,
+          9,
+          1
+        ],
+        [
+          12,
+          10,
+          0
+        ]
+      ],
+      "name": "seqmatch-023"
+    },
+    {
+      "a": "bedbebecdéé",
+      "b": "bbc😀😀 ",
+      "ratio": 0.35294117647058826,
+      "matching_blocks": [
+        [
+          0,
+          0,
+          1
+        ],
+        [
+          3,
+          1,
+          1
+        ],
+        [
+          7,
+          2,
+          1
+        ],
+        [
+          11,
+          6,
+          0
+        ]
+      ],
+      "name": "seqmatch-024"
+    },
+    {
+      "a": "éaeadceécb a",
+      "b": "bdc 😀c",
+      "ratio": 0.3333333333333333,
+      "matching_blocks": [
+        [
+          4,
+          1,
+          2
+        ],
+        [
+          8,
+          5,
+          1
+        ],
+        [
+          12,
+          6,
+          0
+        ]
+      ],
+      "name": "seqmatch-025"
+    },
+    {
+      "a": "éa😀dedééd",
+      "b": "ée",
+      "ratio": 0.36363636363636365,
+      "matching_blocks": [
+        [
+          0,
+          0,
+          1
+        ],
+        [
+          4,
+          1,
+          1
+        ],
+        [
+          9,
+          2,
+          0
+        ]
+      ],
+      "name": "seqmatch-026"
+    },
+    {
+      "a": "ecbbéda ",
+      "b": "😀 😀  deee😀éd",
+      "ratio": 0.3,
+      "matching_blocks": [
+        [
+          0,
+          6,
+          1
+        ],
+        [
+          4,
+          10,
+          2
+        ],
+        [
+          8,
+          12,
+          0
+        ]
+      ],
+      "name": "seqmatch-027"
+    },
+    {
+      "a": " dec😀céd😀",
+      "b": "ée",
+      "ratio": 0.18181818181818182,
+      "matching_blocks": [
+        [
+          2,
+          1,
+          1
+        ],
+        [
+          9,
+          2,
+          0
+        ]
+      ],
+      "name": "seqmatch-028"
+    },
+    {
+      "a": "  ",
+      "b": "cbd😀beédbbé",
+      "ratio": 0.0,
+      "matching_blocks": [
+        [
+          2,
+          11,
+          0
+        ]
+      ],
+      "name": "seqmatch-029"
+    },
+    {
+      "a": "cb😀d bccb",
+      "b": "cc😀déad",
+      "ratio": 0.375,
+      "matching_blocks": [
+        [
+          0,
+          0,
+          1
+        ],
+        [
+          2,
+          2,
+          2
+        ],
+        [
+          9,
+          7,
+          0
+        ]
+      ],
+      "name": "seqmatch-030"
+    },
+    {
+      "a": "b😀baéacd ",
+      "b": "dac é b",
+      "ratio": 0.375,
+      "matching_blocks": [
+        [
+          5,
+          1,
+          2
+        ],
+        [
+          8,
+          3,
+          1
+        ],
+        [
+          9,
+          7,
+          0
+        ]
+      ],
+      "name": "seqmatch-031"
+    },
+    {
+      "a": "da 😀",
+      "b": "😀ddc",
+      "ratio": 0.25,
+      "matching_blocks": [
+        [
+          0,
+          1,
+          1
+        ],
+        [
+          4,
+          4,
+          0
+        ]
+      ],
+      "name": "seqmatch-032"
+    },
+    {
+      "a": "éd",
+      "b": "ebdacéebba e",
+      "ratio": 0.14285714285714285,
+      "matching_blocks": [
+        [
+          0,
+          5,
+          1
+        ],
+        [
+          2,
+          12,
+          0
+        ]
+      ],
+      "name": "seqmatch-033"
+    },
+    {
+      "a": "😀😀😀😀cdd",
+      "b": "😀😀ée aa",
+      "ratio": 0.2857142857142857,
+      "matching_blocks": [
+        [
+          0,
+          0,
+          2
+        ],
+        [
+          7,
+          7,
+          0
+        ]
+      ],
+      "name": "seqmatch-034"
+    },
+    {
+      "a": "d ebb eé",
+      "b": "ea éé😀ééc😀😀dé",
+      "ratio": 0.19047619047619047,
+      "matching_blocks": [
+        [
+          0,
+          11,
+          1
+        ],
+        [
+          7,
+          12,
+          1
+        ],
+        [
+          8,
+          13,
+          0
+        ]
+      ],
+      "name": "seqmatch-035"
+    },
+    {
+      "a": "a😀😀😀bb dea",
+      "b": "ee d",
+      "ratio": 0.2857142857142857,
+      "matching_blocks": [
+        [
+          6,
+          2,
+          2
+        ],
+        [
+          10,
+          4,
+          0
+        ]
+      ],
+      "name": "seqmatch-036"
+    },
+    {
+      "a": "a aeéba be😀",
+      "b": "😀 aeaeé😀c😀éce ",
+      "ratio": 0.4,
+      "matching_blocks": [
+        [
+          1,
+          1,
+          3
+        ],
+        [
+          4,
+          6,
+          1
+        ],
+        [
+          7,
+          13,
+          1
+        ],
+        [
+          11,
+          14,
+          0
+        ]
+      ],
+      "name": "seqmatch-037"
+    },
+    {
+      "a": "bb😀edbcé",
+      "b": "ecé😀éc😀deeaa ",
+      "ratio": 0.2857142857142857,
+      "matching_blocks": [
+        [
+          3,
+          0,
+          1
+        ],
+        [
+          6,
+          1,
+          2
+        ],
+        [
+          8,
+          13,
+          0
+        ]
+      ],
+      "name": "seqmatch-038"
+    },
+    {
+      "a": "d 😀",
+      "b": "  baeaaa",
+      "ratio": 0.18181818181818182,
+      "matching_blocks": [
+        [
+          1,
+          0,
+          1
+        ],
+        [
+          3,
+          8,
+          0
+        ]
+      ],
+      "name": "seqmatch-039"
+    },
+    {
+      "a": "ed e  abc😀😀",
+      "b": " c😀c",
+      "ratio": 0.4,
+      "matching_blocks": [
+        [
+          2,
+          0,
+          1
+        ],
+        [
+          8,
+          1,
+          2
+        ],
+        [
+          11,
+          4,
+          0
+        ]
+      ],
+      "name": "seqmatch-040"
+    },
+    {
+      "a": "  😀😀d é",
+      "b": " a c",
+      "ratio": 0.36363636363636365,
+      "matching_blocks": [
+        [
+          0,
+          0,
+          1
+        ],
+        [
+          1,
+          2,
+          1
+        ],
+        [
+          7,
+          4,
+          0
+        ]
+      ],
+      "name": "seqmatch-041"
+    },
+    {
+      "a": "c aea😀b éé b😀",
+      "b": "e",
+      "ratio": 0.14285714285714285,
+      "matching_blocks": [
+        [
+          3,
+          0,
+          1
+        ],
+        [
+          13,
+          1,
+          0
+        ]
+      ],
+      "name": "seqmatch-042"
+    },
+    {
+      "a": "bbacécdaa 😀",
+      "b": "aded ecb c",
+      "ratio": 0.19047619047619047,
+      "matching_blocks": [
+        [
+          0,
+          7,
+          1
+        ],
+        [
+          3,
+          9,
+          1
+        ],
+        [
+          11,
+          10,
+          0
+        ]
+      ],
+      "name": "seqmatch-043"
+    },
+    {
+      "a": "cd",
+      "b": "d b bébédeé😀😀é",
+      "ratio": 0.125,
+      "matching_blocks": [
+        [
+          1,
+          0,
+          1
+        ],
+        [
+          2,
+          14,
+          0
+        ]
+      ],
+      "name": "seqmatch-044"
+    },
+    {
+      "a": "edcé édadc😀",
+      "b": "ed éd",
+      "ratio": 0.625,
+      "matching_blocks": [
+        [
+          0,
+          0,
+          2
+        ],
+        [
+          4,
+          2,
+          3
+        ],
+        [
+          11,
+          5,
+          0
+        ]
+      ],
+      "name": "seqmatch-045"
+    },
+    {
+      "a": "édcb",
+      "b": "😀😀é",
+      "ratio": 0.2857142857142857,
+      "matching_blocks": [
+        [
+          0,
+          2,
+          1
+        ],
+        [
+          4,
+          3,
+          0
+        ]
+      ],
+      "name": "seqmatch-046"
+    },
+    {
+      "a": "e  😀é bbécea",
+      "b": "cé   ",
+      "ratio": 0.35294117647058826,
+      "matching_blocks": [
+        [
+          1,
+          2,
+          2
+        ],
+        [
+          5,
+          4,
+          1
+        ],
+        [
+          12,
+          5,
+          0
+        ]
+      ],
+      "name": "seqmatch-047"
+    },
+    {
+      "a": "😀ace😀ccéb ",
+      "b": "eé",
+      "ratio": 0.3333333333333333,
+      "matching_blocks": [
+        [
+          3,
+          0,
+          1
+        ],
+        [
+          7,
+          1,
+          1
+        ],
+        [
+          10,
+          2,
+          0
+        ]
+      ],
+      "name": "seqmatch-048"
+    },
+    {
+      "a": "beé",
+      "b": "eaa😀ee",
+      "ratio": 0.2222222222222222,
+      "matching_blocks": [
+        [
+          1,
+          0,
+          1
+        ],
+        [
+          3,
+          6,
+          0
+        ]
+      ],
+      "name": "seqmatch-049"
+    },
+    {
+      "a": "😀ecac ",
+      "b": "",
+      "ratio": 0.0,
+      "matching_blocks": [
+        [
+          6,
+          0,
+          0
+        ]
+      ],
+      "name": "seqmatch-050"
+    },
+    {
+      "a": "dcé b c 😀dd😀ce",
+      "b": "d😀e  😀a😀cé😀",
+      "ratio": 0.32,
+      "matching_blocks": [
+        [
+          0,
+          0,
+          1
+        ],
+        [
+          1,
+          8,
+          2
+        ],
+        [
+          8,
+          10,
+          1
+        ],
+        [
+          14,
+          11,
+          0
+        ]
+      ],
+      "name": "seqmatch-051"
+    },
+    {
+      "a": "cddé",
+      "b": "d😀😀édc e😀é",
+      "ratio": 0.2857142857142857,
+      "matching_blocks": [
+        [
+          0,
+          5,
+          1
+        ],
+        [
+          3,
+          9,
+          1
+        ],
+        [
+          4,
+          10,
+          0
+        ]
+      ],
+      "name": "seqmatch-052"
+    },
+    {
+      "a": "a",
+      "b": "ceb",
+      "ratio": 0.0,
+      "matching_blocks": [
+        [
+          1,
+          3,
+          0
+        ]
+      ],
+      "name": "seqmatch-053"
+    },
+    {
+      "a": "éceaecdab caé",
+      "b": "ddab",
+      "ratio": 0.35294117647058826,
+      "matching_blocks": [
+        [
+          6,
+          1,
+          3
+        ],
+        [
+          13,
+          4,
+          0
+        ]
+      ],
+      "name": "seqmatch-054"
+    },
+    {
+      "a": " ce",
+      "b": "eeé😀ddaeé aae",
+      "ratio": 0.25,
+      "matching_blocks": [
+        [
+          0,
+          9,
+          1
+        ],
+        [
+          2,
+          12,
+          1
+        ],
+        [
+          3,
+          13,
+          0
+        ]
+      ],
+      "name": "seqmatch-055"
+    },
+    {
+      "a": "cad😀😀e",
+      "b": " é😀c  aca",
+      "ratio": 0.26666666666666666,
+      "matching_blocks": [
+        [
+          0,
+          7,
+          2
+        ],
+        [
+          6,
+          9,
+          0
+        ]
+      ],
+      "name": "seqmatch-056"
+    },
+    {
+      "a": "",
+      "b": "cdbc😀aa😀e",
+      "ratio": 0.0,
+      "matching_blocks": [
+        [
+          0,
+          9,
+          0
+        ]
+      ],
+      "name": "seqmatch-057"
+    },
+    {
+      "a": "aé😀becé",
+      "b": "edééabeédb",
+      "ratio": 0.47058823529411764,
+      "matching_blocks": [
+        [
+          0,
+          4,
+          1
+        ],
+        [
+          3,
+          5,
+          2
+        ],
+        [
+          6,
+          7,
+          1
+        ],
+        [
+          7,
+          10,
+          0
+        ]
+      ],
+      "name": "seqmatch-058"
+    },
+    {
+      "a": "",
+      "b": "",
+      "ratio": 1.0,
+      "matching_blocks": [
+        [
+          0,
+          0,
+          0
+        ]
+      ],
+      "name": "seqmatch-059"
+    },
+    {
+      "a": "ed ",
+      "b": "ddc😀e",
+      "ratio": 0.25,
+      "matching_blocks": [
+        [
+          0,
+          4,
+          1
+        ],
+        [
+          3,
+          5,
+          0
+        ]
+      ],
+      "name": "seqmatch-060"
+    },
+    {
+      "a": "c",
+      "b": "ccbae ",
+      "ratio": 0.2857142857142857,
+      "matching_blocks": [
+        [
+          0,
+          0,
+          1
+        ],
+        [
+          1,
+          6,
+          0
+        ]
+      ],
+      "name": "seqmatch-061"
+    },
+    {
+      "a": "a😀a  cdbddaab ",
+      "b": "c😀cc😀",
+      "ratio": 0.21052631578947367,
+      "matching_blocks": [
+        [
+          1,
+          1,
+          1
+        ],
+        [
+          5,
+          2,
+          1
+        ],
+        [
+          14,
+          5,
+          0
+        ]
+      ],
+      "name": "seqmatch-062"
+    },
+    {
+      "a": "  c😀caé  ee",
+      "b": "ad😀😀ac 😀 😀😀d ",
+      "ratio": 0.3333333333333333,
+      "matching_blocks": [
+        [
+          0,
+          6,
+          1
+        ],
+        [
+          1,
+          8,
+          1
+        ],
+        [
+          3,
+          9,
+          1
+        ],
+        [
+          7,
+          12,
+          1
+        ],
+        [
+          11,
+          13,
+          0
+        ]
+      ],
+      "name": "seqmatch-063"
+    },
+    {
+      "a": "é",
+      "b": "dacbaé ée😀",
+      "ratio": 0.18181818181818182,
+      "matching_blocks": [
+        [
+          0,
+          5,
+          1
+        ],
+        [
+          1,
+          10,
+          0
+        ]
+      ],
+      "name": "seqmatch-064"
+    },
+    {
+      "a": "cbb😀ad éb 😀dbe",
+      "b": "aac😀",
+      "ratio": 0.2222222222222222,
+      "matching_blocks": [
+        [
+          0,
+          2,
+          1
+        ],
+        [
+          3,
+          3,
+          1
+        ],
+        [
+          14,
+          4,
+          0
+        ]
+      ],
+      "name": "seqmatch-065"
+    },
+    {
+      "a": "ebe😀 eé😀eecéd",
+      "b": "éé😀d ",
+      "ratio": 0.3333333333333333,
+      "matching_blocks": [
+        [
+          6,
+          1,
+          2
+        ],
+        [
+          12,
+          3,
+          1
+        ],
+        [
+          13,
+          5,
+          0
+        ]
+      ],
+      "name": "seqmatch-066"
+    },
+    {
+      "a": "ad",
+      "b": "",
+      "ratio": 0.0,
+      "matching_blocks": [
+        [
+          2,
+          0,
+          0
+        ]
+      ],
+      "name": "seqmatch-067"
+    },
+    {
+      "a": "😀c😀  eeaaéé😀",
+      "b": "daé",
+      "ratio": 0.26666666666666666,
+      "matching_blocks": [
+        [
+          8,
+          1,
+          2
+        ],
+        [
+          12,
+          3,
+          0
+        ]
+      ],
+      "name": "seqmatch-068"
+    },
+    {
+      "a": " d",
+      "b": "caeéédc  b",
+      "ratio": 0.16666666666666666,
+      "matching_blocks": [
+        [
+          0,
+          7,
+          1
+        ],
+        [
+          2,
+          10,
+          0
+        ]
+      ],
+      "name": "seqmatch-069"
+    },
+    {
+      "a": "aba",
+      "b": "bc e  ",
+      "ratio": 0.2222222222222222,
+      "matching_blocks": [
+        [
+          1,
+          0,
+          1
+        ],
+        [
+          3,
+          6,
+          0
+        ]
+      ],
+      "name": "seqmatch-070"
+    },
+    {
+      "a": "éb  aa😀",
+      "b": "aé  aéaec d😀",
+      "ratio": 0.631578947368421,
+      "matching_blocks": [
+        [
+          0,
+          1,
+          1
+        ],
+        [
+          2,
+          2,
+          3
+        ],
+        [
+          5,
+          6,
+          1
+        ],
+        [
+          6,
+          11,
+          1
+        ],
+        [
+          7,
+          12,
+          0
+        ]
+      ],
+      "name": "seqmatch-071"
+    },
+    {
+      "a": "é  b",
+      "b": "cdécé",
+      "ratio": 0.2222222222222222,
+      "matching_blocks": [
+        [
+          0,
+          2,
+          1
+        ],
+        [
+          4,
+          5,
+          0
+        ]
+      ],
+      "name": "seqmatch-072"
+    },
+    {
+      "a": "de dcc dab",
+      "b": "éec😀 b😀 ",
+      "ratio": 0.3333333333333333,
+      "matching_blocks": [
+        [
+          1,
+          1,
+          1
+        ],
+        [
+          2,
+          4,
+          1
+        ],
+        [
+          6,
+          7,
+          1
+        ],
+        [
+          10,
+          8,
+          0
+        ]
+      ],
+      "name": "seqmatch-073"
+    },
+    {
+      "a": "dé😀😀c😀 ",
+      "b": "de ab céee",
+      "ratio": 0.23529411764705882,
+      "matching_blocks": [
+        [
+          0,
+          0,
+          1
+        ],
+        [
+          1,
+          7,
+          1
+        ],
+        [
+          7,
+          10,
+          0
+        ]
+      ],
+      "name": "seqmatch-074"
+    },
+    {
+      "a": "bb abaaecac",
+      "b": "ddé😀bdc é",
+      "ratio": 0.2,
+      "matching_blocks": [
+        [
+          0,
+          4,
+          1
+        ],
+        [
+          2,
+          7,
+          1
+        ],
+        [
+          11,
+          9,
+          0
+        ]
+      ],
+      "name": "seqmatch-075"
+    },
+    {
+      "a": "edbée",
+      "b": "dbc😀e ",
+      "ratio": 0.5454545454545454,
+      "matching_blocks": [
+        [
+          1,
+          0,
+          2
+        ],
+        [
+          4,
+          4,
+          1
+        ],
+        [
+          5,
+          6,
+          0
+        ]
+      ],
+      "name": "seqmatch-076"
+    },
+    {
+      "a": "a😀dbeé😀 c",
+      "b": "",
+      "ratio": 0.0,
+      "matching_blocks": [
+        [
+          9,
+          0,
+          0
+        ]
+      ],
+      "name": "seqmatch-077"
+    },
+    {
+      "a": "eéa😀deééc😀d",
+      "b": "b",
+      "ratio": 0.0,
+      "matching_blocks": [
+        [
+          11,
+          1,
+          0
+        ]
+      ],
+      "name": "seqmatch-078"
+    },
+    {
+      "a": "éded b éc dda",
+      "b": "ca",
+      "ratio": 0.26666666666666666,
+      "matching_blocks": [
+        [
+          8,
+          0,
+          1
+        ],
+        [
+          12,
+          1,
+          1
+        ],
+        [
+          13,
+          2,
+          0
+        ]
+      ],
+      "name": "seqmatch-079"
+    },
+    {
+      "a": "a ee d a😀cadé",
+      "b": "a eabbé",
+      "ratio": 0.5,
+      "matching_blocks": [
+        [
+          0,
+          0,
+          3
+        ],
+        [
+          7,
+          3,
+          1
+        ],
+        [
+          12,
+          6,
+          1
+        ],
+        [
+          13,
+          7,
+          0
+        ]
+      ],
+      "name": "seqmatch-080"
+    },
+    {
+      "a": "bde",
+      "b": "baaé",
+      "ratio": 0.2857142857142857,
+      "matching_blocks": [
+        [
+          0,
+          0,
+          1
+        ],
+        [
+          3,
+          4,
+          0
+        ]
+      ],
+      "name": "seqmatch-081"
+    },
+    {
+      "a": "éb😀cbb😀éecba ",
+      "b": "",
+      "ratio": 0.0,
+      "matching_blocks": [
+        [
+          13,
+          0,
+          0
+        ]
+      ],
+      "name": "seqmatch-082"
+    },
+    {
+      "a": "dé",
+      "b": " ",
+      "ratio": 0.0,
+      "matching_blocks": [
+        [
+          2,
+          1,
+          0
+        ]
+      ],
+      "name": "seqmatch-083"
+    },
+    {
+      "a": "😀eéecaeb",
+      "b": "a😀ae😀",
+      "ratio": 0.46153846153846156,
+      "matching_blocks": [
+        [
+          0,
+          1,
+          1
+        ],
+        [
+          5,
+          2,
+          2
+        ],
+        [
+          8,
+          5,
+          0
+        ]
+      ],
+      "name": "seqmatch-084"
+    },
+    {
+      "a": "é😀eébae😀bé",
+      "b": "écdceba",
+      "ratio": 0.47058823529411764,
+      "matching_blocks": [
+        [
+          0,
+          0,
+          1
+        ],
+        [
+          2,
+          4,
+          1
+        ],
+        [
+          4,
+          5,
+          2
+        ],
+        [
+          10,
+          7,
+          0
+        ]
+      ],
+      "name": "seqmatch-085"
+    },
+    {
+      "a": "edc",
+      "b": "aebba ab 😀éc",
+      "ratio": 0.26666666666666666,
+      "matching_blocks": [
+        [
+          0,
+          1,
+          1
+        ],
+        [
+          2,
+          11,
+          1
+        ],
+        [
+          3,
+          12,
+          0
+        ]
+      ],
+      "name": "seqmatch-086"
+    },
+    {
+      "a": "ceb",
+      "b": "bdaéd",
+      "ratio": 0.25,
+      "matching_blocks": [
+        [
+          2,
+          0,
+          1
+        ],
+        [
+          3,
+          5,
+          0
+        ]
+      ],
+      "name": "seqmatch-087"
+    },
+    {
+      "a": "deae😀de dab😀 ",
+      "b": "éb😀ébaéd😀ecbd",
+      "ratio": 0.15384615384615385,
+      "matching_blocks": [
+        [
+          10,
+          1,
+          2
+        ],
+        [
+          13,
+          13,
+          0
+        ]
+      ],
+      "name": "seqmatch-088"
+    },
+    {
+      "a": "ea",
+      "b": "😀bad😀dd a cc",
+      "ratio": 0.14285714285714285,
+      "matching_blocks": [
+        [
+          1,
+          2,
+          1
+        ],
+        [
+          2,
+          12,
+          0
+        ]
+      ],
+      "name": "seqmatch-089"
+    },
+    {
+      "a": "bbédaabédéddc",
+      "b": "ae",
+      "ratio": 0.13333333333333333,
+      "matching_blocks": [
+        [
+          4,
+          0,
+          1
+        ],
+        [
+          13,
+          2,
+          0
+        ]
+      ],
+      "name": "seqmatch-090"
+    },
+    {
+      "a": "b😀",
+      "b": "e😀déad  é",
+      "ratio": 0.18181818181818182,
+      "matching_blocks": [
+        [
+          1,
+          1,
+          1
+        ],
+        [
+          2,
+          9,
+          0
+        ]
+      ],
+      "name": "seqmatch-091"
+    },
+    {
+      "a": "c ééa",
+      "b": "d aa😀c😀",
+      "ratio": 0.16666666666666666,
+      "matching_blocks": [
+        [
+          0,
+          5,
+          1
+        ],
+        [
+          5,
+          7,
+          0
+        ]
+      ],
+      "name": "seqmatch-092"
+    },
+    {
+      "a": "eeé😀a",
+      "b": "dbéd déae",
+      "ratio": 0.14285714285714285,
+      "matching_blocks": [
+        [
+          0,
+          8,
+          1
+        ],
+        [
+          5,
+          9,
+          0
+        ]
+      ],
+      "name": "seqmatch-093"
+    },
+    {
+      "a": "éée  eéd",
+      "b": "😀b😀béad",
+      "ratio": 0.26666666666666666,
+      "matching_blocks": [
+        [
+          0,
+          4,
+          1
+        ],
+        [
+          7,
+          6,
+          1
+        ],
+        [
+          8,
+          7,
+          0
+        ]
+      ],
+      "name": "seqmatch-094"
+    },
+    {
+      "a": "😀abd 😀",
+      "b": "cceebeabcé😀c😀 ",
+      "ratio": 0.3,
+      "matching_blocks": [
+        [
+          1,
+          6,
+          2
+        ],
+        [
+          4,
+          13,
+          1
+        ],
+        [
+          6,
+          14,
+          0
+        ]
+      ],
+      "name": "seqmatch-095"
+    },
+    {
+      "a": "ecécc 😀b",
+      "b": "e😀écc  c 😀ecb",
+      "ratio": 0.6666666666666666,
+      "matching_blocks": [
+        [
+          0,
+          0,
+          1
+        ],
+        [
+          2,
+          2,
+          4
+        ],
+        [
+          6,
+          9,
+          1
+        ],
+        [
+          7,
+          12,
+          1
+        ],
+        [
+          8,
+          13,
+          0
+        ]
+      ],
+      "name": "seqmatch-096"
+    },
+    {
+      "a": "",
+      "b": " bbee bc ",
+      "ratio": 0.0,
+      "matching_blocks": [
+        [
+          0,
+          9,
+          0
+        ]
+      ],
+      "name": "seqmatch-097"
+    },
+    {
+      "a": "😀bbad",
+      "b": "a😀dé c😀",
+      "ratio": 0.3333333333333333,
+      "matching_blocks": [
+        [
+          0,
+          1,
+          1
+        ],
+        [
+          4,
+          2,
+          1
+        ],
+        [
+          5,
+          7,
+          0
+        ]
+      ],
+      "name": "seqmatch-098"
+    },
+    {
+      "a": "cae😀😀bé😀",
+      "b": "eédéebeacd",
+      "ratio": 0.1111111111111111,
+      "matching_blocks": [
+        [
+          0,
+          8,
+          1
+        ],
+        [
+          8,
+          10,
+          0
+        ]
+      ],
+      "name": "seqmatch-099"
+    },
+    {
+      "a": "eaébbbd😀",
+      "b": " e😀da",
+      "ratio": 0.3076923076923077,
+      "matching_blocks": [
+        [
+          0,
+          1,
+          1
+        ],
+        [
+          1,
+          4,
+          1
+        ],
+        [
+          8,
+          5,
+          0
+        ]
+      ],
+      "name": "seqmatch-100"
+    },
+    {
+      "a": " aaceé",
+      "b": "éé",
+      "ratio": 0.25,
+      "matching_blocks": [
+        [
+          5,
+          0,
+          1
+        ],
+        [
+          6,
+          2,
+          0
+        ]
+      ],
+      "name": "seqmatch-101"
+    },
+    {
+      "a": "dab",
+      "b": "daa😀eebe😀  ",
+      "ratio": 0.42857142857142855,
+      "matching_blocks": [
+        [
+          0,
+          0,
+          2
+        ],
+        [
+          2,
+          6,
+          1
+        ],
+        [
+          3,
+          11,
+          0
+        ]
+      ],
+      "name": "seqmatch-102"
+    },
+    {
+      "a": "😀",
+      "b": "",
+      "ratio": 0.0,
+      "matching_blocks": [
+        [
+          1,
+          0,
+          0
+        ]
+      ],
+      "name": "seqmatch-103"
+    },
+    {
+      "a": "ecéed 😀",
+      "b": "cd",
+      "ratio": 0.4444444444444444,
+      "matching_blocks": [
+        [
+          1,
+          0,
+          1
+        ],
+        [
+          4,
+          1,
+          1
+        ],
+        [
+          7,
+          2,
+          0
+        ]
+      ],
+      "name": "seqmatch-104"
+    },
+    {
+      "a": "😀",
+      "b": "😀ed bcbebaéa",
+      "ratio": 0.15384615384615385,
+      "matching_blocks": [
+        [
+          0,
+          0,
+          1
+        ],
+        [
+          1,
+          12,
+          0
+        ]
+      ],
+      "name": "seqmatch-105"
+    },
+    {
+      "a": "😀 bc",
+      "b": " cbb😀",
+      "ratio": 0.2222222222222222,
+      "matching_blocks": [
+        [
+          0,
+          4,
+          1
+        ],
+        [
+          4,
+          5,
+          0
+        ]
+      ],
+      "name": "seqmatch-106"
+    },
+    {
+      "a": "ecab e",
+      "b": "cbéécd",
+      "ratio": 0.3333333333333333,
+      "matching_blocks": [
+        [
+          1,
+          0,
+          1
+        ],
+        [
+          3,
+          1,
+          1
+        ],
+        [
+          6,
+          6,
+          0
+        ]
+      ],
+      "name": "seqmatch-107"
+    },
+    {
+      "a": " 😀d ",
+      "b": "éb😀 ab😀aea",
+      "ratio": 0.2857142857142857,
+      "matching_blocks": [
+        [
+          0,
+          3,
+          1
+        ],
+        [
+          1,
+          6,
+          1
+        ],
+        [
+          4,
+          10,
+          0
+        ]
+      ],
+      "name": "seqmatch-108"
+    },
+    {
+      "a": "😀ba😀",
+      "b": " e😀beaééc😀 a😀",
+      "ratio": 0.47058823529411764,
+      "matching_blocks": [
+        [
+          0,
+          2,
+          2
+        ],
+        [
+          2,
+          11,
+          2
+        ],
+        [
+          4,
+          13,
+          0
+        ]
+      ],
+      "name": "seqmatch-109"
+    },
+    {
+      "a": "d",
+      "b": "😀😀b😀😀 a c😀ca",
+      "ratio": 0.0,
+      "matching_blocks": [
+        [
+          1,
+          12,
+          0
+        ]
+      ],
+      "name": "seqmatch-110"
+    },
+    {
+      "a": "eeéé😀",
+      "b": "ébcac😀b😀bdcdd",
+      "ratio": 0.2222222222222222,
+      "matching_blocks": [
+        [
+          2,
+          0,
+          1
+        ],
+        [
+          4,
+          5,
+          1
+        ],
+        [
+          5,
+          13,
+          0
+        ]
+      ],
+      "name": "seqmatch-111"
+    },
+    {
+      "a": "adbbacaé aab",
+      "b": "éeééaaab😀dc",
+      "ratio": 0.34782608695652173,
+      "matching_blocks": [
+        [
+          0,
+          4,
+          1
+        ],
+        [
+          9,
+          5,
+          3
+        ],
+        [
+          12,
+          11,
+          0
+        ]
+      ],
+      "name": "seqmatch-112"
+    },
+    {
+      "a": "😀 b ccbba😀c",
+      "b": "😀ecdb",
+      "ratio": 0.25,
+      "matching_blocks": [
+        [
+          0,
+          0,
+          1
+        ],
+        [
+          2,
+          4,
+          1
+        ],
+        [
+          11,
+          5,
+          0
+        ]
+      ],
+      "name": "seqmatch-113"
+    },
+    {
+      "a": "éeéd😀deéda😀d 😀",
+      "b": "cdd 😀😀é😀a😀",
+      "ratio": 0.3333333333333333,
+      "matching_blocks": [
+        [
+          3,
+          1,
+          1
+        ],
+        [
+          11,
+          2,
+          3
+        ],
+        [
+          14,
+          10,
+          0
+        ]
+      ],
+      "name": "seqmatch-114"
+    },
+    {
+      "a": " a😀aeé ",
+      "b": "bécb",
+      "ratio": 0.18181818181818182,
+      "matching_blocks": [
+        [
+          5,
+          1,
+          1
+        ],
+        [
+          7,
+          4,
+          0
+        ]
+      ],
+      "name": "seqmatch-115"
+    },
+    {
+      "a": "ec😀ab😀 ",
+      "b": "eaéae  abd😀😀c",
+      "ratio": 0.4,
+      "matching_blocks": [
+        [
+          0,
+          0,
+          1
+        ],
+        [
+          3,
+          7,
+          2
+        ],
+        [
+          5,
+          10,
+          1
+        ],
+        [
+          7,
+          13,
+          0
+        ]
+      ],
+      "name": "seqmatch-116"
+    },
+    {
+      "a": "éadaa😀a😀éee😀b",
+      "b": "dc😀 😀😀e ",
+      "ratio": 0.38095238095238093,
+      "matching_blocks": [
+        [
+          2,
+          0,
+          1
+        ],
+        [
+          5,
+          2,
+          1
+        ],
+        [
+          7,
+          4,
+          1
+        ],
+        [
+          9,
+          6,
+          1
+        ],
+        [
+          13,
+          8,
+          0
+        ]
+      ],
+      "name": "seqmatch-117"
+    },
+    {
+      "a": "eb ",
+      "b": "eb",
+      "ratio": 0.8,
+      "matching_blocks": [
+        [
+          0,
+          0,
+          2
+        ],
+        [
+          3,
+          2,
+          0
+        ]
+      ],
+      "name": "seqmatch-118"
+    },
+    {
+      "a": "é",
+      "b": " éb😀😀",
+      "ratio": 0.3333333333333333,
+      "matching_blocks": [
+        [
+          0,
+          1,
+          1
+        ],
+        [
+          1,
+          5,
+          0
+        ]
+      ],
+      "name": "seqmatch-119"
+    },
+    {
+      "a": "dc éb😀adcéab",
+      "b": " ",
+      "ratio": 0.15384615384615385,
+      "matching_blocks": [
+        [
+          2,
+          0,
+          1
+        ],
+        [
+          12,
+          1,
+          0
+        ]
+      ],
+      "name": "seqmatch-120"
+    },
+    {
+      "a": "😀 😀dé ",
+      "b": "aa😀cbcacecé😀😀",
+      "ratio": 0.21052631578947367,
+      "matching_blocks": [
+        [
+          0,
+          2,
+          1
+        ],
+        [
+          2,
+          11,
+          1
+        ],
+        [
+          6,
+          13,
+          0
+        ]
+      ],
+      "name": "seqmatch-121"
+    },
+    {
+      "a": "b",
+      "b": "e😀 aé😀 éedc",
+      "ratio": 0.0,
+      "matching_blocks": [
+        [
+          1,
+          11,
+          0
+        ]
+      ],
+      "name": "seqmatch-122"
+    },
+    {
+      "a": "db",
+      "b": "edb😀bd😀c😀",
+      "ratio": 0.36363636363636365,
+      "matching_blocks": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          2,
+          9,
+          0
+        ]
+      ],
+      "name": "seqmatch-123"
+    },
+    {
+      "a": "aad eéaad😀😀 ",
+      "b": " béébbb😀c ",
+      "ratio": 0.36363636363636365,
+      "matching_blocks": [
+        [
+          3,
+          0,
+          1
+        ],
+        [
+          5,
+          2,
+          1
+        ],
+        [
+          9,
+          7,
+          1
+        ],
+        [
+          11,
+          9,
+          1
+        ],
+        [
+          12,
+          10,
+          0
+        ]
+      ],
+      "name": "seqmatch-124"
+    },
+    {
+      "a": "e",
+      "b": "d  a écaa😀éa",
+      "ratio": 0.0,
+      "matching_blocks": [
+        [
+          1,
+          12,
+          0
+        ]
+      ],
+      "name": "seqmatch-125"
+    },
+    {
+      "a": "e",
+      "b": "aebdédéab😀😀",
+      "ratio": 0.16666666666666666,
+      "matching_blocks": [
+        [
+          0,
+          1,
+          1
+        ],
+        [
+          1,
+          11,
+          0
+        ]
+      ],
+      "name": "seqmatch-126"
+    },
+    {
+      "a": "",
+      "b": "be",
+      "ratio": 0.0,
+      "matching_blocks": [
+        [
+          0,
+          2,
+          0
+        ]
+      ],
+      "name": "seqmatch-127"
+    },
+    {
+      "a": "ed é",
+      "b": "c",
+      "ratio": 0.0,
+      "matching_blocks": [
+        [
+          4,
+          1,
+          0
+        ]
+      ],
+      "name": "seqmatch-128"
+    },
+    {
+      "a": "bcdcéa😀😀 de",
+      "b": "a😀 cecéd",
+      "ratio": 0.42105263157894735,
+      "matching_blocks": [
+        [
+          1,
+          3,
+          1
+        ],
+        [
+          3,
+          5,
+          2
+        ],
+        [
+          9,
+          7,
+          1
+        ],
+        [
+          11,
+          8,
+          0
+        ]
+      ],
+      "name": "seqmatch-129"
+    },
+    {
+      "a": "eedbe",
+      "b": "d c",
+      "ratio": 0.25,
+      "matching_blocks": [
+        [
+          2,
+          0,
+          1
+        ],
+        [
+          5,
+          3,
+          0
+        ]
+      ],
+      "name": "seqmatch-130"
+    },
+    {
+      "a": " e adbd ",
+      "b": "dcéd",
+      "ratio": 0.3333333333333333,
+      "matching_blocks": [
+        [
+          4,
+          0,
+          1
+        ],
+        [
+          6,
+          3,
+          1
+        ],
+        [
+          8,
+          4,
+          0
+        ]
+      ],
+      "name": "seqmatch-131"
+    },
+    {
+      "a": "a😀ac😀 😀eé  d ",
+      "b": "cé😀d bbc😀ade",
+      "ratio": 0.24,
+      "matching_blocks": [
+        [
+          1,
+          8,
+          2
+        ],
+        [
+          7,
+          11,
+          1
+        ],
+        [
+          13,
+          12,
+          0
+        ]
+      ],
+      "name": "seqmatch-132"
+    },
+    {
+      "a": "bcddc",
+      "b": "abad",
+      "ratio": 0.4444444444444444,
+      "matching_blocks": [
+        [
+          0,
+          1,
+          1
+        ],
+        [
+          2,
+          3,
+          1
+        ],
+        [
+          5,
+          4,
+          0
+        ]
+      ],
+      "name": "seqmatch-133"
+    },
+    {
+      "a": "cceéd😀 ac",
+      "b": "",
+      "ratio": 0.0,
+      "matching_blocks": [
+        [
+          9,
+          0,
+          0
+        ]
+      ],
+      "name": "seqmatch-134"
+    },
+    {
+      "a": "é ac ",
+      "b": "edcbae😀cd😀d",
+      "ratio": 0.25,
+      "matching_blocks": [
+        [
+          2,
+          4,
+          1
+        ],
+        [
+          3,
+          7,
+          1
+        ],
+        [
+          5,
+          11,
+          0
+        ]
+      ],
+      "name": "seqmatch-135"
+    },
+    {
+      "a": "",
+      "b": "édcbe😀c😀",
+      "ratio": 0.0,
+      "matching_blocks": [
+        [
+          0,
+          8,
+          0
+        ]
+      ],
+      "name": "seqmatch-136"
+    },
+    {
+      "a": "aebb😀 a😀eaee",
+      "b": "e😀",
+      "ratio": 0.2857142857142857,
+      "matching_blocks": [
+        [
+          1,
+          0,
+          1
+        ],
+        [
+          4,
+          1,
+          1
+        ],
+        [
+          12,
+          2,
+          0
+        ]
+      ],
+      "name": "seqmatch-137"
+    },
+    {
+      "a": "e😀c",
+      "b": "e 😀 adbb😀d😀c ",
+      "ratio": 0.375,
+      "matching_blocks": [
+        [
+          0,
+          0,
+          1
+        ],
+        [
+          1,
+          10,
+          2
+        ],
+        [
+          3,
+          13,
+          0
+        ]
+      ],
+      "name": "seqmatch-138"
+    },
+    {
+      "a": "edc é",
+      "b": "abeae",
+      "ratio": 0.2,
+      "matching_blocks": [
+        [
+          0,
+          2,
+          1
+        ],
+        [
+          5,
+          5,
+          0
+        ]
+      ],
+      "name": "seqmatch-139"
+    },
+    {
+      "a": "a😀😀ba😀😀e",
+      "b": "",
+      "ratio": 0.0,
+      "matching_blocks": [
+        [
+          8,
+          0,
+          0
+        ]
+      ],
+      "name": "seqmatch-140"
+    },
+    {
+      "a": "d😀ea é a",
+      "b": " cdbbc édcb😀b",
+      "ratio": 0.2857142857142857,
+      "matching_blocks": [
+        [
+          0,
+          2,
+          1
+        ],
+        [
+          4,
+          6,
+          2
+        ],
+        [
+          8,
+          13,
+          0
+        ]
+      ],
+      "name": "seqmatch-141"
+    },
+    {
+      "a": "bd",
+      "b": "  éb😀😀😀dbb😀",
+      "ratio": 0.3076923076923077,
+      "matching_blocks": [
+        [
+          0,
+          3,
+          1
+        ],
+        [
+          1,
+          7,
+          1
+        ],
+        [
+          2,
+          11,
+          0
+        ]
+      ],
+      "name": "seqmatch-142"
+    }
+  ]
+}

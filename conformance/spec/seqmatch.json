@@ -1,0 +1,60 @@
+{
+  "category": "seqmatch",
+  "tier": "spec",
+  "vectors": [
+    {
+      "name": "empty-empty-is-one",
+      "a": "", "b": "",
+      "ratio": 1.0,
+      "matching_blocks": [[0, 0, 0]]
+    },
+    {
+      "name": "single-char-match",
+      "a": "a", "b": "a",
+      "ratio": 1.0,
+      "matching_blocks": [[0, 0, 1], [1, 1, 0]]
+    },
+    {
+      "name": "single-char-no-match",
+      "a": "a", "b": "b",
+      "ratio": 0.0,
+      "matching_blocks": [[1, 1, 0]]
+    },
+    {
+      "name": "identical-abc",
+      "a": "abc", "b": "abc",
+      "ratio": 1.0,
+      "matching_blocks": [[0, 0, 3], [3, 3, 0]]
+    },
+    {
+      "name": "abc-abd-one-diff",
+      "a": "abc", "b": "abd",
+      "ratio": 0.6666666666666666,
+      "matching_blocks": [[0, 0, 2], [3, 3, 0]]
+    },
+    {
+      "name": "tide-diet-order-matters-a",
+      "a": "tide", "b": "diet",
+      "ratio": 0.25,
+      "matching_blocks": [[0, 3, 1], [4, 4, 0]]
+    },
+    {
+      "name": "diet-tide-order-matters-b",
+      "a": "diet", "b": "tide",
+      "ratio": 0.5,
+      "matching_blocks": [[0, 2, 1], [2, 3, 1], [4, 4, 0]]
+    },
+    {
+      "name": "repeat-aa-a",
+      "a": "aa", "b": "a",
+      "ratio": 0.6666666666666666,
+      "matching_blocks": [[0, 0, 1], [2, 1, 0]]
+    },
+    {
+      "name": "non-bmp-code-points-not-utf16-units",
+      "a": "😀", "b": "😀😀",
+      "ratio": 0.6666666666666666,
+      "matching_blocks": [[0, 0, 1], [1, 2, 0]]
+    }
+  ]
+}

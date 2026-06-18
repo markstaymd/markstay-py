@@ -1,0 +1,45 @@
+{
+  "category": "resolve",
+  "tier": "spec",
+  "vectors": [
+    {
+      "name": "marker-tier-survives-reorder",
+      "before": "First paragraph here.\n<!-- stay:p1 -->\n\nSecond paragraph here.\n<!-- stay:p2 -->\n",
+      "after": "Second paragraph here.\n<!-- stay:p2 -->\n\nFirst paragraph here.\n<!-- stay:p1 -->\n",
+      "threshold": 0.5, "margin": 0.05,
+      "resolutions": {
+        "p1": { "method": "marker", "target": 1, "score": 1.0 },
+        "p2": { "method": "marker", "target": 0, "score": 1.0 }
+      }
+    },
+    {
+      "name": "hash-tier-recovers-stripped-verbatim",
+      "before": "First paragraph here.\n<!-- stay:p1 -->\n\nSecond paragraph here.\n<!-- stay:p2 -->\n",
+      "after": "Second paragraph here.\n\nFirst paragraph here.\n",
+      "threshold": 0.5, "margin": 0.05,
+      "resolutions": {
+        "p1": { "method": "hash", "target": 1, "score": 1.0 },
+        "p2": { "method": "hash", "target": 0, "score": 1.0 }
+      }
+    },
+    {
+      "name": "deleted-block-detaches",
+      "before": "Only block here.\n<!-- stay:solo -->\n",
+      "after": "",
+      "threshold": 0.5, "margin": 0.05,
+      "resolutions": {
+        "solo": { "method": "detached", "target": null, "score": 0.0 }
+      }
+    },
+    {
+      "name": "near-dup-twins-detach-despite-high-score",
+      "before": "Same body.\n<!-- stay:a -->\n\nSame body.\n<!-- stay:b -->\n",
+      "after": "Same body.\n\nSame body.\n",
+      "threshold": 0.5, "margin": 0.05,
+      "resolutions": {
+        "a": { "method": "detached", "target": null, "score": 1.0 },
+        "b": { "method": "detached", "target": null, "score": 1.0 }
+      }
+    }
+  ]
+}

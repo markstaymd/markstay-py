@@ -1,0 +1,81 @@
+{
+  "category": "lint",
+  "tier": "gen",
+  "vectors": [
+    {
+      "doc": "The order pipeline ingests messages and normalizes them.\n<!-- stay:8f24 hash=sha256:9c26 -->\n",
+      "findings": [],
+      "name": "lint-000"
+    },
+    {
+      "doc": "Users authenticate with an API key.\n<!-- stay:8f24 hash=sha256:9690 -->\n",
+      "findings": [],
+      "name": "lint-001"
+    },
+    {
+      "doc": "Block one.\n<!-- stay:dup -->\n\nBlock two.\n<!-- stay:dup -->\n",
+      "findings": [
+        {
+          "level": "error",
+          "code": "DUPLICATE_ID",
+          "id": "dup",
+          "line": 5
+        }
+      ],
+      "name": "lint-002"
+    },
+    {
+      "doc": "A paragraph.\n<!-- stay:note=hello -->\n",
+      "findings": [
+        {
+          "level": "error",
+          "code": "MALFORMED_MARKER",
+          "id": null,
+          "line": 2
+        }
+      ],
+      "name": "lint-003"
+    },
+    {
+      "doc": "<!-- stay:loose -->\n\nReal content below.\n",
+      "findings": [
+        {
+          "level": "error",
+          "code": "ORPHAN_MARKER",
+          "id": "loose",
+          "line": 1
+        }
+      ],
+      "name": "lint-004"
+    },
+    {
+      "doc": "Edited content.\n<!-- stay:z9 hash=sha256:dead -->\n",
+      "findings": [
+        {
+          "level": "warn",
+          "code": "HASH_DRIFT",
+          "id": "z9",
+          "line": 2
+        }
+      ],
+      "name": "lint-005"
+    },
+    {
+      "doc": "An MDX block.\n{/* stay:mdx1 hash=sha256:abcd */}\n",
+      "findings": [
+        {
+          "level": "warn",
+          "code": "HASH_DRIFT",
+          "id": "mdx1",
+          "line": 2
+        }
+      ],
+      "name": "lint-006"
+    },
+    {
+      "doc": "clean para.\n<!-- stay:ok -->\n\nanother.\n<!-- stay:ok2 -->\n",
+      "findings": [],
+      "name": "lint-007"
+    }
+  ]
+}

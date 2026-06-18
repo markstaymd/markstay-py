@@ -1,0 +1,60 @@
+{
+  "category": "score",
+  "tier": "spec",
+  "vectors": [
+    {
+      "name": "wrapper-empty-both-floors-to-zero",
+      "fn": "ratio", "a": "", "b": "", "score": 0.0
+    },
+    {
+      "name": "wrapper-empty-a-floors-to-zero",
+      "fn": "ratio", "a": "", "b": "x", "score": 0.0
+    },
+    {
+      "name": "body-score-identical-after-normalize",
+      "fn": "body_score", "quote": "Same normalized body.", "candidate": "Same normalized body.", "score": 1.0
+    },
+    {
+      "name": "body-score-empty-candidate",
+      "fn": "body_score", "quote": "x", "candidate": "", "score": 0.0
+    },
+    {
+      "name": "ascii-fold-and-whitespace-collapse-make-equal",
+      "fn": "body_score", "quote": "The  QUICK\tBrown", "candidate": "the quick brown", "score": 1.0
+    },
+    {
+      "name": "non-ascii-case-not-folded-ascii-rule-rejects-casefold",
+      "fn": "body_score", "quote": "É", "candidate": "é", "score": 0.0
+    },
+    {
+      "name": "best-match-exact-winner-zero-runner",
+      "fn": "best_match", "quote": "aaaa", "prefix": "", "suffix": "",
+      "candidates": ["aaaa", "bbbb"],
+      "index": 0, "score": 1.0, "runner_up": 0.0
+    },
+    {
+      "name": "best-match-exact-tie-picks-later-block",
+      "fn": "best_match", "quote": "identical block body", "prefix": "", "suffix": "",
+      "candidates": ["identical block body", "identical block body"],
+      "index": 1, "score": 1.0, "runner_up": 1.0
+    },
+    {
+      "name": "best-match-empty-candidates",
+      "fn": "best_match", "quote": "x", "prefix": "", "suffix": "",
+      "candidates": [],
+      "index": -1, "score": 0.0, "runner_up": 0.0
+    },
+    {
+      "name": "context-bonus-zero-without-prefix-suffix",
+      "fn": "context_bonus", "prefix": "", "suffix": "", "prev": "whatever", "next": "whatever", "bonus": 0.0
+    },
+    {
+      "name": "context-bonus-exact-suffix-is-half-of-ten-percent",
+      "fn": "context_bonus", "prefix": "", "suffix": "abc", "prev": "irrelevant", "next": "abc", "bonus": 0.05
+    },
+    {
+      "name": "context-bonus-exact-prefix-is-half-of-ten-percent",
+      "fn": "context_bonus", "prefix": "xyz", "suffix": "", "prev": "xyz", "next": "irrelevant", "bonus": 0.05
+    }
+  ]
+}

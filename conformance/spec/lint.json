@@ -1,0 +1,51 @@
+{
+  "category": "lint",
+  "tier": "spec",
+  "vectors": [
+    {
+      "name": "clean-with-correct-hash",
+      "doc": "The order pipeline ingests messages and normalizes them.\n<!-- stay:8f24 hash=sha256:9c26 -->\n",
+      "findings": []
+    },
+    {
+      "name": "uppercase-hex-no-drift",
+      "doc": "Users authenticate with an API key in the Authorization header.\n<!-- stay:8f24 hash=sha256:4CCD -->\n",
+      "findings": []
+    },
+    {
+      "name": "duplicate-id",
+      "doc": "Block one.\n<!-- stay:dup -->\n\nBlock two.\n<!-- stay:dup -->\n",
+      "findings": [
+        { "level": "error", "code": "DUPLICATE_ID", "id": "dup", "line": 5 }
+      ]
+    },
+    {
+      "name": "malformed-marker",
+      "doc": "A paragraph.\n<!-- stay:note=hello -->\n",
+      "findings": [
+        { "level": "error", "code": "MALFORMED_MARKER", "id": null, "line": 2 }
+      ]
+    },
+    {
+      "name": "malformed-no-rescue-from-second-stay",
+      "doc": "A paragraph.\n<!-- stay:note=hello stay:ok -->\n",
+      "findings": [
+        { "level": "error", "code": "MALFORMED_MARKER", "id": null, "line": 2 }
+      ]
+    },
+    {
+      "name": "orphan-marker",
+      "doc": "<!-- stay:loose -->\n\nReal content below.\n",
+      "findings": [
+        { "level": "error", "code": "ORPHAN_MARKER", "id": "loose", "line": 1 }
+      ]
+    },
+    {
+      "name": "hash-drift-is-warning",
+      "doc": "Edited content.\n<!-- stay:z9 hash=sha256:dead -->\n",
+      "findings": [
+        { "level": "warn", "code": "HASH_DRIFT", "id": "z9", "line": 2 }
+      ]
+    }
+  ]
+}

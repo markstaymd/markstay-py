@@ -1,0 +1,44 @@
+{
+  "category": "parse",
+  "tier": "spec",
+  "vectors": [
+    {
+      "name": "marker-no-blank-attaches-to-block",
+      "doc": "Just one paragraph.\n<!-- stay:p1 -->\n",
+      "blocks": [
+        { "content": "Just one paragraph.", "index": 0, "ids": ["p1"], "line": 1, "orphan": false }
+      ]
+    },
+    {
+      "name": "marker-only-chunk-attaches-to-previous",
+      "doc": "Some content.\n\n<!-- stay:x -->\n",
+      "blocks": [
+        { "content": "Some content.", "index": 0, "ids": ["x"], "line": 1, "orphan": false }
+      ]
+    },
+    {
+      "name": "orphan-marker-at-top",
+      "doc": "<!-- stay:loose -->\n\nReal content below.\n",
+      "blocks": [
+        { "content": "", "index": -1, "ids": ["loose"], "line": 1, "orphan": true },
+        { "content": "Real content below.", "index": 0, "ids": [], "line": 3, "orphan": false }
+      ]
+    },
+    {
+      "name": "two-paragraphs",
+      "doc": "A.\n<!-- stay:a -->\n\nB.\n<!-- stay:b -->\n",
+      "blocks": [
+        { "content": "A.", "index": 0, "ids": ["a"], "line": 1, "orphan": false },
+        { "content": "B.", "index": 1, "ids": ["b"], "line": 4, "orphan": false }
+      ]
+    },
+    {
+      "name": "duplicate-id-two-blocks",
+      "doc": "Block one.\n<!-- stay:dup -->\n\nBlock two.\n<!-- stay:dup -->\n",
+      "blocks": [
+        { "content": "Block one.", "index": 0, "ids": ["dup"], "line": 1, "orphan": false },
+        { "content": "Block two.", "index": 1, "ids": ["dup"], "line": 4, "orphan": false }
+      ]
+    }
+  ]
+}
