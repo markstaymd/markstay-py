@@ -1,5 +1,11 @@
 # markstay , Python reference implementation (v1 core)
 
+[![PyPI](https://img.shields.io/pypi/v/markstay)](https://pypi.org/project/markstay/)
+[![Python versions](https://img.shields.io/pypi/pyversions/markstay)](https://pypi.org/project/markstay/)
+[![tests](https://img.shields.io/github/actions/workflow/status/markstaymd/markstay-py/test.yml?label=tests)](https://github.com/markstaymd/markstay-py/actions/workflows/test.yml)
+[![spec](https://img.shields.io/badge/spec-v1.1-blue)](https://markstay.org)
+![License](https://img.shields.io/pypi/l/markstay)
+
 The Python reference implementation of the [markstay spec](https://markstay.org)
 (v1.1). markstay is a source-level identity primitive for Markdown blocks: an id
 token that **stays** bound to its block across edits (marker `stay:`), so a
