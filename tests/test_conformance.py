@@ -156,9 +156,35 @@ def v_resolve(v):
     return approx(got, v["resolutions"]), f"got={got}"
 
 
+def _id_factory(ids):
+    it = iter(ids)
+    return lambda: next(it)
+
+
+def v_stamp(v):
+    op = v["op"]
+    o = v.get("options", {})
+    if op == "stamp":
+        r = M.stamp(v["input"], syntax=o.get("syntax", "html"), hash=o.get("hash", True),
+                    hash_length=o.get("hashLength", M.DEFAULT_HASH_LENGTH),
+                    new_id=_id_factory(v["ids"]))
+        got = {"text": r.text, "minted": r.minted}
+    elif op == "restamp":
+        r = M.restamp(v["input"], hash_length=o.get("hashLength"),
+                      add_missing=o.get("addMissing", False))
+        got = {"text": r.text, "refreshed": r.refreshed}
+    elif op == "repair":
+        r = M.repair_duplicates(v["input"], new_id=_id_factory(v["ids"]))
+        got = {"text": r.text, "renamed": r.renamed}
+    else:
+        return False, f"unknown stamp op: {op!r}"
+    return approx(got, v["expected"]), f"got={got}"
+
+
 VERIFIERS = {
     "hash": v_hash, "markers": v_markers, "parse": v_parse, "lint": v_lint,
     "diff": v_diff, "seqmatch": v_seqmatch, "score": v_score, "resolve": v_resolve,
+    "stamp": v_stamp,
 }
 
 

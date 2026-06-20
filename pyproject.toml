@@ -35,6 +35,10 @@ dependencies = []
 # §5.2 CommonMark-tree segmentation (loose lists / blank-line fences as one
 # block). The default blank-line model is dependency-free; this is the opt-in.
 commonmark = ["markdown-it-py>=2"]
+# Tools the suite exercises but the package never imports. mdformat drives the
+# external transform-safety fixture (does a reformat preserve stay markers?);
+# the test importorskips it, so it's optional and CI without it just skips.
+test = ["markdown-it-py>=2", "mdformat>=1"]
 
 [project.scripts]
 markstay = "markstay.cli:main"

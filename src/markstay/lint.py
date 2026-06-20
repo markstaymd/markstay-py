@@ -145,6 +145,39 @@ def strip_markers(text: str) -> str:
     return MDX_MARKER.sub("", HTML_MARKER.sub("", text))
 
 
+# One combined HTML|MDX pattern so a single ordered pass sees every marker in
+# document order (rather than all HTML then all MDX). Group 1 is the HTML body,
+# group 2 the MDX body; exactly one is set per match. Mirrors markers.js.
+COMBINED_MARKER = re.compile(
+    r"<!--\s*(?P<html>stay:.*?)\s*-->|\{/\*\s*(?P<mdx>stay:.*?)\s*\*/\}", re.DOTALL
+)
+
+
+def rewrite_markers(text: str, transform) -> str:
+    """Rewrite markers in place, in document order, without disturbing
+    surrounding text. ``transform(marker)`` receives a :class:`Marker` (``line``
+    is 0 here, position is not tracked) and returns a replacement string, or
+    ``None`` to leave the marker unchanged. The write helpers (restamp,
+    repair_duplicates) build on this so marker edits reuse the one canonical
+    grammar instead of re-deriving it."""
+    def repl(m: "re.Match[str]") -> str:
+        body = m.group("html")
+        syntax = "html"
+        if body is None:
+            body, syntax = m.group("mdx"), "mdx"
+        idm = ID_RE.match(body)
+        hm = HASH_RE.search(body)
+        marker = Marker(
+            id=idm.group("id") if idm else None,
+            hash=hm.group("hash").lower() if hm else None,
+            raw=m.group(0), syntax=syntax, line=0, malformed=idm is None,
+        )
+        out = transform(marker)
+        return m.group(0) if out is None else out
+
+    return COMBINED_MARKER.sub(repl, text)
+
+
 def segment_blank_line(text: str) -> list[tuple[int, str]]:
     """Baseline segmenter (SPEC.md §5): a block is a maximal run of non-blank
     lines bounded by blank lines or the document edges. Dependency-free. Returns

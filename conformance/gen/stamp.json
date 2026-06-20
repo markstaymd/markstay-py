@@ -1,0 +1,265 @@
+{
+  "category": "stamp",
+  "tier": "gen",
+  "vectors": [
+    {
+      "name": "stamp-single-block-trailing-3.1",
+      "op": "stamp",
+      "input": "Hello world.",
+      "options": {},
+      "ids": [
+        "abc12345"
+      ],
+      "expected": {
+        "text": "Hello world.\n<!-- stay:abc12345 hash=sha256:aa3ec16e6acc -->",
+        "minted": [
+          {
+            "id": "abc12345",
+            "line": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "stamp-multi-block-sequential-ids",
+      "op": "stamp",
+      "input": "# Title\n\nFirst paragraph.\n\nSecond paragraph.\n\n- a\n- b\n",
+      "options": {},
+      "ids": [
+        "id00",
+        "id01",
+        "id02",
+        "id03"
+      ],
+      "expected": {
+        "text": "# Title\n<!-- stay:id00 hash=sha256:79aeaf7ba450 -->\n\nFirst paragraph.\n<!-- stay:id01 hash=sha256:98ea01bc109a -->\n\nSecond paragraph.\n<!-- stay:id02 hash=sha256:3fc3deaa2b36 -->\n\n- a\n- b\n<!-- stay:id03 hash=sha256:4e11985d599f -->\n",
+        "minted": [
+          {
+            "id": "id00",
+            "line": 1
+          },
+          {
+            "id": "id01",
+            "line": 3
+          },
+          {
+            "id": "id02",
+            "line": 5
+          },
+          {
+            "id": "id03",
+            "line": 8
+          }
+        ]
+      }
+    },
+    {
+      "name": "stamp-mdx-no-hash",
+      "op": "stamp",
+      "input": "Body.",
+      "options": {
+        "syntax": "mdx",
+        "hash": false
+      },
+      "ids": [
+        "m1"
+      ],
+      "expected": {
+        "text": "Body.\n{/* stay:m1 */}",
+        "minted": [
+          {
+            "id": "m1",
+            "line": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "stamp-hash-length-4",
+      "op": "stamp",
+      "input": "Body.",
+      "options": {
+        "hashLength": 4
+      },
+      "ids": [
+        "h1"
+      ],
+      "expected": {
+        "text": "Body.\n<!-- stay:h1 hash=sha256:521b -->",
+        "minted": [
+          {
+            "id": "h1",
+            "line": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "stamp-idempotent-already-marked",
+      "op": "stamp",
+      "input": "Marked.\n<!-- stay:keep hash=sha256:ae0a8cb1f952 -->",
+      "options": {},
+      "ids": [
+        "unused"
+      ],
+      "expected": {
+        "text": "Marked.\n<!-- stay:keep hash=sha256:ae0a8cb1f952 -->",
+        "minted": []
+      }
+    },
+    {
+      "name": "stamp-marker-only-chunk-identifies-block",
+      "op": "stamp",
+      "input": "Para body.\n\n<!-- stay:keep hash=sha256:0000 -->\n\nOther.",
+      "options": {},
+      "ids": [
+        "new0"
+      ],
+      "expected": {
+        "text": "Para body.\n\n<!-- stay:keep hash=sha256:0000 -->\n\nOther.\n<!-- stay:new0 hash=sha256:053a32f025d5 -->",
+        "minted": [
+          {
+            "id": "new0",
+            "line": 5
+          }
+        ]
+      }
+    },
+    {
+      "name": "stamp-minted-id-avoids-collision",
+      "op": "stamp",
+      "input": "A.\n<!-- stay:id00 -->\n\nB.",
+      "options": {},
+      "ids": [
+        "id00",
+        "id00",
+        "id01"
+      ],
+      "expected": {
+        "text": "A.\n<!-- stay:id00 -->\n\nB.\n<!-- stay:id01 hash=sha256:be651d5a8e97 -->",
+        "minted": [
+          {
+            "id": "id01",
+            "line": 4
+          }
+        ]
+      }
+    },
+    {
+      "name": "restamp-refreshes-drifted-hash",
+      "op": "restamp",
+      "input": "Edited body now.\n<!-- stay:r1 hash=sha256:d085cd66582d -->",
+      "options": {},
+      "expected": {
+        "text": "Edited body now.\n<!-- stay:r1 hash=sha256:a590a10c023e -->",
+        "refreshed": [
+          "r1"
+        ]
+      }
+    },
+    {
+      "name": "restamp-no-op-when-undrifted",
+      "op": "restamp",
+      "input": "Body.\n<!-- stay:r1 hash=sha256:521b25cc4586 -->",
+      "options": {},
+      "expected": {
+        "text": "Body.\n<!-- stay:r1 hash=sha256:521b25cc4586 -->",
+        "refreshed": []
+      }
+    },
+    {
+      "name": "restamp-preserves-stored-precision",
+      "op": "restamp",
+      "input": "New text here.\n<!-- stay:p1 hash=sha256:0000 -->",
+      "options": {},
+      "expected": {
+        "text": "New text here.\n<!-- stay:p1 hash=sha256:c6bd -->",
+        "refreshed": [
+          "p1"
+        ]
+      }
+    },
+    {
+      "name": "restamp-add-missing",
+      "op": "restamp",
+      "input": "Body text.\n<!-- stay:n1 -->",
+      "options": {
+        "addMissing": true
+      },
+      "expected": {
+        "text": "Body text.\n<!-- stay:n1 hash=sha256:4319bbb0a28e -->",
+        "refreshed": [
+          "n1"
+        ]
+      }
+    },
+    {
+      "name": "repair-duplicate-first-kept-second-reminted",
+      "op": "repair",
+      "input": "Para one.\n<!-- stay:dup hash=sha256:0000 -->\n\nPara two.\n<!-- stay:dup hash=sha256:1111 -->",
+      "options": {},
+      "ids": [
+        "fresh1"
+      ],
+      "expected": {
+        "text": "Para one.\n<!-- stay:dup hash=sha256:0000 -->\n\nPara two.\n<!-- stay:fresh1 hash=sha256:1111 -->",
+        "renamed": [
+          {
+            "from": "dup",
+            "to": "fresh1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "repair-same-block-duplicate-markers",
+      "op": "repair",
+      "input": "A.\n<!-- stay:dup -->\n<!-- stay:dup -->",
+      "options": {},
+      "ids": [
+        "fresh1"
+      ],
+      "expected": {
+        "text": "A.\n<!-- stay:dup -->\n<!-- stay:fresh1 -->",
+        "renamed": [
+          {
+            "from": "dup",
+            "to": "fresh1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "repair-no-op-without-duplicates",
+      "op": "repair",
+      "input": "One.\n<!-- stay:a -->\n\nTwo.\n<!-- stay:b -->",
+      "options": {},
+      "ids": [
+        "unused"
+      ],
+      "expected": {
+        "text": "One.\n<!-- stay:a -->\n\nTwo.\n<!-- stay:b -->",
+        "renamed": []
+      }
+    },
+    {
+      "name": "repair-reminted-id-avoids-collision",
+      "op": "repair",
+      "input": "One.\n<!-- stay:dup -->\n\nTwo.\n<!-- stay:dup -->\n\nThree.\n<!-- stay:taken -->",
+      "options": {},
+      "ids": [
+        "taken",
+        "ok1"
+      ],
+      "expected": {
+        "text": "One.\n<!-- stay:dup -->\n\nTwo.\n<!-- stay:ok1 -->\n\nThree.\n<!-- stay:taken -->",
+        "renamed": [
+          {
+            "from": "dup",
+            "to": "ok1"
+          }
+        ]
+      }
+    }
+  ]
+}

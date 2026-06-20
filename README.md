@@ -12,8 +12,9 @@ token that **stays** bound to its block across edits (marker `stay:`), so a
 reference to a block survives the document being rewritten, including by an LLM.
 
 This is the **parser-free core**: everything string-level and parser-independent
-(§8 hashing, §3/§4 marker grammar, §5 blank-line segmentation, §7/§11 lint, §9
-quote recovery, §9.1 resolution ladder). It mirrors the JavaScript reference
+(§8 hashing, §3/§4 marker grammar, §5 blank-line segmentation, §6 id minting, the
+§3/§4/§7/§8 write path, §7/§11 lint, §9 quote recovery, §9.1 resolution ladder).
+It mirrors the JavaScript reference
 ([`markstay` on npm](https://www.npmjs.com/package/markstay)); both are gated by a
 shared language-neutral conformance corpus, which turns "two implementations
 agree" from an assertion into a tested fact.
@@ -55,31 +56,46 @@ M.body_hash("some block body")
 # §9.1 resolution ladder: re-attach ids after an edit, or report DETACHED
 anchors = M.build_anchors(before_md)
 resolutions = M.resolve(anchors, after_md)   # id -> marker | hash | quote | detached
+
+# write path: mint ids for unmarked blocks (§6), append the §3.1 trailing marker
+res = M.stamp("First paragraph.\n\nSecond paragraph.\n")
+res.text     # each block now carries <!-- stay:ID hash=sha256:... -->
+res.minted   # [{"id": ..., "line": ...}, ...]
+
+# refresh a hash you edited on purpose (§8); repair duplicate ids (§7, copy mints new)
+M.restamp(edited_md)            # -> RestampResult(text, refreshed)
+M.repair_duplicates(copied_md)  # -> RepairResult(text, renamed)
 ```
 
 Public API (mirrors the JS `index.js` surface): `normalize_body`, `body_hash`,
-`Marker`, `find_markers`, `strip_markers`, `segment_blank_line`,
-`segment_commonmark`, `Block`, `parse_document`, `Finding`, `lint_document`,
-`lint_diff`, `sort_findings`, `has_errors`, `Selector`, `normalize`,
+`Marker`, `find_markers`, `strip_markers`, `rewrite_markers`,
+`segment_blank_line`, `segment_commonmark`, `Block`, `parse_document`, `Finding`,
+`lint_document`, `lint_diff`, `sort_findings`, `has_errors`, `mint_id`,
+`ID_CHARSET`, `format_marker`, `format_attr_value`, `stamp`, `restamp`,
+`repair_duplicates`, `DEFAULT_HASH_LENGTH`, `Selector`, `normalize`,
 `body_score`, `context_bonus`, `best_match`, `CONTEXT_CHARS`, `Anchor`,
 `Resolution`, `build_anchors`, `resolve`, `DEFAULT_THRESHOLD`, `DEFAULT_MARGIN`.
 
 ## CLI
 
 ```sh
-markstay FILE [FILE ...]            # well-formedness + intra-doc checks
-markstay --before OLD.md NEW.md     # regeneration diff (dropped/duplicated/relocated ids)
-markstay --json ...                 # machine-readable findings
-markstay --commonmark ...           # §5.2 CommonMark-tree segmentation (needs the extra)
+markstay lint    FILE [FILE ...]      # well-formedness + intra-doc checks
+markstay lint    --before OLD.md NEW  # regeneration diff (dropped/duplicated/relocated ids)
+markstay lint    --json ...           # machine-readable findings
+markstay lint    --commonmark ...     # §5.2 CommonMark-tree segmentation (needs the extra)
+markstay stamp   FILE... [-w]         # mint ids for unmarked blocks (§6)
+markstay restamp FILE... [-w]         # refresh hashes that drifted (§8)
+markstay repair  FILE... [-w]         # mint fresh ids for duplicate ids (§7)
 ```
 
-Exit status is non-zero when any error-level finding is reported, so it can gate
-a commit hook or an agent's post-edit step.
+`lint` exits non-zero when any error-level finding is reported, so it gates a
+commit hook or an agent's post-edit step. The write verbs print the result to
+stdout by default; `-w`/`--write` edits files in place.
 
 ## The conformance corpus (the actual deliverable)
 
 The corpus under [`conformance/`](conformance) is shared with the JavaScript
-reference. **276 vectors** across two tiers:
+reference. **290 vectors** across two tiers:
 
 - **`spec/`** , hand-authored from the spec prose, asserting what the *words*
   require. These are authority; a `spec/` vector the reference fails is a

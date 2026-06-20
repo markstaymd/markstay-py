@@ -200,7 +200,7 @@ def test_commonmark_loose_list_is_one_block():
 def test_cli_lints_a_file(tmp_path):
     p = tmp_path / "doc.md"
     p.write_text("A clean paragraph.\n<!-- stay:ok -->\n")
-    r = subprocess.run([sys.executable, "-m", "markstay.cli", str(p)],
+    r = subprocess.run([sys.executable, "-m", "markstay.cli", "lint", str(p)],
                        capture_output=True, text=True)
     assert r.returncode == 0
     assert "clean" in r.stdout
@@ -209,7 +209,20 @@ def test_cli_lints_a_file(tmp_path):
 def test_cli_nonzero_on_error(tmp_path):
     p = tmp_path / "doc.md"
     p.write_text("Para.\n<!-- stay:dup -->\n\nPara two.\n<!-- stay:dup -->\n")
-    r = subprocess.run([sys.executable, "-m", "markstay.cli", str(p)],
+    r = subprocess.run([sys.executable, "-m", "markstay.cli", "lint", str(p)],
                        capture_output=True, text=True)
     assert r.returncode == 1
     assert "DUPLICATE_ID" in r.stdout
+
+
+def test_cli_stamp_writes_in_place_then_lints_clean(tmp_path):
+    p = tmp_path / "doc.md"
+    p.write_text("First paragraph.\n\nSecond paragraph.\n")
+    stamp = subprocess.run([sys.executable, "-m", "markstay.cli", "stamp", "-w", str(p)],
+                           capture_output=True, text=True)
+    assert stamp.returncode == 0
+    assert "2 id(s) minted" in stamp.stderr
+    lint = subprocess.run([sys.executable, "-m", "markstay.cli", "lint", str(p)],
+                          capture_output=True, text=True)
+    assert lint.returncode == 0
+    assert "clean" in lint.stdout
