@@ -181,10 +181,33 @@ def v_stamp(v):
     return approx(got, v["expected"]), f"got={got}"
 
 
+def _cursor_random(byte_list):
+    """A byte source over a fixed list, consumed in order across random(n) draws."""
+    state = {"i": 0}
+
+    def r(n):
+        i = state["i"]
+        out = bytes(byte_list[i:i + n])
+        state["i"] = i + n
+        return out
+
+    return r
+
+
+def v_mint(v):
+    """Id-minting vectors (§6): a fixed byte array is the injected source, so the
+    rejection loop runs deterministically and identically across all three impls."""
+    kwargs = {}
+    if "alphabet" in v:
+        kwargs["alphabet"] = v["alphabet"]
+    got = M.mint_id(v["length"], random=_cursor_random(v["bytes"]), **kwargs)
+    return approx(got, v["expected"]), f"got={got}"
+
+
 VERIFIERS = {
     "hash": v_hash, "markers": v_markers, "parse": v_parse, "lint": v_lint,
     "diff": v_diff, "seqmatch": v_seqmatch, "score": v_score, "resolve": v_resolve,
-    "stamp": v_stamp,
+    "stamp": v_stamp, "mint": v_mint,
 }
 
 

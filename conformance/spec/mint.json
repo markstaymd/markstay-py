@@ -1,0 +1,31 @@
+{
+  "category": "mint",
+  "tier": "spec",
+  "vectors": [
+    {
+      "name": "zeros-give-first-alphabet-char",
+      "length": 8,
+      "bytes": [0, 0, 0, 0, 0, 0, 0, 0],
+      "expected": "AAAAAAAA"
+    },
+    {
+      "name": "rejection-sampling-skips-byte-at-limit",
+      "length": 4,
+      "bytes": [248, 1, 2, 3, 4],
+      "expected": "BCDE"
+    },
+    {
+      "name": "byte-reduced-modulo-alphabet-length",
+      "length": 2,
+      "bytes": [62, 63],
+      "expected": "AB"
+    },
+    {
+      "name": "custom-two-char-alphabet-no-rejection",
+      "length": 4,
+      "alphabet": "AB",
+      "bytes": [0, 1, 0, 1],
+      "expected": "ABAB"
+    }
+  ]
+}
