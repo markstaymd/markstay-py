@@ -38,6 +38,7 @@ def error_codes(md: str) -> list[str]:
 
 # --- mint_id (§6) ---------------------------------------------------------
 
+
 def test_mint_id_default_charset_and_length():
     for _ in range(200):
         i = M.mint_id()
@@ -59,6 +60,7 @@ def test_mint_id_rejects_degenerate_params():
 
 
 # --- format_attr_value / format_marker (§3 / §4) --------------------------
+
 
 def test_format_attr_value_bare_vs_quoted_with_escaping():
     assert M.format_attr_value("sha256:7a9c") == "sha256:7a9c"
@@ -164,7 +166,27 @@ def test_stamp_hash_length_controls_precision():
     assert mk.hash == M.body_hash("Body.", 4)
 
 
+def test_stamp_commonmark_fence_with_blank_line_gets_one_trailing_marker():
+    pytest.importorskip("markdown_it")
+    md = "```txt\nalpha\n\nbeta\n```\n"
+    res = M.stamp(md, new_id=lambda: "fence01", hash=False, mode="commonmark")
+    assert res.text == "```txt\nalpha\n\nbeta\n```\n<!-- stay:fence01 -->\n"
+    blocks = [b for b in M.parse_document(res.text, mode="commonmark") if b.index >= 0]
+    assert len(blocks) == 1
+    assert [m.id for m in blocks[0].markers] == ["fence01"]
+
+
+def test_restamp_commonmark_hashes_whole_fence_with_blank_line():
+    pytest.importorskip("markdown_it")
+    md = "```txt\nalpha\n\nbeta\n```\n<!-- stay:fence01 hash=sha256:0000 -->\n"
+    res = M.restamp(md, hash_length=4, mode="commonmark")
+    block = [b for b in M.parse_document(md, mode="commonmark") if b.index >= 0][0]
+    assert res.refreshed == ["fence01"]
+    assert f"hash=sha256:{M.body_hash(block.content, 4)}" in res.text
+
+
 # --- restamp (§8) ---------------------------------------------------------
+
 
 def test_restamp_refreshes_drifted_hash_then_lints_clean():
     stamped = M.stamp("Original body.", new_id=lambda: "r1").text
@@ -201,6 +223,7 @@ def test_restamp_add_missing_gives_hashless_marker_a_hash():
 
 
 # --- repair_duplicates (§7) -----------------------------------------------
+
 
 def test_repair_duplicates_first_kept_later_reminted_lints_clean():
     md = (

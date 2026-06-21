@@ -1,10 +1,10 @@
 """The write path (SPEC.md §3 / §4 / §6 / §7 / §8): mint ids, serialize markers,
 stamp an unmarked corpus, refresh drifted hashes, and repair duplicate ids.
 
-String-level and parser-free like the rest of the core (no Markdown parser), so it
-stays dependency-free and runs under the blank-line segmenter (§5). Port of the
-JavaScript reference (`impl/js/src/stamp.js`); the two are gated by the shared
-conformance corpus.
+String-level by default like the rest of the core: blank-line mode stays
+parser-free, while opt-in CommonMark mode reuses the optional markdown-it-py
+segmenter (§5.2). Port of the JavaScript reference (`impl/js/src/stamp.js`); the
+default path is gated by the shared conformance corpus.
 
 Every operation is idempotent in the obvious sense: stamping an already-stamped
 document is a no-op, restamping an undrifted document is a no-op, and repairing a
@@ -25,6 +25,7 @@ from .lint import (
     parse_document,
     rewrite_markers,
     segment_blank_line,
+    segment_commonmark,
     strip_markers,
 )
 
@@ -102,7 +103,9 @@ def format_marker(id: str, hash=None, attrs=None, syntax: str = "html") -> str:
     marker).
     """
     if not id or not ID_CHARSET.match(id):
-        raise ValueError(f"format_marker: invalid id {id!r} (must match [A-Za-z0-9_-]+)")
+        raise ValueError(
+            f"format_marker: invalid id {id!r} (must match [A-Za-z0-9_-]+)"
+        )
     if syntax not in ("html", "mdx"):
         raise ValueError(f"format_marker: unknown syntax {syntax!r}")
     body = f"stay:{id}"
@@ -126,12 +129,14 @@ def format_marker(id: str, hash=None, attrs=None, syntax: str = "html") -> str:
 
 def _unique_minter(used: set, new_id: Callable[[], str]) -> Callable[[], str]:
     """A minting function that never returns an id already present in ``used``."""
+
     def mint() -> str:
         while True:
             i = new_id()
             if i not in used:
                 used.add(i)
                 return i
+
     return mint
 
 
@@ -148,6 +153,14 @@ def _default_minter(new_id, length, alphabet, random):
     return lambda: mint_id(**kwargs)
 
 
+def _segments_for_mode(text: str, mode: str) -> list[tuple[int, str]]:
+    if mode == "commonmark":
+        return segment_commonmark(text)
+    if mode == "blank-line":
+        return segment_blank_line(text)
+    raise ValueError(f"unknown parse mode: {mode!r} (use 'blank-line' or 'commonmark')")
+
+
 def stamp(
     md: str,
     syntax: str = "html",
@@ -157,11 +170,16 @@ def stamp(
     length: int | None = None,
     alphabet: str | None = None,
     random: Callable[[int], bytes] | None = None,
+    mode: str = "blank-line",
 ) -> StampResult:
     """Stamp every unmarked content block (SPEC.md §5/§6): for each block with no
     well-formed id, mint one and append its marker on a new line directly after
     the block (the §3.1 trailing form, no blank line, so it binds to that block).
     Blocks that already carry a well-formed id are left untouched.
+
+    ``mode`` selects the block segmenter: ``"blank-line"`` is the dependency-free
+    default; ``"commonmark"`` uses the CommonMark block tree so fences, lists, and
+    blockquotes with internal blank lines are stamped as one block.
 
     ``new_id`` overrides the id factory; otherwise ``length``/``alphabet``/
     ``random`` are forwarded to :func:`mint_id`. Returns a :class:`StampResult`
@@ -174,16 +192,20 @@ def stamp(
     used = {mk.id for mk in find_markers(norm) if mk.id and not mk.malformed}
     next_id = _unique_minter(used, _default_minter(new_id, length, alphabet, random))
 
-    # Walk blank-line chunks, mirroring parse.py attachment, but keep each content
-    # block's last source line so a marker can be inserted right after it.
+    # Walk the selected segmenter, mirroring parse_document attachment, but keep
+    # each content block's last source line so a marker can be inserted after it.
     needs_stamp: list[dict] = []
     current: dict | None = None
-    for start, chunk in segment_blank_line(norm):
+    for start, chunk in _segments_for_mode(norm, mode):
         content = strip_markers(chunk).strip(_ASCII_TRIM)
         has_id = any(mk.id and not mk.malformed for mk in find_markers(chunk))
         if content != "":
             n_lines = len(chunk.split("\n"))
-            current = {"last_line0": start + n_lines - 2, "content": content, "has_id": has_id}
+            current = {
+                "last_line0": start + n_lines - 2,
+                "content": content,
+                "has_id": has_id,
+            }
             needs_stamp.append(current)
         elif current is not None:
             # marker-only chunk: its id (if any) identifies the preceding block
@@ -197,7 +219,9 @@ def stamp(
             continue
         new = next_id()
         hex_ = body_hash(blk["content"], hash_length) if hash else None
-        insert_after[blk["last_line0"]] = format_marker(id=new, hash=hex_, syntax=syntax)
+        insert_after[blk["last_line0"]] = format_marker(
+            id=new, hash=hex_, syntax=syntax
+        )
         minted.append({"id": new, "line": blk["last_line0"] + 1})
 
     if not insert_after:
@@ -215,6 +239,7 @@ def restamp(
     md: str,
     hash_length: int | None = None,
     add_missing: bool = False,
+    mode: str = "blank-line",
 ) -> RestampResult:
     """Refresh hashes that no longer match their block (SPEC.md §8): the
     deliberate "I edited this block on purpose, accept the new content" operation.
@@ -222,6 +247,7 @@ def restamp(
     body hash (at the stored precision), rewrite it to the current value. With
     ``add_missing``, markers that carry no hash gain one.
 
+    ``mode`` selects the same block segmenter accepted by :func:`stamp`.
     ``hash_length=None`` preserves each marker's stored precision. Returns a
     :class:`RestampResult` with ``text`` (LF-normalized) and ``refreshed`` ids.
     """
@@ -230,7 +256,7 @@ def restamp(
     # id -> the block body it identifies (first occurrence wins; a duplicate id is
     # a separate lint error and is left for repair_duplicates).
     content_by_id: dict[str, str] = {}
-    for b in parse_document(norm):
+    for b in parse_document(norm, mode=mode):
         if b.index < 0:
             continue
         for mk in b.markers:
@@ -249,11 +275,17 @@ def restamp(
             if now == mk.hash:
                 return None  # unchanged at this precision
             refreshed.append(mk.id)
-            return re.sub(r"hash\s*=\s*sha256:[0-9a-fA-F]+", f"hash=sha256:{now}", mk.raw, count=1)
+            return re.sub(
+                r"hash\s*=\s*sha256:[0-9a-fA-F]+", f"hash=sha256:{now}", mk.raw, count=1
+            )
         if add_missing:
-            now = body_hash(content, hash_length if hash_length is not None else DEFAULT_HASH_LENGTH)
+            now = body_hash(
+                content, hash_length if hash_length is not None else DEFAULT_HASH_LENGTH
+            )
             refreshed.append(mk.id)
-            return re.sub(r"(stay:\s*[A-Za-z0-9_-]+)", rf"\1 hash=sha256:{now}", mk.raw, count=1)
+            return re.sub(
+                r"(stay:\s*[A-Za-z0-9_-]+)", rf"\1 hash=sha256:{now}", mk.raw, count=1
+            )
         return None
 
     return RestampResult(text=rewrite_markers(norm, transform), refreshed=refreshed)
@@ -265,17 +297,19 @@ def repair_duplicates(
     length: int | None = None,
     alphabet: str | None = None,
     random: Callable[[int], bytes] | None = None,
+    mode: str = "blank-line",
 ) -> RepairResult:
     """Repair duplicate ids (SPEC.md §7: copy mints a new stay). The first block
     to carry a duplicated id keeps it; every later marker carrying that id is
     given a fresh, collision-free id. A copied block's content is unchanged, so
     its hash stays valid and is left as-is.
 
-    Returns a :class:`RepairResult` with ``text`` (LF-normalized) and ``renamed``
+    ``mode`` selects the same block segmenter accepted by :func:`stamp`. Returns
+    a :class:`RepairResult` with ``text`` (LF-normalized) and ``renamed``
     ``[{"from", "to"}]``.
     """
     norm = md.replace("\r\n", "\n").replace("\r", "\n")
-    blocks = parse_document(norm)
+    blocks = parse_document(norm, mode=mode)
 
     used: set[str] = set()
     count: dict[str, int] = {}  # id -> number of marker occurrences carrying it

@@ -21,6 +21,7 @@ def codes(findings):
 
 # --- well-formedness + intra-doc (linter/test_lint.py) --------------------
 
+
 def test_clean_doc_with_correct_hash():
     body = "The order pipeline ingests messages and normalizes them."
     h = M.body_hash(body, 4)
@@ -74,7 +75,9 @@ def test_orphan_marker_at_top():
 
 
 def test_hash_drift_intradoc():
-    _, findings = M.lint_document("Edited content.\n<!-- stay:z9 hash=sha256:dead -->\n")
+    _, findings = M.lint_document(
+        "Edited content.\n<!-- stay:z9 hash=sha256:dead -->\n"
+    )
     assert codes(findings) == ["HASH_DRIFT"]
     assert not M.has_errors(findings)  # drift is a warning, not an error
 
@@ -90,6 +93,7 @@ def test_strip_markers_removes_both_syntaxes():
 
 
 # --- regeneration diff (§11) ----------------------------------------------
+
 
 def test_diff_dropped():
     before = "A.\n<!-- stay:a -->\n\nB.\n<!-- stay:b -->\n"
@@ -180,11 +184,13 @@ def test_deleted_block_detaches():
 def test_determinism():
     a = M.resolve(M.build_anchors(BEFORE), BEFORE)
     b = M.resolve(M.build_anchors(BEFORE), BEFORE)
-    assert {k: (v.method, v.target) for k, v in a.items()} == \
-           {k: (v.method, v.target) for k, v in b.items()}
+    assert {k: (v.method, v.target) for k, v in a.items()} == {
+        k: (v.method, v.target) for k, v in b.items()
+    }
 
 
 # --- CommonMark mode (§5.2, optional extra) -------------------------------
+
 
 def test_commonmark_loose_list_is_one_block():
     pytest.importorskip("markdown_it")
@@ -197,11 +203,15 @@ def test_commonmark_loose_list_is_one_block():
 
 # --- CLI smoke ------------------------------------------------------------
 
+
 def test_cli_lints_a_file(tmp_path):
     p = tmp_path / "doc.md"
     p.write_text("A clean paragraph.\n<!-- stay:ok -->\n")
-    r = subprocess.run([sys.executable, "-m", "markstay.cli", "lint", str(p)],
-                       capture_output=True, text=True)
+    r = subprocess.run(
+        [sys.executable, "-m", "markstay.cli", "lint", str(p)],
+        capture_output=True,
+        text=True,
+    )
     assert r.returncode == 0
     assert "clean" in r.stdout
 
@@ -209,8 +219,11 @@ def test_cli_lints_a_file(tmp_path):
 def test_cli_nonzero_on_error(tmp_path):
     p = tmp_path / "doc.md"
     p.write_text("Para.\n<!-- stay:dup -->\n\nPara two.\n<!-- stay:dup -->\n")
-    r = subprocess.run([sys.executable, "-m", "markstay.cli", "lint", str(p)],
-                       capture_output=True, text=True)
+    r = subprocess.run(
+        [sys.executable, "-m", "markstay.cli", "lint", str(p)],
+        capture_output=True,
+        text=True,
+    )
     assert r.returncode == 1
     assert "DUPLICATE_ID" in r.stdout
 
@@ -218,11 +231,40 @@ def test_cli_nonzero_on_error(tmp_path):
 def test_cli_stamp_writes_in_place_then_lints_clean(tmp_path):
     p = tmp_path / "doc.md"
     p.write_text("First paragraph.\n\nSecond paragraph.\n")
-    stamp = subprocess.run([sys.executable, "-m", "markstay.cli", "stamp", "-w", str(p)],
-                           capture_output=True, text=True)
+    stamp = subprocess.run(
+        [sys.executable, "-m", "markstay.cli", "stamp", "-w", str(p)],
+        capture_output=True,
+        text=True,
+    )
     assert stamp.returncode == 0
     assert "2 id(s) minted" in stamp.stderr
-    lint = subprocess.run([sys.executable, "-m", "markstay.cli", "lint", str(p)],
-                          capture_output=True, text=True)
+    lint = subprocess.run(
+        [sys.executable, "-m", "markstay.cli", "lint", str(p)],
+        capture_output=True,
+        text=True,
+    )
     assert lint.returncode == 0
     assert "clean" in lint.stdout
+
+
+def test_cli_stamp_commonmark_keeps_marker_out_of_fence(tmp_path):
+    pytest.importorskip("markdown_it")
+    p = tmp_path / "doc.md"
+    p.write_text("```txt\nalpha\n\nbeta\n```\n")
+    stamp = subprocess.run(
+        [sys.executable, "-m", "markstay.cli", "stamp", "--commonmark", "-w", str(p)],
+        capture_output=True,
+        text=True,
+    )
+    assert stamp.returncode == 0
+    lines = p.read_text().splitlines()
+    fence_open = False
+    inside_markers = []
+    for line in lines:
+        if line.startswith("```"):
+            fence_open = not fence_open
+        elif fence_open and "stay:" in line:
+            inside_markers.append(line)
+    assert inside_markers == []
+    assert lines[4].startswith("```")
+    assert lines[5].startswith("<!-- stay:")
