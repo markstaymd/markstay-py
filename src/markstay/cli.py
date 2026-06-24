@@ -26,13 +26,23 @@ from .lint import Finding
 from .stamp import DEFAULT_HASH_LENGTH, repair_duplicates, restamp, stamp
 
 
-def render_text(label: str, findings: list[Finding]) -> str:
+def render_text(label: str, findings: list[Finding], show_drift: bool = False) -> str:
+    """Human render. HASH_DRIFT is the dominant, non-actionable line in normal use
+    (it never blocks; it only ever says "you edited things"), so it is hidden by
+    default and collapsed to one discoverable line. `show_drift=True` lists it.
+    `--json` and the return tuples always carry drift, so the structured channel is
+    unaffected. The error/warn/info summary counts the real totals either way."""
     if not findings:
         return f"{label}: clean (no findings)"
     out = [f"{label}:"]
-    for f in L.sort_findings(findings):
+    shown = findings if show_drift else [f for f in findings if f.code != "HASH_DRIFT"]
+    n_drift_hidden = len(findings) - len(shown)
+    for f in L.sort_findings(shown):
         where = f"L{f.line}" if f.line else "-"
         out.append(f"  [{f.level:5}] {f.code:16} {where:>5}  {f.message}")
+    if n_drift_hidden:
+        noun = "finding" if n_drift_hidden == 1 else "findings"
+        out.append(f"  -> {n_drift_hidden} hash-drift {noun} hidden (--show-drift to list)")
     n_err = sum(1 for f in findings if f.level == "error")
     n_warn = sum(1 for f in findings if f.level == "warn")
     n_info = sum(1 for f in findings if f.level == "info")
@@ -51,7 +61,8 @@ def _cmd_lint(args, ap) -> int:
         results.append(
             (
                 f"{args.before} -> {args.files[0]}",
-                L.lint_diff(before_md, after_md, mode=mode),
+                L.lint_diff(before_md, after_md, mode=mode,
+                            check_collections=args.check_collections),
             )
         )
     else:
@@ -65,7 +76,8 @@ def _cmd_lint(args, ap) -> int:
         }
         print(json.dumps(payload, indent=2))
     else:
-        print("\n".join(render_text(label, fs) for label, fs in results))
+        print("\n".join(render_text(label, fs, show_drift=args.show_drift)
+                        for label, fs in results))
 
     return 1 if any(L.has_errors(fs) for _, fs in results) else 0
 
@@ -155,6 +167,20 @@ def build_parser() -> argparse.ArgumentParser:
         "single FILE given (dropped/duplicated/relocated ids)",
     )
     p_lint.add_argument("--json", action="store_true", help="emit findings as JSON")
+    p_lint.add_argument(
+        "--show-drift",
+        action="store_true",
+        dest="show_drift",
+        help="list HASH_DRIFT findings in the text output (hidden by default; "
+        "--json always carries them)",
+    )
+    p_lint.add_argument(
+        "--check-collections",
+        action="store_true",
+        dest="check_collections",
+        help="with --before, also block when a kept stay's table or list lost "
+        "rows/bullets (COLLECTION_SHRANK); off by default",
+    )
     p_lint.add_argument("--commonmark", action="store_true", help=commonmark_help)
     p_lint.set_defaults(func=_cmd_lint)
 

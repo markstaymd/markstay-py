@@ -275,8 +275,10 @@ def restamp(
             if now == mk.hash:
                 return None  # unchanged at this precision
             refreshed.append(mk.id)
+            # \b mirrors the read-path HASH_RE: without it the sub false-matches the
+            # `hash` inside a custom key like `rehash` and corrupts a §4-preserved key.
             return re.sub(
-                r"hash\s*=\s*sha256:[0-9a-fA-F]+", f"hash=sha256:{now}", mk.raw, count=1
+                r"\bhash\s*=\s*sha256:[0-9a-fA-F]+", f"hash=sha256:{now}", mk.raw, count=1
             )
         if add_missing:
             now = body_hash(

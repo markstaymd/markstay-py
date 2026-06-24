@@ -80,6 +80,7 @@ def test_hash_drift_intradoc():
     )
     assert codes(findings) == ["HASH_DRIFT"]
     assert not M.has_errors(findings)  # drift is a warning, not an error
+    assert all(f.level == "warn" for f in findings if f.code == "HASH_DRIFT")
 
 
 def test_mdx_marker_parsed():
@@ -128,12 +129,78 @@ def test_diff_relocation_swap():
 def test_diff_inplace_edit_is_drift_not_relocation():
     before = "Alpha content.\n<!-- stay:aaa -->\n"
     after = "Alpha content, now revised.\n<!-- stay:aaa -->\n"
-    assert codes(M.lint_diff(before, after)) == ["HASH_DRIFT"]
+    findings = M.lint_diff(before, after)
+    assert codes(findings) == ["HASH_DRIFT"]
+    assert all(f.level == "warn" for f in findings if f.code == "HASH_DRIFT")
+
+
+def test_hash_drift_stays_warn_in_return_tuples_guardrail():
+    # Guardrail: the packaged markstay.lint must keep HASH_DRIFT at warn, because
+    # the RAG chunker imports THIS API and treats a drift warning as fatal (a stale
+    # hash means the cache's re-embed trigger is lying). Quieting the text render
+    # must never strip drift, or downgrade its level, in the structured channel.
+    # Mirror of the umbrella guardrail in linter/test_lint.py.
+    _, doc = M.lint_document("Edited.\n<!-- stay:z9 hash=sha256:dead -->\n")
+    doc_drift = [f for f in doc if f.code == "HASH_DRIFT"]
+    assert doc_drift and all(f.level == "warn" for f in doc_drift)
+    diff = M.lint_diff("Alpha.\n<!-- stay:a -->\n", "Alpha, revised.\n<!-- stay:a -->\n")
+    diff_drift = [f for f in diff if f.code == "HASH_DRIFT"]
+    assert diff_drift and all(f.level == "warn" for f in diff_drift)
 
 
 def test_unknown_mode_rejected():
     with pytest.raises(ValueError):
         M.parse_document("x\n", mode="bogus")
+
+
+# --- COLLECTION_SHRANK: opt-in within-collection loss check (SPEC.md §5.1) -----
+# A stay binds the whole table/list, so a dropped row/bullet is normally only a
+# non-blocking HASH_DRIFT. check_collections=True turns net item loss into a
+# blocking finding; off by default so existing callers are unaffected.
+
+_TBL = (
+    "| Item | State |\n|------|-------|\n"
+    "| auth | done |\n| orders | wip |\n<!-- stay:tbl -->\n"
+)
+_LST = "- alpha\n- beta\n- gamma\n<!-- stay:lst -->\n"
+
+
+def test_collection_shrank_table_row_drop():
+    after = _TBL.replace("| orders | wip |\n", "")
+    on = M.lint_diff(_TBL, after, check_collections=True)
+    assert "COLLECTION_SHRANK" in codes(on)
+    assert M.has_errors(on)
+    off = M.lint_diff(_TBL, after)  # off by default: only a non-blocking drift
+    assert "COLLECTION_SHRANK" not in codes(off)
+    assert not M.has_errors(off)
+
+
+def test_collection_shrank_bullet_drop():
+    after = _LST.replace("- beta\n", "")
+    on = M.lint_diff(_LST, after, check_collections=True)
+    assert "COLLECTION_SHRANK" in codes(on)
+    assert M.has_errors(on)
+
+
+def test_collection_shrank_silent_on_inplace_edit_and_growth():
+    edited = _TBL.replace("| orders | wip |", "| orders | done |")
+    grown = _TBL.replace("| orders | wip |\n", "| orders | wip |\n| billing | todo |\n")
+    for after in (edited, grown):
+        on = M.lint_diff(_TBL, after, check_collections=True)
+        assert "COLLECTION_SHRANK" not in codes(on)
+        assert not M.has_errors(on)
+
+
+def test_collection_shrank_fires_on_consolidation_known_fp():
+    after = _TBL.replace("| auth | done |\n| orders | wip |\n", "| auth+orders | done |\n")
+    assert "COLLECTION_SHRANK" in codes(M.lint_diff(_TBL, after, check_collections=True))
+
+
+def test_collection_shrank_distinct_from_dropped_block():
+    after = "Some replacement paragraph.\n<!-- stay:other -->\n"
+    cs = codes(M.lint_diff(_TBL, after, check_collections=True))
+    assert "DROPPED_ID" in cs
+    assert "COLLECTION_SHRANK" not in cs
 
 
 # --- attachment resolver ladder (§9.1) ------------------------------------
@@ -226,6 +293,46 @@ def test_cli_nonzero_on_error(tmp_path):
     )
     assert r.returncode == 1
     assert "DUPLICATE_ID" in r.stdout
+
+
+def _lint_cli(*args):
+    return subprocess.run(
+        [sys.executable, "-m", "markstay.cli", "lint", *args],
+        capture_output=True,
+        text=True,
+    )
+
+
+def test_cli_hides_drift_by_default_lists_with_flag(tmp_path):
+    p = tmp_path / "doc.md"
+    p.write_text("Edited.\n<!-- stay:z9 hash=sha256:dead -->\n")
+    hidden = _lint_cli(str(p))
+    assert hidden.returncode == 0  # drift is a warning, never gates
+    assert "HASH_DRIFT" not in hidden.stdout
+    assert "hash-drift" in hidden.stdout and "--show-drift" in hidden.stdout
+    shown = _lint_cli("--show-drift", str(p))
+    assert "HASH_DRIFT" in shown.stdout
+
+
+def test_cli_json_byte_identical_regardless_of_show_drift(tmp_path):
+    p = tmp_path / "doc.md"
+    p.write_text("Edited.\n<!-- stay:z9 hash=sha256:dead -->\n")
+    a = _lint_cli("--json", str(p))
+    b = _lint_cli("--json", "--show-drift", str(p))
+    assert a.stdout == b.stdout  # --json is the structured channel, untouched
+    assert "HASH_DRIFT" in a.stdout
+
+
+def test_cli_before_diff_text_path_hides_drift(tmp_path):
+    before = tmp_path / "before.md"
+    after = tmp_path / "after.md"
+    before.write_text("Alpha content.\n<!-- stay:aaa -->\n")
+    after.write_text("Alpha content, now revised.\n<!-- stay:aaa -->\n")
+    hidden = _lint_cli("--before", str(before), str(after))
+    assert "HASH_DRIFT" not in hidden.stdout
+    assert "hash-drift" in hidden.stdout
+    shown = _lint_cli("--show-drift", "--before", str(before), str(after))
+    assert "HASH_DRIFT" in shown.stdout
 
 
 def test_cli_stamp_writes_in_place_then_lints_clean(tmp_path):

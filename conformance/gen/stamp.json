@@ -260,6 +260,18 @@
           }
         ]
       }
+    },
+    {
+      "name": "restamp-preserves-unknown-key-ending-in-hash",
+      "op": "restamp",
+      "input": "Body.\n<!-- stay:x rehash=sha256:abc hash=sha256:beef -->",
+      "options": {},
+      "expected": {
+        "text": "Body.\n<!-- stay:x rehash=sha256:abc hash=sha256:521b -->",
+        "refreshed": [
+          "x"
+        ]
+      }
     }
   ]
 }
