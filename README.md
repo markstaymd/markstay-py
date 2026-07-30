@@ -83,6 +83,7 @@ markstay lint    FILE [FILE ...]      # well-formedness + intra-doc checks
 markstay lint    --before OLD.md NEW  # regeneration diff (dropped/duplicated/relocated ids)
 markstay lint    --json ...           # machine-readable findings
 markstay lint    --commonmark ...     # §5.2 CommonMark-tree segmentation (needs the extra)
+markstay check-staged [FILE...]       # the same diff against the staged commit
 markstay stamp   FILE... [-w]         # mint ids for unmarked blocks (§6)
 markstay restamp FILE... [-w]         # refresh hashes that drifted (§8)
 markstay repair  FILE... [-w]         # mint fresh ids for duplicate ids (§7)
@@ -91,6 +92,33 @@ markstay repair  FILE... [-w]         # mint fresh ids for duplicate ids (§7)
 `lint` exits non-zero when any error-level finding is reported, so it gates a
 commit hook or an agent's post-edit step. The write verbs print the result to
 stdout by default; `-w`/`--write` edits files in place.
+
+## Gating commits (pre-commit framework)
+
+`lint` needs two files. `check-staged` needs only a repo: it reads the staged commit
+and finds each document's baseline itself, which is what a hook actually wants.
+
+```yaml
+# .pre-commit-config.yaml
+repos:
+  - repo: https://github.com/markstaymd/markstay-py
+    rev: v0.4.0
+    hooks:
+      - id: markstay                  # or markstay-collections, to include table
+                                      # rows and list bullets
+```
+
+It stays quiet unless there is something to act on: a commit that only edits stamped
+blocks in place or mints new ids prints nothing, so the channel keeps meaning
+something. `--show-drift` opts back in, `--json` for machine output.
+
+**The baseline is resolved by stay id, not by filename.** git's rename detection is
+content-similarity based, and similarity is anti-correlated with this failure mode:
+the more a rewrite destroys, the more stays it can drop *and* the less git sees a
+rename. A measured real case scored 2% similarity, so git recorded delete + create
+and a path-keyed baseline found nothing to compare against. A surviving stay id is
+the stronger signal. An id that moved to another document in the same commit is
+reported as a move rather than a loss, so reorganising documents does not block.
 
 ## The conformance corpus (the actual deliverable)
 

@@ -5,6 +5,8 @@ naturally and the two ecosystems converge:
 
     markstay lint    FILE...              well-formedness + intra-doc checks
     markstay lint    --before OLD.md NEW  regeneration diff (SPEC.md §11)
+    markstay check-staged [FILE...]       the same diff against the staged commit,
+                                          for a pre-commit hook (§11)
     markstay stamp   FILE... [-w]         mint ids for unmarked blocks (§6)
     markstay restamp FILE... [-w]         refresh drifted hashes (§8)
     markstay repair  FILE... [-w]         mint fresh ids for duplicate ids (§7)
@@ -48,6 +50,73 @@ def render_text(label: str, findings: list[Finding], show_drift: bool = False) -
     n_info = sum(1 for f in findings if f.level == "info")
     out.append(f"  -> {n_err} error, {n_warn} warn, {n_info} info")
     return "\n".join(out)
+
+
+def _cmd_check_staged(args, ap) -> int:
+    from .staged import check_staged, check_worktree
+
+    # check-staged reads the index (a commit hook); check-worktree reads the files on
+    # disk (an agent's post-edit step, minutes after the edit rather than at the next
+    # commit). Same baseline resolution either way.
+    check = check_worktree if getattr(args, "worktree", False) else check_staged
+    mode = "commonmark" if args.commonmark else "blank-line"
+    try:
+        result = check(
+            [_repo_relative(f) for f in args.files],
+            mode=mode,
+            check_collections=args.check_collections,
+        )
+    except RuntimeError as exc:
+        sys.stderr.write(f"markstay: {exc}\n")
+        return 2
+
+    if args.json:
+        payload = {label: [f.__dict__ for f in L.sort_findings(fs)]
+                   for label, fs in result.reports}
+        print(json.dumps({"findings": payload, "notes": result.notes}, indent=2))
+    else:
+        # A hook speaks only when there is something to act on. HASH_DRIFT says
+        # "you edited a stamped block" and NEW_ID says "you added a stay"; neither
+        # blocks and neither asks anything of the committer, so a commit carrying
+        # only those prints nothing. --show-drift opts back in.
+        def actionable(f):
+            return f.level == "error" or (f.level == "warn" and f.code != "HASH_DRIFT")
+
+        shown = [render_text(label, fs, args.show_drift)
+                 for label, fs in result.reports
+                 if (fs if args.show_drift else any(actionable(f) for f in fs))]
+        if shown:
+            sys.stderr.write("\n".join(shown) + "\n")
+        if result.notes:
+            sys.stderr.write("markstay: stays that changed document (not blocking):\n"
+                             + "\n".join(f"  {n}" for n in result.notes) + "\n")
+
+    if result.has_errors:
+        sys.stderr.write(
+            "\nmarkstay: this commit breaks a stay (dropped / duplicated / "
+            "relocated / malformed). Fix it, or bypass once with "
+            "`git commit --no-verify`.\n")
+        return 1
+    return 0
+
+
+def _repo_relative(path: str) -> str:
+    """pre-commit and lint-staged both pass paths that may be absolute."""
+    import os
+    import subprocess
+
+    p = Path(path)
+    if not p.is_absolute():
+        return str(p).replace(os.sep, "/")
+    top = subprocess.run(["git", "rev-parse", "--show-toplevel"],
+                         capture_output=True, text=True)
+    if top.returncode != 0:
+        return str(p).replace(os.sep, "/")
+    try:
+        return str(p.resolve().relative_to(Path(top.stdout.strip()).resolve())
+                   ).replace(os.sep, "/")
+    except ValueError:
+        return str(p).replace(os.sep, "/")
 
 
 def _cmd_lint(args, ap) -> int:
@@ -183,6 +252,45 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_lint.add_argument("--commonmark", action="store_true", help=commonmark_help)
     p_lint.set_defaults(func=_cmd_lint)
+
+    p_staged = sub.add_parser(
+        "check-staged",
+        help="lint the staged commit against its baseline (for a pre-commit hook)",
+    )
+    p_staged.add_argument(
+        "files", nargs="*", metavar="FILE",
+        help="narrow the report to these paths; the commit is still read whole, "
+        "because a renamed document's baseline lives at a deleted path",
+    )
+    p_staged.add_argument("--json", action="store_true", help="machine-readable output")
+    p_staged.add_argument(
+        "--show-drift", action="store_true", dest="show_drift",
+        help="list the non-blocking findings a hook hides by default",
+    )
+    p_staged.add_argument(
+        "--check-collections", action="store_true", dest="check_collections",
+        help="also block when a kept stay's table or list lost rows/bullets "
+        "(COLLECTION_SHRANK); off by default",
+    )
+    p_staged.add_argument("--commonmark", action="store_true", help=commonmark_help)
+    p_staged.set_defaults(func=_cmd_check_staged, worktree=False)
+
+    p_wt = sub.add_parser(
+        "check-worktree",
+        help="the same check against the files on disk, staged or not "
+        "(for an agent's post-edit step, not a commit hook)",
+    )
+    p_wt.add_argument("files", nargs="*", metavar="FILE",
+                      help="narrow the report to these paths")
+    p_wt.add_argument("--json", action="store_true", help="machine-readable output")
+    p_wt.add_argument("--show-drift", action="store_true", dest="show_drift",
+                      help="list the non-blocking findings this hides by default")
+    p_wt.add_argument(
+        "--check-collections", action="store_true", dest="check_collections",
+        help="also report when a kept stay's table or list lost rows/bullets",
+    )
+    p_wt.add_argument("--commonmark", action="store_true", help=commonmark_help)
+    p_wt.set_defaults(func=_cmd_check_staged, worktree=True)
 
     p_stamp = sub.add_parser("stamp", help="mint ids for unmarked blocks (§6)")
     p_stamp.add_argument("files", nargs="+", metavar="FILE")

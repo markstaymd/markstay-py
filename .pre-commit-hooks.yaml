@@ -1,0 +1,42 @@
+# markstay as a pre-commit framework hook, so adopters add a `repo:` entry to the
+# config they already have instead of running a bespoke installer:
+#
+#   # .pre-commit-config.yaml
+#   repos:
+#     - repo: https://github.com/markstaymd/markstay-py
+#       rev: v0.4.0
+#       hooks:
+#         - id: markstay
+#
+# `pass_filenames: false` is deliberate. pre-commit would otherwise batch the staged
+# paths across several invocations, and this check reads the commit whole regardless:
+# a renamed document's baseline lives at a deleted path, which pre-commit never
+# passes. One invocation, one reading of the commit, one report.
+#
+# `types: [markdown]` still gates it, so the hook only runs when a Markdown file is
+# staged.
+- id: markstay
+  name: markstay (block identity)
+  description: >-
+    Block a commit that silently drops, duplicates, or relocates a stay marker.
+    Resolves each document's baseline by stay id rather than by filename, so a
+    rewrite that git records as delete + create is still checked.
+  entry: markstay check-staged
+  language: python
+  types: [markdown]
+  pass_filenames: false
+  require_serial: true
+
+# The same check with table rows and list bullets included. A stay binds a whole
+# table or list, so a pruned row is otherwise only a non-blocking hash drift. Opt in
+# by using this id instead: it is noisier on append-heavy prose.
+- id: markstay-collections
+  name: markstay (block identity, incl. table rows and list items)
+  description: >-
+    As `markstay`, and also block when a kept stay's table or list silently lost
+    rows or bullets (COLLECTION_SHRANK).
+  entry: markstay check-staged --check-collections
+  language: python
+  types: [markdown]
+  pass_filenames: false
+  require_serial: true
