@@ -204,10 +204,26 @@ def v_mint(v):
     return approx(got, v["expected"]), f"got={got}"
 
 
+def v_preserve(v):
+    """§11 preservation-instruction vectors. The instruction text ships as a
+    constant in this package (an installed wheel has no corpus on disk), so this
+    is what holds that copy byte-identical to the JS and Rust ones."""
+    fn = v["fn"]
+    if fn == "instruction":
+        got = M.PRESERVE_INSTRUCTION
+    elif fn == "return_only":
+        got = M.PRESERVE_RETURN_ONLY
+    elif fn == "wrap":
+        got = M.preserve_wrap(v["doc"], v.get("task"))
+    else:
+        raise AssertionError(f"unknown preserve fn: {fn!r}")
+    return approx(got, v["expected"]), f"got={got!r}"
+
+
 VERIFIERS = {
     "hash": v_hash, "markers": v_markers, "parse": v_parse, "lint": v_lint,
     "diff": v_diff, "seqmatch": v_seqmatch, "score": v_score, "resolve": v_resolve,
-    "stamp": v_stamp, "mint": v_mint,
+    "stamp": v_stamp, "mint": v_mint, "preserve": v_preserve,
 }
 
 
@@ -231,6 +247,16 @@ VECTORS = _load_vectors()
 
 def test_corpus_present():
     assert VECTORS, f"no corpus files found under {CORPUS}/spec or {CORPUS}/gen"
+
+
+def test_every_verifier_has_vectors():
+    """A verifier with no vectors is a check that silently is not running, and the
+    hundreds of unrelated vectors keep the suite green while it does nothing. That
+    is the failure class this project exists to catch, so a category missing from
+    the vendored corpus fails here rather than passing quietly."""
+    seen = {case.values[0] for case in VECTORS}
+    missing = sorted(set(VERIFIERS) - seen)
+    assert not missing, f"verifiers with no vectors in {CORPUS}: {missing}"
 
 
 @pytest.mark.parametrize("category,vector", VECTORS)

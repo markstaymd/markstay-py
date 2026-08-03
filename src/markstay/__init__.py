@@ -21,6 +21,7 @@ Public API (mirrors the JS `index.js` surface):
                   CONTEXT_CHARS
   resolve (§9.1)  Anchor, Resolution, build_anchors, resolve,
                   DEFAULT_THRESHOLD, DEFAULT_MARGIN
+  preserve (§11)  PRESERVE_INSTRUCTION, PRESERVE_RETURN_ONLY, preserve_wrap
 """
 
 from __future__ import annotations
@@ -75,8 +76,13 @@ from .resolve import (
     build_anchors,
     resolve,
 )
+from .preserve import (
+    INSTRUCTION as PRESERVE_INSTRUCTION,
+    RETURN_ONLY as PRESERVE_RETURN_ONLY,
+    preserve_wrap,
+)
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 __all__ = [
     "__version__",
@@ -129,4 +135,8 @@ __all__ = [
     "resolve",
     "DEFAULT_THRESHOLD",
     "DEFAULT_MARGIN",
+    # preserve / §11 AI editing contract
+    "PRESERVE_INSTRUCTION",
+    "PRESERVE_RETURN_ONLY",
+    "preserve_wrap",
 ]

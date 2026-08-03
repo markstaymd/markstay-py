@@ -34,6 +34,35 @@ pip install "markstay[commonmark]"   # pulls in markdown-it-py
 
 Requires Python >= 3.9.
 
+## Keeping stays alive through an agent's edit (start here)
+
+Almost every stay that goes missing goes missing the same way: a model rewrote the
+document and did not know the markers were load-bearing. The eval measured both
+halves of the fix, and they are not close , a naive "clean this up" rewrite keeps
+about **5%** of markers, the same rewrite carrying the SPEC.md §11 instruction keeps
+**~96-100%**, across five models and three vendors. That outweighs model tier.
+
+```sh
+markstay preserve                        # the §11 instruction, ready to paste into
+                                         #   AGENTS.md / CLAUDE.md / a system prompt
+markstay preserve --wrap DOC.md          # the instruction wrapped around a document,
+                                         #   as a complete editing prompt
+markstay preserve --wrap DOC.md --task "Rewrite this to be clearer."
+```
+
+```python
+import markstay as M
+
+M.PRESERVE_INSTRUCTION            # the §11 contract, worded for an editing agent
+M.preserve_wrap(doc, "Tighten it.")   # the prompt shape the eval measured
+```
+
+The instruction is byte-identical in the npm and crates.io packages, held there by
+the shared conformance corpus rather than by convention.
+
+Everything below is the **backstop**: it catches loss after the fact, it does not
+prevent it. Ship the instruction first.
+
 ## Library
 
 ```python
@@ -74,11 +103,14 @@ Public API (mirrors the JS `index.js` surface): `normalize_body`, `body_hash`,
 `ID_CHARSET`, `format_marker`, `format_attr_value`, `stamp`, `restamp`,
 `repair_duplicates`, `DEFAULT_HASH_LENGTH`, `Selector`, `normalize`,
 `body_score`, `context_bonus`, `best_match`, `CONTEXT_CHARS`, `Anchor`,
-`Resolution`, `build_anchors`, `resolve`, `DEFAULT_THRESHOLD`, `DEFAULT_MARGIN`.
+`Resolution`, `build_anchors`, `resolve`, `DEFAULT_THRESHOLD`, `DEFAULT_MARGIN`,
+`PRESERVE_INSTRUCTION`, `PRESERVE_RETURN_ONLY`, `preserve_wrap`.
 
 ## CLI
 
 ```sh
+markstay preserve                     # the §11 instruction for an editing agent
+markstay preserve --wrap DOC.md       # that instruction + the doc, as a prompt
 markstay lint    FILE [FILE ...]      # well-formedness + intra-doc checks
 markstay lint    --before OLD.md NEW  # regeneration diff (dropped/duplicated/relocated ids)
 markstay lint    --json ...           # machine-readable findings
@@ -123,7 +155,7 @@ reported as a move rather than a loss, so reorganising documents does not block.
 ## The conformance corpus (the actual deliverable)
 
 The corpus under [`conformance/`](conformance) is shared with the JavaScript
-reference. **290 vectors** across two tiers:
+reference. **303 vectors** across two tiers:
 
 - **`spec/`** , hand-authored from the spec prose, asserting what the *words*
   require. These are authority; a `spec/` vector the reference fails is a

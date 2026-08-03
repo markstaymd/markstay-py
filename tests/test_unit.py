@@ -375,3 +375,66 @@ def test_cli_stamp_commonmark_keeps_marker_out_of_fence(tmp_path):
     assert inside_markers == []
     assert lines[4].startswith("```")
     assert lines[5].startswith("<!-- stay:")
+
+
+# --- preserve (SPEC.md §11) -----------------------------------------------
+#
+# The verb the eval says matters most: an instructed rewrite keeps ~96-100% of
+# markers against ~5% for a naive one. Its CLI contract is deliberately dull, no
+# parsing and no git, so these pin the shape rather than the content (the text
+# itself is held byte-identical to the JS and Rust copies by the conformance
+# corpus, in test_conformance.py).
+
+
+def _cli(*args):
+    return subprocess.run(
+        [sys.executable, "-m", "markstay.cli", *args], capture_output=True, text=True
+    )
+
+
+def test_cli_preserve_prints_the_instruction_verbatim():
+    r = _cli("preserve")
+    assert r.returncode == 0
+    assert r.stdout == M.PRESERVE_INSTRUCTION + "\n"
+
+
+def test_cli_preserve_wrap_composes_the_measured_prompt_shape(tmp_path):
+    p = tmp_path / "doc.md"
+    p.write_text("# Title\n\nA paragraph.\n")
+    r = _cli("preserve", "--wrap", str(p), "--task", "Tighten it.")
+    assert r.returncode == 0
+    assert r.stdout == M.preserve_wrap("# Title\n\nA paragraph.\n", "Tighten it.") + "\n"
+    # task first, then the instruction, then the document behind the rule
+    assert (
+        r.stdout.index("Tighten it.")
+        < r.stdout.index(M.PRESERVE_INSTRUCTION)
+        < r.stdout.index("A paragraph.")
+    )
+
+
+def test_cli_preserve_rejects_a_task_without_wrap_and_a_missing_file(tmp_path):
+    # A bare FILE is the plausible mistake (every other verb takes one), so it
+    # has to fail loudly rather than print the instruction and ignore the doc.
+    assert _cli("preserve", "--task", "Tighten it.").returncode == 2
+    assert _cli("preserve", str(tmp_path / "nope.md")).returncode == 2
+    assert _cli("preserve", "--wrap", str(tmp_path / "nope.md")).returncode == 2
+
+
+def test_cli_preserve_rejects_input_that_is_not_utf8(tmp_path):
+    # Python's text streams surrogate-escape and Node substitutes U+FFFD, so a
+    # lenient read is precisely how three implementations stop emitting the same
+    # bytes for the same document. All three exit 2 instead.
+    p = tmp_path / "bad.md"
+    p.write_bytes(b"Body \xff byte.\n")
+    r = _cli("preserve", "--wrap", str(p))
+    assert r.returncode == 2
+    assert "not valid UTF-8" in r.stderr
+    assert "Traceback" not in r.stderr
+
+    r = subprocess.run(
+        [sys.executable, "-m", "markstay.cli", "preserve", "--wrap", "-"],
+        input=b"Body \xff byte.\n",
+        capture_output=True,
+    )
+    assert r.returncode == 2
+    assert b"not valid UTF-8" in r.stderr

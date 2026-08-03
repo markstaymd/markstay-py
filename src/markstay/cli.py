@@ -3,6 +3,10 @@
 Subcommand grammar, matching the npm `markstay` CLI so the write verbs read
 naturally and the two ecosystems converge:
 
+    markstay preserve                     print the §11 instruction for an editing
+                                          agent (the lever; see below)
+    markstay preserve --wrap DOC.md       that instruction wrapped around a document,
+                                          as a ready editing prompt
     markstay lint    FILE...              well-formedness + intra-doc checks
     markstay lint    --before OLD.md NEW  regeneration diff (SPEC.md §11)
     markstay check-staged [FILE...]       the same diff against the staged commit,
@@ -10,6 +14,10 @@ naturally and the two ecosystems converge:
     markstay stamp   FILE... [-w]         mint ids for unmarked blocks (§6)
     markstay restamp FILE... [-w]         refresh drifted hashes (§8)
     markstay repair  FILE... [-w]         mint fresh ids for duplicate ids (§7)
+
+``preserve`` comes first because measurement puts it first: an instructed rewrite
+keeps ~96-100% of markers against ~5% for a naive one (`eval/FINDINGS.md`), so the
+instruction prevents loss and the checks below only catch it.
 
 ``lint`` exits non-zero when any error-level finding is reported, so it gates a
 commit hook or an agent's post-edit step. The write verbs print the result to
@@ -209,6 +217,33 @@ def _cmd_repair(args, ap) -> int:
     return _run_write("repair", args, ap, op)
 
 
+def _cmd_preserve(args, ap) -> int:
+    from .preserve import INSTRUCTION, preserve_wrap
+
+    if args.task is not None and args.wrap is None:
+        ap.error("--task only applies with --wrap")
+    if args.wrap is None:
+        sys.stdout.write(INSTRUCTION + "\n")
+        return 0
+    # Read bytes and decode strictly. Invalid input is rejected rather than
+    # guessed at: Python's text streams surrogate-escape and Node substitutes
+    # U+FFFD, so a lenient read is precisely how three implementations stop
+    # emitting the same bytes for the same document.
+    where = "stdin" if args.wrap == "-" else args.wrap
+    try:
+        raw = sys.stdin.buffer.read() if args.wrap == "-" else Path(args.wrap).read_bytes()
+    except OSError as exc:
+        sys.stderr.write(f"markstay: {exc}\n")
+        return 2
+    try:
+        doc = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        sys.stderr.write(f"markstay: {where}: not valid UTF-8\n")
+        return 2
+    sys.stdout.write(preserve_wrap(doc, task=args.task) + "\n")
+    return 0
+
+
 def _positive_int(s: str) -> int:
     n = int(s)
     if n < 1:
@@ -224,6 +259,27 @@ def build_parser() -> argparse.ArgumentParser:
         "blank-line fences attach as one block. Needs the 'commonmark' extra "
         "(markdown-it-py)"
     )
+
+    # First, because measurement puts it first: the instruction prevents loss,
+    # everything below only catches it.
+    p_preserve = sub.add_parser(
+        "preserve",
+        help="print the §11 instruction that keeps markers alive through an "
+        "agent's edit (--wrap DOC.md to build the whole prompt)",
+    )
+    p_preserve.add_argument(
+        "--wrap",
+        metavar="DOC.md",
+        help="emit the instruction wrapped around this document as a ready "
+        "editing prompt ('-' reads stdin)",
+    )
+    p_preserve.add_argument(
+        "--task",
+        metavar="TEXT",
+        help="edit task to prepend to a --wrap prompt "
+        '(e.g. "Rewrite this to be clearer.")',
+    )
+    p_preserve.set_defaults(func=_cmd_preserve)
 
     p_lint = sub.add_parser("lint", help="well-formedness + intra-doc checks")
     p_lint.add_argument(

@@ -1,0 +1,51 @@
+{
+  "category": "preserve",
+  "tier": "spec",
+  "vectors": [
+    {
+      "name": "instruction-is-the-normative-s11-wording",
+      "fn": "instruction",
+      "expected": "This Markdown document uses markstay markers: HTML comments of the form\n`<!-- stay:ID ... -->` (or, in MDX, `{/* stay:ID ... */}`) placed on or just after\nthe block they identify. Each marker is a stable address that other tools rely on,\nso it must survive your edit.\n\nWhen you edit this document you MUST:\n\n- preserve every existing `stay:` marker exactly as written, including its id and\n  any `hash=` / `quote=` attributes; do not remove, reword, renumber, or relocate it;\n- keep each marker attached to the same logical block it was on before, even when\n  you move, reword, or reformat that block;\n- mint a fresh id (any new short token) only for content that is genuinely new;\n- never reuse an existing id for different content;\n- if you must drop a marker, report it explicitly in your reply, never drop one\n  silently;\n- never introduce a duplicate id (the same id on two blocks).\n\nReturn the edited Markdown with every original marker still present and in place."
+    },
+    {
+      "name": "return-only-line",
+      "fn": "return_only",
+      "expected": "Return only the resulting Markdown, with no commentary and no code fence around it."
+    },
+    {
+      "name": "wrap-without-task-leads-with-the-instruction",
+      "fn": "wrap",
+      "doc": "\n\n# Title\n\nA paragraph.\n\n",
+      "task": null,
+      "expected": "This Markdown document uses markstay markers: HTML comments of the form\n`<!-- stay:ID ... -->` (or, in MDX, `{/* stay:ID ... */}`) placed on or just after\nthe block they identify. Each marker is a stable address that other tools rely on,\nso it must survive your edit.\n\nWhen you edit this document you MUST:\n\n- preserve every existing `stay:` marker exactly as written, including its id and\n  any `hash=` / `quote=` attributes; do not remove, reword, renumber, or relocate it;\n- keep each marker attached to the same logical block it was on before, even when\n  you move, reword, or reformat that block;\n- mint a fresh id (any new short token) only for content that is genuinely new;\n- never reuse an existing id for different content;\n- if you must drop a marker, report it explicitly in your reply, never drop one\n  silently;\n- never introduce a duplicate id (the same id on two blocks).\n\nReturn the edited Markdown with every original marker still present and in place.\n\nReturn only the resulting Markdown, with no commentary and no code fence around it.\n\n---\n\n# Title\n\nA paragraph.\n"
+    },
+    {
+      "name": "wrap-with-task-puts-the-task-first-and-trims-it",
+      "fn": "wrap",
+      "doc": "\n\n# Title\n\nA paragraph.\n\n",
+      "task": "  Rewrite this to be clearer.\n\n",
+      "expected": "Rewrite this to be clearer.\n\nThis Markdown document uses markstay markers: HTML comments of the form\n`<!-- stay:ID ... -->` (or, in MDX, `{/* stay:ID ... */}`) placed on or just after\nthe block they identify. Each marker is a stable address that other tools rely on,\nso it must survive your edit.\n\nWhen you edit this document you MUST:\n\n- preserve every existing `stay:` marker exactly as written, including its id and\n  any `hash=` / `quote=` attributes; do not remove, reword, renumber, or relocate it;\n- keep each marker attached to the same logical block it was on before, even when\n  you move, reword, or reformat that block;\n- mint a fresh id (any new short token) only for content that is genuinely new;\n- never reuse an existing id for different content;\n- if you must drop a marker, report it explicitly in your reply, never drop one\n  silently;\n- never introduce a duplicate id (the same id on two blocks).\n\nReturn the edited Markdown with every original marker still present and in place.\n\nReturn only the resulting Markdown, with no commentary and no code fence around it.\n\n---\n\n# Title\n\nA paragraph.\n"
+    },
+    {
+      "name": "wrap-treats-a-whitespace-only-task-as-absent",
+      "fn": "wrap",
+      "doc": "\n\n# Title\n\nA paragraph.\n\n",
+      "task": " \t\n ",
+      "expected": "This Markdown document uses markstay markers: HTML comments of the form\n`<!-- stay:ID ... -->` (or, in MDX, `{/* stay:ID ... */}`) placed on or just after\nthe block they identify. Each marker is a stable address that other tools rely on,\nso it must survive your edit.\n\nWhen you edit this document you MUST:\n\n- preserve every existing `stay:` marker exactly as written, including its id and\n  any `hash=` / `quote=` attributes; do not remove, reword, renumber, or relocate it;\n- keep each marker attached to the same logical block it was on before, even when\n  you move, reword, or reformat that block;\n- mint a fresh id (any new short token) only for content that is genuinely new;\n- never reuse an existing id for different content;\n- if you must drop a marker, report it explicitly in your reply, never drop one\n  silently;\n- never introduce a duplicate id (the same id on two blocks).\n\nReturn the edited Markdown with every original marker still present and in place.\n\nReturn only the resulting Markdown, with no commentary and no code fence around it.\n\n---\n\n# Title\n\nA paragraph.\n"
+    },
+    {
+      "name": "wrap-trims-ascii-whitespace-only-nbsp-is-content",
+      "fn": "wrap",
+      "doc": "\n  Body with edge NBSP.  \n",
+      "task": null,
+      "expected": "This Markdown document uses markstay markers: HTML comments of the form\n`<!-- stay:ID ... -->` (or, in MDX, `{/* stay:ID ... */}`) placed on or just after\nthe block they identify. Each marker is a stable address that other tools rely on,\nso it must survive your edit.\n\nWhen you edit this document you MUST:\n\n- preserve every existing `stay:` marker exactly as written, including its id and\n  any `hash=` / `quote=` attributes; do not remove, reword, renumber, or relocate it;\n- keep each marker attached to the same logical block it was on before, even when\n  you move, reword, or reformat that block;\n- mint a fresh id (any new short token) only for content that is genuinely new;\n- never reuse an existing id for different content;\n- if you must drop a marker, report it explicitly in your reply, never drop one\n  silently;\n- never introduce a duplicate id (the same id on two blocks).\n\nReturn the edited Markdown with every original marker still present and in place.\n\nReturn only the resulting Markdown, with no commentary and no code fence around it.\n\n---\n\n Body with edge NBSP. \n"
+    },
+    {
+      "name": "wrap-carries-a-stayed-document-verbatim",
+      "fn": "wrap",
+      "doc": "# Title\n<!-- stay:aB3dEf01 hash=0f1e2d3c4b5a -->\n\nA paragraph that is addressed.\n<!-- stay:Zy9Xw8Vu -->\n",
+      "task": "Tighten the prose.",
+      "expected": "Tighten the prose.\n\nThis Markdown document uses markstay markers: HTML comments of the form\n`<!-- stay:ID ... -->` (or, in MDX, `{/* stay:ID ... */}`) placed on or just after\nthe block they identify. Each marker is a stable address that other tools rely on,\nso it must survive your edit.\n\nWhen you edit this document you MUST:\n\n- preserve every existing `stay:` marker exactly as written, including its id and\n  any `hash=` / `quote=` attributes; do not remove, reword, renumber, or relocate it;\n- keep each marker attached to the same logical block it was on before, even when\n  you move, reword, or reformat that block;\n- mint a fresh id (any new short token) only for content that is genuinely new;\n- never reuse an existing id for different content;\n- if you must drop a marker, report it explicitly in your reply, never drop one\n  silently;\n- never introduce a duplicate id (the same id on two blocks).\n\nReturn the edited Markdown with every original marker still present and in place.\n\nReturn only the resulting Markdown, with no commentary and no code fence around it.\n\n---\n\n# Title\n<!-- stay:aB3dEf01 hash=0f1e2d3c4b5a -->\n\nA paragraph that is addressed.\n<!-- stay:Zy9Xw8Vu -->\n"
+    }
+  ]
+}
