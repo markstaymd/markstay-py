@@ -20,6 +20,7 @@ from typing import Callable, Iterable
 from .id import ID_CHARSET, mint_id
 from .lint import (
     Marker,
+    _blank_frontmatter,
     body_hash,
     find_markers,
     parse_document,
@@ -67,6 +68,7 @@ class RestampResult:
 class RepairResult:
     text: str
     renamed: list[dict] = field(default_factory=list)  # [{"from":.., "to":..}]
+    cleaned: list[str] = field(default_factory=list)
 
 
 def format_attr_value(value) -> str:
@@ -154,6 +156,14 @@ def _default_minter(new_id, length, alphabet, random):
 
 
 def _segments_for_mode(text: str, mode: str) -> list[tuple[int, str]]:
+    """Segment for the write path exactly as :func:`parse_document` does, leading
+    frontmatter included: it is blanked line-for-line first, so the write path
+    never mints an id for document metadata. Skipping it here rather than filtering
+    afterwards is what keeps stamp and lint agreeing , a marker stamped onto
+    frontmatter would have no block to attach to and lint would (correctly) call it
+    an ORPHAN_MARKER. Line numbers are preserved by the blanking, so the caller's
+    insertion points still index the original text."""
+    text = _blank_frontmatter(text)
     if mode == "commonmark":
         return segment_commonmark(text)
     if mode == "blank-line":
@@ -171,6 +181,7 @@ def stamp(
     alphabet: str | None = None,
     random: Callable[[int], bytes] | None = None,
     mode: str = "blank-line",
+    child_blocks: bool = False,
 ) -> StampResult:
     """Stamp every unmarked content block (SPEC.md §5/§6): for each block with no
     well-formed id, mint one and append its marker on a new line directly after
@@ -185,6 +196,9 @@ def stamp(
     ``random`` are forwarded to :func:`mint_id`. Returns a :class:`StampResult`
     with ``text`` (LF-normalized) and ``minted`` ``[{"id", "line"}]``.
     """
+    if child_blocks and not hash:
+        raise ValueError("stamp: child_blocks requires subhash evidence")
+
     norm = md.replace("\r\n", "\n").replace("\r", "\n")
     lines = norm.split("\n")
 
@@ -196,15 +210,43 @@ def stamp(
     # each content block's last source line so a marker can be inserted after it.
     needs_stamp: list[dict] = []
     current: dict | None = None
+    parsed_children = (
+        {
+            b.line: b.children
+            for b in parse_document(norm, mode=mode, child_blocks=child_blocks)
+            if b.index >= 0
+        }
+        if child_blocks
+        else {}
+    )
     for start, chunk in _segments_for_mode(norm, mode):
         content = strip_markers(chunk).strip(_ASCII_TRIM)
-        has_id = any(mk.id and not mk.malformed for mk in find_markers(chunk))
+        chunk_markers = find_markers(chunk, line_offset=start - 1)
+        has_id = any(
+            mk.id and not mk.malformed and (not child_blocks or mk.subhash is None)
+            for mk in chunk_markers
+        )
         if content != "":
             n_lines = len(chunk.split("\n"))
+            children = []
+            if child_blocks:
+                for child in parsed_children.get(start, []):
+                    if child.marker_line <= 0:
+                        continue
+                    children.append(
+                        {
+                            "content": child.content,
+                            "marker_line0": child.marker_line - 1,
+                            "has_id": any(
+                                mk.id and not mk.malformed for mk in child.markers
+                            ),
+                        }
+                    )
             current = {
                 "last_line0": start + n_lines - 2,
                 "content": content,
                 "has_id": has_id,
+                "children": children,
             }
             needs_stamp.append(current)
         elif current is not None:
@@ -213,8 +255,21 @@ def stamp(
                 current["has_id"] = True
 
     insert_after: dict[int, str] = {}
+    append_inline: dict[int, list[str]] = {}
     minted: list[dict] = []
     for blk in needs_stamp:
+        for child in blk["children"]:
+            if child["has_id"]:
+                continue
+            new = next_id()
+            hex_ = body_hash(child["content"], hash_length)
+            marker = format_marker(
+                id=new,
+                attrs=[("subhash", f"sha256:{hex_}")],
+                syntax=syntax,
+            )
+            append_inline.setdefault(child["marker_line0"], []).append(marker)
+            minted.append({"id": new, "line": child["marker_line0"] + 1})
         if blk["has_id"]:
             continue
         new = next_id()
@@ -224,11 +279,16 @@ def stamp(
         )
         minted.append({"id": new, "line": blk["last_line0"] + 1})
 
-    if not insert_after:
+    if not insert_after and not append_inline:
         return StampResult(text=norm, minted=[])
 
     out: list[str] = []
     for i, line in enumerate(lines):
+        if i in append_inline:
+            for marker in append_inline[i]:
+                if line and not line.endswith((" ", "\t", "\f", "\v")):
+                    line += " "
+                line += marker
         out.append(line)
         if i in insert_after:
             out.append(insert_after[i])
@@ -240,6 +300,7 @@ def restamp(
     hash_length: int | None = None,
     add_missing: bool = False,
     mode: str = "blank-line",
+    child_blocks: bool = False,
 ) -> RestampResult:
     """Refresh hashes that no longer match their block (SPEC.md §8): the
     deliberate "I edited this block on purpose, accept the new content" operation.
@@ -256,17 +317,38 @@ def restamp(
     # id -> the block body it identifies (first occurrence wins; a duplicate id is
     # a separate lint error and is left for repair_duplicates).
     content_by_id: dict[str, str] = {}
-    for b in parse_document(norm, mode=mode):
+    child_content_by_id: dict[str, str] = {}
+    for b in parse_document(norm, mode=mode, child_blocks=child_blocks):
         if b.index < 0:
             continue
         for mk in b.markers:
             if mk.id and not mk.malformed and mk.id not in content_by_id:
                 content_by_id[mk.id] = b.content
+        if child_blocks:
+            for child in b.children:
+                for mk in child.markers:
+                    if mk.id and not mk.malformed and mk.id not in child_content_by_id:
+                        child_content_by_id[mk.id] = child.content
 
     refreshed: list[str] = []
 
     def transform(mk: Marker):
-        if not mk.id or mk.id not in content_by_id:
+        if not mk.id:
+            return None
+        if child_blocks and mk.subhash is not None and mk.id in child_content_by_id:
+            content = child_content_by_id[mk.id]
+            length = hash_length if hash_length is not None else len(mk.subhash)
+            now = body_hash(content, length)
+            if now == mk.subhash:
+                return None
+            refreshed.append(mk.id)
+            return re.sub(
+                r"\bsubhash\s*=\s*sha256:[0-9a-fA-F]+",
+                f"subhash=sha256:{now}",
+                mk.raw,
+                count=1,
+            )
+        if mk.id not in content_by_id:
             return None
         content = content_by_id[mk.id]
         if mk.hash is not None:
@@ -278,7 +360,10 @@ def restamp(
             # \b mirrors the read-path HASH_RE: without it the sub false-matches the
             # `hash` inside a custom key like `rehash` and corrupts a §4-preserved key.
             return re.sub(
-                r"\bhash\s*=\s*sha256:[0-9a-fA-F]+", f"hash=sha256:{now}", mk.raw, count=1
+                r"\bhash\s*=\s*sha256:[0-9a-fA-F]+",
+                f"hash=sha256:{now}",
+                mk.raw,
+                count=1,
             )
         if add_missing:
             now = body_hash(
@@ -300,6 +385,7 @@ def repair_duplicates(
     alphabet: str | None = None,
     random: Callable[[int], bytes] | None = None,
     mode: str = "blank-line",
+    child_blocks: bool = False,
 ) -> RepairResult:
     """Repair duplicate ids (SPEC.md §7: copy mints a new stay). The first block
     to carry a duplicated id keeps it; every later marker carrying that id is
@@ -311,7 +397,7 @@ def repair_duplicates(
     ``[{"from", "to"}]``.
     """
     norm = md.replace("\r\n", "\n").replace("\r", "\n")
-    blocks = parse_document(norm, mode=mode)
+    blocks = parse_document(norm, mode=mode, child_blocks=child_blocks)
 
     used: set[str] = set()
     count: dict[str, int] = {}  # id -> number of marker occurrences carrying it
@@ -322,26 +408,56 @@ def repair_duplicates(
             if mk.id and not mk.malformed:
                 used.add(mk.id)
                 count[mk.id] = count.get(mk.id, 0) + 1
+        if child_blocks:
+            for child in b.children:
+                for mk in child.markers:
+                    if mk.id and not mk.malformed:
+                        used.add(mk.id)
+                        count[mk.id] = count.get(mk.id, 0) + 1
     # A duplicate is any id on more than one marker, so two markers sharing an id
     # on the *same* block (which lint_document also flags) are repaired, not just
     # the copy-across-blocks case.
     dup = {i for i, c in count.items() if c > 1}
-    if not dup:
-        return RepairResult(text=norm, renamed=[])
+    injected: set[str] = set()
+    if child_blocks:
+        for b in blocks:
+            if b.index < 0:
+                continue
+            for child in b.children:
+                for mk in child.markers:
+                    if (
+                        mk.id
+                        and mk.hash
+                        and body_hash(b.content, len(mk.hash)) == mk.hash
+                    ):
+                        injected.add(mk.id)
+    if not dup and not injected:
+        return RepairResult(text=norm, renamed=[], cleaned=[])
 
     next_id = _unique_minter(used, _default_minter(new_id, length, alphabet, random))
     seen: dict[str, int] = {}  # id -> markers-with-this-id seen so far
     renamed: list[dict] = []
+    cleaned: list[str] = []
 
     def transform(mk: Marker):
-        if not mk.id or mk.id not in dup:
+        if not mk.id:
             return None
-        c = seen.get(mk.id, 0) + 1
-        seen[mk.id] = c
-        if c == 1:
-            return None  # first occurrence keeps the id
-        fresh = next_id()
-        renamed.append({"from": mk.id, "to": fresh})
-        return re.sub(r"stay:\s*[A-Za-z0-9_-]+", f"stay:{fresh}", mk.raw, count=1)
+        raw = mk.raw
+        changed = False
+        if mk.id in dup:
+            c = seen.get(mk.id, 0) + 1
+            seen[mk.id] = c
+            if c > 1:
+                fresh = next_id()
+                renamed.append({"from": mk.id, "to": fresh})
+                raw = re.sub(r"stay:\s*[A-Za-z0-9_-]+", f"stay:{fresh}", raw, count=1)
+                changed = True
+        if child_blocks and mk.subhash is not None and mk.id in injected and mk.hash:
+            raw = re.sub(r"\s+\bhash\s*=\s*sha256:[0-9a-fA-F]+", "", raw, count=1)
+            cleaned.append(mk.id)
+            changed = True
+        return raw if changed else None
 
-    return RepairResult(text=rewrite_markers(norm, transform), renamed=renamed)
+    return RepairResult(
+        text=rewrite_markers(norm, transform), renamed=renamed, cleaned=cleaned
+    )

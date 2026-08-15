@@ -1,4 +1,4 @@
-"""markstay , Python reference implementation of the markstay spec (v1.1).
+"""markstay , Python reference implementation of the markstay spec (v1.2).
 
 A source-level identity primitive for Markdown blocks: an id token that *stays*
 bound to its block across edits. This package is the parser-free core (everything
@@ -6,7 +6,8 @@ string-level and parser-independent) plus the attachment resolver. It mirrors th
 JavaScript reference (`markstay` on npm); both are gated by a shared
 language-neutral conformance corpus.
 
-Public API (mirrors the JS `index.js` surface):
+Public API (the spec'd portion mirrors the JS `index.js` surface; child-block
+names are experimental Python-only):
 
   hashing (§8)    normalize_body, body_hash
   markers (§3/§4) Marker, find_markers, strip_markers
@@ -22,6 +23,7 @@ Public API (mirrors the JS `index.js` surface):
   resolve (§9.1)  Anchor, Resolution, build_anchors, resolve,
                   DEFAULT_THRESHOLD, DEFAULT_MARGIN
   preserve (§11)  PRESERVE_INSTRUCTION, PRESERVE_RETURN_ONLY, preserve_wrap
+  commit check    CommitEntry, StagedCheck, check_entries
 """
 
 from __future__ import annotations
@@ -34,9 +36,11 @@ from .id import (
 )
 from .lint import (
     Block,
+    ChildBlock,
     Finding,
     Marker,
     body_hash,
+    child_body,
     find_markers,
     has_errors,
     lint_diff,
@@ -45,6 +49,7 @@ from .lint import (
     parse_document,
     rewrite_markers,
     segment_blank_line,
+    segment_child_items,
     segment_commonmark,
     sort_findings,
     strip_markers,
@@ -72,23 +77,29 @@ from .resolve import (
     DEFAULT_MARGIN,
     DEFAULT_THRESHOLD,
     Anchor,
+    ChildAnchor,
+    ChildResolution,
     Resolution,
     build_anchors,
+    build_child_anchors,
     resolve,
+    resolve_children,
 )
 from .preserve import (
     INSTRUCTION as PRESERVE_INSTRUCTION,
     RETURN_ONLY as PRESERVE_RETURN_ONLY,
     preserve_wrap,
 )
+from .staged import CommitEntry, StagedCheck, check_entries
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 
 __all__ = [
     "__version__",
     # hashing
     "normalize_body",
     "body_hash",
+    "child_body",
     # markers
     "Marker",
     "find_markers",
@@ -97,8 +108,10 @@ __all__ = [
     # segmentation
     "segment_blank_line",
     "segment_commonmark",
+    "segment_child_items",
     # parse
     "Block",
+    "ChildBlock",
     "parse_document",
     # lint
     "Finding",
@@ -130,13 +143,21 @@ __all__ = [
     "CONTEXT_CHARS",
     # resolve / §9.1 ladder
     "Anchor",
+    "ChildAnchor",
+    "ChildResolution",
     "Resolution",
     "build_anchors",
+    "build_child_anchors",
     "resolve",
+    "resolve_children",
     "DEFAULT_THRESHOLD",
     "DEFAULT_MARGIN",
     # preserve / §11 AI editing contract
     "PRESERVE_INSTRUCTION",
     "PRESERVE_RETURN_ONLY",
     "preserve_wrap",
+    # git-independent commit-check core
+    "CommitEntry",
+    "StagedCheck",
+    "check_entries",
 ]

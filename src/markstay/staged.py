@@ -41,10 +41,29 @@ class StagedCheck:
 
     reports: list[tuple[str, list[Finding]]] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    pairings: list[tuple[str, str | None]] = field(default_factory=list)
 
     @property
     def has_errors(self) -> bool:
         return any(L.has_errors(f) for _, f in self.reports)
+
+
+@dataclass(frozen=True)
+class CommitEntry:
+    """One commit-shaped input to :func:`check_entries`.
+
+    ``before`` is the HEAD text at ``src`` for rename/copy/delete entries and at
+    ``dst`` otherwise. ``after`` is the index or worktree text at ``dst`` for
+    non-deletions. Keeping this shape free of git makes baseline pairing part of
+    the shared cross-language conformance surface rather than an integration-test
+    detail in three unrelated CLIs.
+    """
+
+    status: str
+    src: str
+    dst: str
+    before: str | None
+    after: str | None
 
 
 def _git(args: list[str], repo: str | None = None, allow_fail: bool = False):
@@ -104,8 +123,17 @@ def worktree_entries(repo: str | None = None) -> list[tuple[str, str, str]]:
     files count: an agent that rewrites a document under a new name leaves a deleted
     path and an untracked one, which is exactly the rename case.
     """
-    raw = _git(["diff", "HEAD", "--name-status", "-z", "--find-renames"], repo,
-               allow_fail=True)
+    raw = _git(
+        ["diff", "HEAD", "--name-status", "-z", "--find-renames"], repo, allow_fail=True
+    )
+    if raw is None:
+        # An unborn repository has no HEAD. Every tracked path is necessarily an
+        # index addition, and the caller still reads its current worktree text.
+        raw = _git(
+            ["diff", "--cached", "--name-status", "-z", "--find-renames"],
+            repo,
+            allow_fail=True,
+        )
     fields = (raw or "").split("\0")
     out: list[tuple[str, str, str]] = []
     i = 0
@@ -131,6 +159,7 @@ def check_staged(
     *,
     mode: str = "blank-line",
     check_collections: bool = False,
+    child_blocks: bool = False,
     repo: str | None = None,
 ) -> StagedCheck:
     """Lint the staged commit against its per-document baseline.
@@ -139,10 +168,16 @@ def check_staged(
     narrows the *report* only. The commit is always read whole, because a renamed
     document's baseline lives at a deleted path and neither tool passes one.
     """
-    return _check(
-        staged_entries(repo),
-        lambda p: _git(["show", f":{p}"], repo, allow_fail=True) or "",
-        scope, mode=mode, check_collections=check_collections, repo=repo,
+    return check_entries(
+        _materialize_entries(
+            staged_entries(repo),
+            lambda p: _git(["show", f":{p}"], repo, allow_fail=True) or "",
+            repo,
+        ),
+        scope,
+        mode=mode,
+        check_collections=check_collections,
+        child_blocks=child_blocks,
     )
 
 
@@ -151,6 +186,7 @@ def check_worktree(
     *,
     mode: str = "blank-line",
     check_collections: bool = False,
+    child_blocks: bool = False,
     repo: str | None = None,
 ) -> StagedCheck:
     """The same check against the working tree, staged or not.
@@ -167,37 +203,81 @@ def check_worktree(
         except (OSError, UnicodeDecodeError):
             return ""
 
-    return _check(
-        worktree_entries(repo), on_disk, scope,
-        mode=mode, check_collections=check_collections, repo=repo,
+    return check_entries(
+        _materialize_entries(worktree_entries(repo), on_disk, repo),
+        scope,
+        mode=mode,
+        check_collections=check_collections,
+        child_blocks=child_blocks,
     )
 
 
-def _check(
+def _materialize_entries(
     entries: list[tuple[str, str, str]],
     after_text,
-    scope: list[str] | None,
-    *,
-    mode: str,
-    check_collections: bool,
     repo: str | None,
+) -> list[CommitEntry]:
+    """Read git-backed entries once, then hand the pure checker owned text."""
+
+    out: list[CommitEntry] = []
+    for status, src, dst in entries:
+        tracked = (
+            is_markdown(src)
+            if status == "D"
+            else (
+                (is_markdown(src) or is_markdown(dst))
+                if status == "R"
+                else is_markdown(dst)
+            )
+        )
+        if not tracked:
+            continue
+        before_path = src if status in ("R", "C", "D") else dst
+        before = _git(["show", f"HEAD:{before_path}"], repo, allow_fail=True)
+        after = None if status == "D" else after_text(dst)
+        out.append(CommitEntry(status, src, dst, before, after))
+    return out
+
+
+def check_entries(
+    entries: list[CommitEntry],
+    scope: list[str] | None = None,
+    *,
+    mode: str = "blank-line",
+    check_collections: bool = False,
+    child_blocks: bool = False,
 ) -> StagedCheck:
+    """Check commit-shaped entries without reading git or the filesystem.
+
+    This is the language-neutral core used by both git-aware CLI verbs and by the
+    ``check`` conformance category. Pairings are exposed even when a document is
+    otherwise clean, so a runner can prove which baseline was selected instead of
+    inferring it only from a later finding.
+    """
+
     result = StagedCheck()
-    changed = [(st, src, dst) for st, src, dst in entries
-               if st != "D" and is_markdown(dst)]
-    deleted = [src for st, src, _ in entries if st == "D" and is_markdown(src)]
+    changed = [e for e in entries if e.status != "D" and is_markdown(e.dst)]
+    deleted = [
+        e
+        for e in entries
+        if (
+            (e.status == "D" and is_markdown(e.src))
+            or (e.status == "R" and is_markdown(e.src) and not is_markdown(e.dst))
+        )
+    ]
     if not changed and not deleted:
         return result
-
-    def head_text(path: str) -> str | None:
-        return _git(["show", f"HEAD:{path}"], repo, allow_fail=True)
 
     def ids_of(text: str | None) -> set[str]:
         if text is None:
             return set()
-        return set(L._id_index(L.parse_document(text, mode=mode)))
+        blocks = L.parse_document(text, mode=mode, child_blocks=child_blocks)
+        ids = set(L._id_index(blocks))
+        if child_blocks:
+            ids.update(L._child_id_index(blocks))
+        return ids
 
-    staged_text = {dst: after_text(dst) for _, _, dst in changed}
+    staged_text = {e.dst: e.after or "" for e in changed}
     staged_ids = {p: ids_of(t) for p, t in staged_text.items()}
     # An id present anywhere in the staged tree has not been lost, wherever it
     # ended up.
@@ -205,19 +285,16 @@ def _check(
     for s in staged_ids.values():
         committed_ids |= s
 
-    deleted_ids = {p: ids_of(head_text(p)) for p in deleted}
+    deleted_ids = {e.src: ids_of(e.before) for e in deleted}
+    deleted_text = {e.src: e.before for e in deleted}
     claimed: set[str] = set()
 
-    def baseline_for(status: str, src: str, dst: str) -> tuple[str | None, str | None]:
-        if status == "R":
-            text = head_text(src)
-            if text is not None:
-                return text, src
-        elif status != "C":
-            text = head_text(dst)
-            if text is not None:
-                return text, dst
-        mine = staged_ids.get(dst, set())
+    def baseline_for(entry: CommitEntry) -> tuple[str | None, str | None]:
+        if entry.status == "R" and is_markdown(entry.src) and entry.before is not None:
+            return entry.before, entry.src
+        if entry.status not in ("C", "R") and entry.before is not None:
+            return entry.before, entry.dst
+        mine = staged_ids.get(entry.dst, set())
         best, best_n = None, 0
         for cand, cand_ids in deleted_ids.items():
             if cand in claimed:
@@ -227,45 +304,65 @@ def _check(
                 best, best_n = cand, n
         if best is not None:
             claimed.add(best)
-            return head_text(best), best
+            return deleted_text[best], best
         return None, None
 
     want = set(scope or ())
-    for status, src, dst in changed:
-        staged = staged_text[dst]
-        baseline, origin = baseline_for(status, src, dst)
-        _, findings = L.lint_document(staged, mode=mode)
+    for entry in changed:
+        staged = staged_text[entry.dst]
+        baseline, origin = baseline_for(entry)
+        result.pairings.append((entry.dst, origin))
+        _, findings = L.lint_document(staged, mode=mode, child_blocks=child_blocks)
         findings = list(findings)
         if baseline is not None:
             findings += L.lint_diff(
-                baseline, staged, mode=mode, check_collections=check_collections
+                baseline,
+                staged,
+                mode=mode,
+                check_collections=check_collections,
+                child_blocks=child_blocks,
             )
 
         kept = []
         for fd in findings:
-            if fd.code == "DROPPED_ID" and fd.id in committed_ids:
-                elsewhere = sorted(p for p, s in staged_ids.items()
-                                   if p != dst and fd.id in s)
+            if fd.code in ("DROPPED_ID", "CHILD_DROPPED") and fd.id in committed_ids:
+                elsewhere = sorted(
+                    p for p, s in staged_ids.items() if p != entry.dst and fd.id in s
+                )
                 result.notes.append(
-                    f"{fd.id}: moved out of {origin or dst} into "
-                    f"{', '.join(elsewhere)} (still in this commit, not blocking)")
+                    f"{fd.id}: moved out of {origin or entry.dst} into "
+                    f"{', '.join(elsewhere)} (still in this commit, not blocking)"
+                )
                 continue
             kept.append(fd)
 
-        if want and dst not in want:
+        if want and entry.dst not in want:
             continue
         if kept:
-            label = dst if origin in (None, dst) else f"{dst} (baseline {origin})"
+            label = (
+                entry.dst
+                if origin in (None, entry.dst)
+                else f"{entry.dst} (baseline {origin})"
+            )
             result.reports.append((label, kept))
 
-    for path in deleted:
+    for entry in deleted:
+        path = entry.src
         if path in claimed:
             continue
         gone = sorted(deleted_ids.get(path, set()) - committed_ids)
         if gone:
             shown = ", ".join(gone[:6]) + (", ..." if len(gone) > 6 else "")
-            result.notes.append(
-                f"{path}: deleted with {len(gone)} stay(s) that no staged file "
-                f"carries ({shown})")
+            if entry.status == "R":
+                result.notes.append(
+                    f"{path}: renamed to {entry.dst}, leaving Markdown tracking "
+                    f"with {len(gone)} stay(s) not carried by another Markdown "
+                    f"file ({shown})"
+                )
+            else:
+                result.notes.append(
+                    f"{path}: deleted with {len(gone)} stay(s) that no staged file "
+                    f"carries ({shown})"
+                )
 
     return result

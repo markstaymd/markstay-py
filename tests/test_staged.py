@@ -89,6 +89,18 @@ def test_pure_rename_keeps_every_stay(repo):
     assert "DROPPED_ID" not in codes(result)
 
 
+def test_rename_out_of_markdown_is_not_silent(repo):
+    write(repo, "notes.md", doc(2))
+    git(repo, "add", "-A")
+    git(repo, "commit", "-qm", "init")
+    git(repo, "mv", "notes.md", "notes.txt")
+
+    result = check_staged(repo=str(repo))
+    assert not result.has_errors
+    assert any("renamed to notes.txt, leaving Markdown tracking" in note
+               for note in result.notes)
+
+
 def test_cross_document_move_is_a_note_not_a_block(repo):
     moved = ("## Section 2\n\nBody text for section 2, long enough to hash.\n"
              "<!-- stay:s2 -->\n")
@@ -186,6 +198,17 @@ def test_worktree_check_pairs_an_untracked_rename(repo):
     assert result.has_errors
     assert codes(result).count("DROPPED_ID") == 8
     assert "baseline STATUS.md" in result.reports[0][0]
+
+
+def test_worktree_check_sees_indexed_files_before_the_first_commit(repo):
+    from markstay.staged import check_worktree
+
+    write(repo, "broken.md", "Body.\n<!-- stay: -->\n")
+    git(repo, "add", "broken.md")
+
+    result = check_worktree(repo=str(repo))
+    assert result.has_errors
+    assert "MALFORMED_MARKER" in codes(result)
 
 
 def test_pre_commit_hook_definition_matches_the_cli():

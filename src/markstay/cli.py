@@ -52,7 +52,9 @@ def render_text(label: str, findings: list[Finding], show_drift: bool = False) -
         out.append(f"  [{f.level:5}] {f.code:16} {where:>5}  {f.message}")
     if n_drift_hidden:
         noun = "finding" if n_drift_hidden == 1 else "findings"
-        out.append(f"  -> {n_drift_hidden} hash-drift {noun} hidden (--show-drift to list)")
+        out.append(
+            f"  -> {n_drift_hidden} hash-drift {noun} hidden (--show-drift to list)"
+        )
     n_err = sum(1 for f in findings if f.level == "error")
     n_warn = sum(1 for f in findings if f.level == "warn")
     n_info = sum(1 for f in findings if f.level == "info")
@@ -73,14 +75,17 @@ def _cmd_check_staged(args, ap) -> int:
             [_repo_relative(f) for f in args.files],
             mode=mode,
             check_collections=args.check_collections,
+            child_blocks=args.child_blocks,
         )
     except RuntimeError as exc:
         sys.stderr.write(f"markstay: {exc}\n")
         return 2
 
     if args.json:
-        payload = {label: [f.__dict__ for f in L.sort_findings(fs)]
-                   for label, fs in result.reports}
+        payload = {
+            label: [f.__dict__ for f in L.sort_findings(fs)]
+            for label, fs in result.reports
+        }
         print(json.dumps({"findings": payload, "notes": result.notes}, indent=2))
     else:
         # A hook speaks only when there is something to act on. HASH_DRIFT says
@@ -90,20 +95,26 @@ def _cmd_check_staged(args, ap) -> int:
         def actionable(f):
             return f.level == "error" or (f.level == "warn" and f.code != "HASH_DRIFT")
 
-        shown = [render_text(label, fs, args.show_drift)
-                 for label, fs in result.reports
-                 if (fs if args.show_drift else any(actionable(f) for f in fs))]
+        shown = [
+            render_text(label, fs, args.show_drift)
+            for label, fs in result.reports
+            if (fs if args.show_drift else any(actionable(f) for f in fs))
+        ]
         if shown:
             sys.stderr.write("\n".join(shown) + "\n")
         if result.notes:
-            sys.stderr.write("markstay: stays that changed document (not blocking):\n"
-                             + "\n".join(f"  {n}" for n in result.notes) + "\n")
+            sys.stderr.write(
+                "markstay: stays that changed document (not blocking):\n"
+                + "\n".join(f"  {n}" for n in result.notes)
+                + "\n"
+            )
 
     if result.has_errors:
         sys.stderr.write(
             "\nmarkstay: this commit breaks a stay (dropped / duplicated / "
             "relocated / malformed). Fix it, or bypass once with "
-            "`git commit --no-verify`.\n")
+            "`git commit --no-verify`.\n"
+        )
         return 1
     return 0
 
@@ -116,13 +127,15 @@ def _repo_relative(path: str) -> str:
     p = Path(path)
     if not p.is_absolute():
         return str(p).replace(os.sep, "/")
-    top = subprocess.run(["git", "rev-parse", "--show-toplevel"],
-                         capture_output=True, text=True)
+    top = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True
+    )
     if top.returncode != 0:
         return str(p).replace(os.sep, "/")
     try:
-        return str(p.resolve().relative_to(Path(top.stdout.strip()).resolve())
-                   ).replace(os.sep, "/")
+        return str(p.resolve().relative_to(Path(top.stdout.strip()).resolve())).replace(
+            os.sep, "/"
+        )
     except ValueError:
         return str(p).replace(os.sep, "/")
 
@@ -138,13 +151,20 @@ def _cmd_lint(args, ap) -> int:
         results.append(
             (
                 f"{args.before} -> {args.files[0]}",
-                L.lint_diff(before_md, after_md, mode=mode,
-                            check_collections=args.check_collections),
+                L.lint_diff(
+                    before_md,
+                    after_md,
+                    mode=mode,
+                    check_collections=args.check_collections,
+                    child_blocks=args.child_blocks,
+                ),
             )
         )
     else:
         for f in args.files:
-            _, findings = L.lint_document(Path(f).read_text(), mode=mode)
+            _, findings = L.lint_document(
+                Path(f).read_text(), mode=mode, child_blocks=args.child_blocks
+            )
             results.append((f, findings))
 
     if args.json:
@@ -153,8 +173,12 @@ def _cmd_lint(args, ap) -> int:
         }
         print(json.dumps(payload, indent=2))
     else:
-        print("\n".join(render_text(label, fs, show_drift=args.show_drift)
-                        for label, fs in results))
+        print(
+            "\n".join(
+                render_text(label, fs, show_drift=args.show_drift)
+                for label, fs in results
+            )
+        )
 
     return 1 if any(L.has_errors(fs) for _, fs in results) else 0
 
@@ -177,6 +201,8 @@ def _run_write(verb: str, args, ap, op) -> int:
 
 def _cmd_stamp(args, ap) -> int:
     mode = "commonmark" if args.commonmark else "blank-line"
+    if args.child_blocks and args.no_hash:
+        ap.error("--child-blocks requires child subhash evidence; remove --no-hash")
 
     def op(md: str):
         res = stamp(
@@ -189,6 +215,7 @@ def _cmd_stamp(args, ap) -> int:
                 else DEFAULT_HASH_LENGTH
             ),
             mode=mode,
+            child_blocks=args.child_blocks,
         )
         return res.text, f"{len(res.minted)} id(s) minted"
 
@@ -200,7 +227,11 @@ def _cmd_restamp(args, ap) -> int:
 
     def op(md: str):
         res = restamp(
-            md, hash_length=args.hash_length, add_missing=args.add_missing, mode=mode
+            md,
+            hash_length=args.hash_length,
+            add_missing=args.add_missing,
+            mode=mode,
+            child_blocks=args.child_blocks,
         )
         return res.text, f"{len(res.refreshed)} hash(es) refreshed"
 
@@ -211,8 +242,11 @@ def _cmd_repair(args, ap) -> int:
     mode = "commonmark" if args.commonmark else "blank-line"
 
     def op(md: str):
-        res = repair_duplicates(md, mode=mode)
-        return res.text, f"{len(res.renamed)} duplicate id(s) re-minted"
+        res = repair_duplicates(md, mode=mode, child_blocks=args.child_blocks)
+        return res.text, (
+            f"{len(res.renamed)} duplicate id(s) re-minted, "
+            f"{len(res.cleaned)} injected child hash(es) removed"
+        )
 
     return _run_write("repair", args, ap, op)
 
@@ -231,7 +265,11 @@ def _cmd_preserve(args, ap) -> int:
     # emitting the same bytes for the same document.
     where = "stdin" if args.wrap == "-" else args.wrap
     try:
-        raw = sys.stdin.buffer.read() if args.wrap == "-" else Path(args.wrap).read_bytes()
+        raw = (
+            sys.stdin.buffer.read()
+            if args.wrap == "-"
+            else Path(args.wrap).read_bytes()
+        )
     except OSError as exc:
         sys.stderr.write(f"markstay: {exc}\n")
         return 2
@@ -258,6 +296,11 @@ def build_parser() -> argparse.ArgumentParser:
         "segment over the CommonMark tree (SPEC.md §5.2): loose lists and "
         "blank-line fences attach as one block. Needs the 'commonmark' extra "
         "(markdown-it-py)"
+    )
+    child_help = (
+        "enable experimental direct list-item identity; CommonMark mode handles "
+        "general list items, while the dependency-free mode accepts only flat "
+        "tight single-paragraph lists and otherwise emits no child blocks"
     )
 
     # First, because measurement puts it first: the instruction prevents loss,
@@ -307,6 +350,7 @@ def build_parser() -> argparse.ArgumentParser:
         "rows/bullets (COLLECTION_SHRANK); off by default",
     )
     p_lint.add_argument("--commonmark", action="store_true", help=commonmark_help)
+    p_lint.add_argument("--child-blocks", action="store_true", help=child_help)
     p_lint.set_defaults(func=_cmd_lint)
 
     p_staged = sub.add_parser(
@@ -314,21 +358,28 @@ def build_parser() -> argparse.ArgumentParser:
         help="lint the staged commit against its baseline (for a pre-commit hook)",
     )
     p_staged.add_argument(
-        "files", nargs="*", metavar="FILE",
+        "files",
+        nargs="*",
+        metavar="FILE",
         help="narrow the report to these paths; the commit is still read whole, "
         "because a renamed document's baseline lives at a deleted path",
     )
     p_staged.add_argument("--json", action="store_true", help="machine-readable output")
     p_staged.add_argument(
-        "--show-drift", action="store_true", dest="show_drift",
+        "--show-drift",
+        action="store_true",
+        dest="show_drift",
         help="list the non-blocking findings a hook hides by default",
     )
     p_staged.add_argument(
-        "--check-collections", action="store_true", dest="check_collections",
+        "--check-collections",
+        action="store_true",
+        dest="check_collections",
         help="also block when a kept stay's table or list lost rows/bullets "
         "(COLLECTION_SHRANK); off by default",
     )
     p_staged.add_argument("--commonmark", action="store_true", help=commonmark_help)
+    p_staged.add_argument("--child-blocks", action="store_true", help=child_help)
     p_staged.set_defaults(func=_cmd_check_staged, worktree=False)
 
     p_wt = sub.add_parser(
@@ -336,16 +387,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="the same check against the files on disk, staged or not "
         "(for an agent's post-edit step, not a commit hook)",
     )
-    p_wt.add_argument("files", nargs="*", metavar="FILE",
-                      help="narrow the report to these paths")
-    p_wt.add_argument("--json", action="store_true", help="machine-readable output")
-    p_wt.add_argument("--show-drift", action="store_true", dest="show_drift",
-                      help="list the non-blocking findings this hides by default")
     p_wt.add_argument(
-        "--check-collections", action="store_true", dest="check_collections",
+        "files", nargs="*", metavar="FILE", help="narrow the report to these paths"
+    )
+    p_wt.add_argument("--json", action="store_true", help="machine-readable output")
+    p_wt.add_argument(
+        "--show-drift",
+        action="store_true",
+        dest="show_drift",
+        help="list the non-blocking findings this hides by default",
+    )
+    p_wt.add_argument(
+        "--check-collections",
+        action="store_true",
+        dest="check_collections",
         help="also report when a kept stay's table or list lost rows/bullets",
     )
     p_wt.add_argument("--commonmark", action="store_true", help=commonmark_help)
+    p_wt.add_argument("--child-blocks", action="store_true", help=child_help)
     p_wt.set_defaults(func=_cmd_check_staged, worktree=True)
 
     p_stamp = sub.add_parser("stamp", help="mint ids for unmarked blocks (§6)")
@@ -357,6 +416,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="edit files in place (required for >1 file)",
     )
     p_stamp.add_argument("--commonmark", action="store_true", help=commonmark_help)
+    p_stamp.add_argument("--child-blocks", action="store_true", help=child_help)
     p_stamp.add_argument(
         "--mdx", action="store_true", help="emit the MDX comment form {/* ... */}"
     )
@@ -384,6 +444,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="edit files in place (required for >1 file)",
     )
     p_restamp.add_argument("--commonmark", action="store_true", help=commonmark_help)
+    p_restamp.add_argument("--child-blocks", action="store_true", help=child_help)
     p_restamp.add_argument(
         "--add-missing",
         action="store_true",
@@ -408,6 +469,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="edit files in place (required for >1 file)",
     )
     p_repair.add_argument("--commonmark", action="store_true", help=commonmark_help)
+    p_repair.add_argument("--child-blocks", action="store_true", help=child_help)
     p_repair.set_defaults(func=_cmd_repair)
 
     return ap
@@ -422,7 +484,19 @@ def main(argv=None) -> int:
         return 0 if argv else 2
     ap = build_parser()
     args = ap.parse_args(argv)
-    return args.func(args, ap)
+    try:
+        return args.func(args, ap)
+    except ImportError as exc:
+        # CommonMark mode (§5.2) is the one optional extra; a missing parser is a
+        # setup answer, not a stack trace.
+        if getattr(exc, "name", "") == "markdown_it":
+            print(
+                "error: --commonmark needs the optional CommonMark parser.\n"
+                "       install it with:  pip install 'markstay[commonmark]'",
+                file=sys.stderr,
+            )
+            return 2
+        raise
 
 
 if __name__ == "__main__":

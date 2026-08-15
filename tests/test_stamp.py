@@ -185,6 +185,64 @@ def test_restamp_commonmark_hashes_whole_fence_with_blank_line():
     assert f"hash=sha256:{M.body_hash(block.content, 4)}" in res.text
 
 
+# --- stamp vs leading frontmatter (SPEC.md §5) ----------------------------
+
+FM_DOC = "---\nstatus: active\nowner: tim\n---\n\n# Title\n\nBody paragraph.\n"
+
+
+def test_stamp_leaves_frontmatter_unmarked_and_lints_clean():
+    """The write path segments through the same frontmatter skip as the read path.
+    A stamper that missed it would mint an id for the metadata and the linter would
+    then (correctly) report ORPHAN_MARKER on the marker it had just written."""
+    res = M.stamp(FM_DOC, new_id=counter())
+    assert len(res.minted) == 2  # the heading and the paragraph, not the metadata
+    assert res.text.startswith("---\nstatus: active\nowner: tim\n---\n")
+    assert error_codes(res.text) == []
+
+
+def test_stamp_frontmatter_marker_lands_on_the_right_line():
+    """Blanking is line-for-line, so insertion points still index the source."""
+    res = M.stamp(FM_DOC, new_id=counter())
+    lines = res.text.split("\n")
+    assert lines[5] == "# Title"
+    assert lines[6].startswith("<!-- stay:id00")
+
+
+def test_stamp_metadata_edit_does_not_drift_a_stamped_hash():
+    """The dogfood defect, end to end on the write path: stamp, flip a metadata
+    field, and the document must still lint clean."""
+    stamped = M.stamp(FM_DOC, new_id=counter()).text
+    edited = stamped.replace("status: active", "status: complete")
+    assert error_codes(edited) == []
+    assert [f.code for f in M.lint_document(edited)[1]] == []
+
+
+def test_stamp_does_not_skip_a_leading_thematic_break():
+    """The other direction: an opening `---` that is not frontmatter is ordinary
+    content and still gets an id."""
+    res = M.stamp("---\n\nBody.\n", new_id=counter())
+    assert len(res.minted) == 2
+    assert error_codes(res.text) == []
+
+
+def test_stamp_commonmark_mode_also_skips_frontmatter():
+    pytest.importorskip("markdown_it")
+    res = M.stamp(FM_DOC, new_id=counter(), mode="commonmark")
+    assert len(res.minted) == 2
+    assert res.text.startswith("---\nstatus: active\nowner: tim\n---\n")
+    assert error_codes(res.text) == []
+
+
+def test_restamp_ignores_frontmatter():
+    """restamp goes through parse_document, so the metadata carries no hash to
+    refresh: a stamped-then-metadata-edited document is a no-op."""
+    stamped = M.stamp(FM_DOC, new_id=counter()).text
+    edited = stamped.replace("owner: tim", "owner: someone")
+    res = M.restamp(edited)
+    assert res.refreshed == []
+    assert res.text == edited
+
+
 # --- restamp (§8) ---------------------------------------------------------
 
 

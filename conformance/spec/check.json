@@ -1,0 +1,345 @@
+{
+  "category": "check",
+  "tier": "spec",
+  "vectors": [
+    {
+      "name": "modified-file-uses-the-same-path-in-head",
+      "entries": [
+        {
+          "status": "M",
+          "src": "a.md",
+          "dst": "a.md",
+          "before": "A.\n<!-- stay:a -->\n",
+          "after": "A.\n<!-- stay:a -->\n"
+        }
+      ],
+      "expected": {
+        "pairings": [{ "path": "a.md", "baseline": "a.md" }],
+        "reports": [],
+        "notes": [],
+        "hasErrors": false
+      }
+    },
+    {
+      "name": "recorded-rename-uses-the-source-path-in-head",
+      "entries": [
+        {
+          "status": "R",
+          "src": "old.md",
+          "dst": "new.md",
+          "before": "A.\n<!-- stay:a -->\n",
+          "after": "A.\n<!-- stay:a -->\n"
+        }
+      ],
+      "expected": {
+        "pairings": [{ "path": "new.md", "baseline": "old.md" }],
+        "reports": [],
+        "notes": [],
+        "hasErrors": false
+      }
+    },
+    {
+      "name": "delete-create-rewrite-pairs-on-a-surviving-id",
+      "entries": [
+        {
+          "status": "D",
+          "src": "old.md",
+          "dst": "old.md",
+          "before": "A.\n<!-- stay:a -->\n\nB.\n<!-- stay:b -->\n",
+          "after": null
+        },
+        {
+          "status": "A",
+          "src": "new.md",
+          "dst": "new.md",
+          "before": null,
+          "after": "A rewritten.\n<!-- stay:a -->\n"
+        }
+      ],
+      "expected": {
+        "pairings": [{ "path": "new.md", "baseline": "old.md" }],
+        "reports": [
+          {
+            "label": "new.md (baseline old.md)",
+            "findings": [
+              { "level": "error", "code": "DROPPED_ID", "id": "b", "line": null },
+              { "level": "warn", "code": "HASH_DRIFT", "id": "a", "line": null }
+            ]
+          }
+        ],
+        "notes": [],
+        "hasErrors": true
+      }
+    },
+    {
+      "name": "delete-create-chooses-the-largest-positive-id-overlap",
+      "entries": [
+        {
+          "status": "D",
+          "src": "one.md",
+          "dst": "one.md",
+          "before": "A.\n<!-- stay:a -->\n",
+          "after": null
+        },
+        {
+          "status": "D",
+          "src": "two.md",
+          "dst": "two.md",
+          "before": "B.\n<!-- stay:b -->\n\nC.\n<!-- stay:c -->\n",
+          "after": null
+        },
+        {
+          "status": "A",
+          "src": "merged.md",
+          "dst": "merged.md",
+          "before": null,
+          "after": "B.\n<!-- stay:b -->\n\nC.\n<!-- stay:c -->\n"
+        }
+      ],
+      "expected": {
+        "pairings": [{ "path": "merged.md", "baseline": "two.md" }],
+        "reports": [],
+        "notes": [
+          "one.md: deleted with 1 stay(s) that no staged file carries (a)"
+        ],
+        "hasErrors": false
+      }
+    },
+    {
+      "name": "a-deleted-baseline-can-be-claimed-only-once",
+      "entries": [
+        {
+          "status": "D",
+          "src": "old.md",
+          "dst": "old.md",
+          "before": "A.\n<!-- stay:a -->\n\nB.\n<!-- stay:b -->\n",
+          "after": null
+        },
+        {
+          "status": "A",
+          "src": "first.md",
+          "dst": "first.md",
+          "before": null,
+          "after": "A.\n<!-- stay:a -->\n"
+        },
+        {
+          "status": "A",
+          "src": "second.md",
+          "dst": "second.md",
+          "before": null,
+          "after": "B.\n<!-- stay:b -->\n"
+        }
+      ],
+      "expected": {
+        "pairings": [
+          { "path": "first.md", "baseline": "old.md" },
+          { "path": "second.md", "baseline": null }
+        ],
+        "reports": [],
+        "notes": [
+          "b: moved out of old.md into second.md (still in this commit, not blocking)"
+        ],
+        "hasErrors": false
+      }
+    },
+    {
+      "name": "cross-document-move-is-a-note-not-a-loss",
+      "entries": [
+        {
+          "status": "M",
+          "src": "a.md",
+          "dst": "a.md",
+          "before": "A.\n<!-- stay:a -->\n\nB.\n<!-- stay:b -->\n",
+          "after": "A.\n<!-- stay:a -->\n"
+        },
+        {
+          "status": "M",
+          "src": "b.md",
+          "dst": "b.md",
+          "before": "C.\n<!-- stay:c -->\n",
+          "after": "C.\n<!-- stay:c -->\n\nB.\n<!-- stay:b -->\n"
+        }
+      ],
+      "expected": {
+        "pairings": [
+          { "path": "a.md", "baseline": "a.md" },
+          { "path": "b.md", "baseline": "b.md" }
+        ],
+        "reports": [
+          {
+            "label": "b.md",
+            "findings": [
+              { "level": "info", "code": "NEW_ID", "id": "b", "line": null }
+            ]
+          }
+        ],
+        "notes": [
+          "b: moved out of a.md into b.md (still in this commit, not blocking)"
+        ],
+        "hasErrors": false
+      }
+    },
+    {
+      "name": "unpaired-deletion-names-every-lost-stay-without-blocking",
+      "entries": [
+        {
+          "status": "D",
+          "src": "doomed.md",
+          "dst": "doomed.md",
+          "before": "D0.\n<!-- stay:d0 -->\n\nD1.\n<!-- stay:d1 -->\n",
+          "after": null
+        }
+      ],
+      "expected": {
+        "pairings": [],
+        "reports": [],
+        "notes": [
+          "doomed.md: deleted with 2 stay(s) that no staged file carries (d0, d1)"
+        ],
+        "hasErrors": false
+      }
+    },
+    {
+      "name": "unpaired-addition-still-runs-intra-document-lint",
+      "entries": [
+        {
+          "status": "A",
+          "src": "new.md",
+          "dst": "new.md",
+          "before": null,
+          "after": "A.\n<!-- stay:note=hello -->\n"
+        }
+      ],
+      "expected": {
+        "pairings": [{ "path": "new.md", "baseline": null }],
+        "reports": [
+          {
+            "label": "new.md",
+            "findings": [
+              { "level": "error", "code": "MALFORMED_MARKER", "id": null, "line": 2 }
+            ]
+          }
+        ],
+        "notes": [],
+        "hasErrors": true
+      }
+    },
+    {
+      "name": "copy-does-not-use-the-source-as-a-regeneration-baseline",
+      "entries": [
+        {
+          "status": "C",
+          "src": "source.md",
+          "dst": "copy.md",
+          "before": "A.\n<!-- stay:a -->\n",
+          "after": "A.\n<!-- stay:a -->\n"
+        }
+      ],
+      "expected": {
+        "pairings": [{ "path": "copy.md", "baseline": null }],
+        "reports": [],
+        "notes": [],
+        "hasErrors": false
+      }
+    },
+    {
+      "name": "rename-out-of-markdown-is-a-tracking-departure",
+      "entries": [
+        {
+          "status": "R",
+          "src": "notes.md",
+          "dst": "notes.txt",
+          "before": "A.\n<!-- stay:a -->\n",
+          "after": "A.\n<!-- stay:a -->\n"
+        }
+      ],
+      "expected": {
+        "pairings": [],
+        "reports": [],
+        "notes": [
+          "notes.md: renamed to notes.txt, leaving Markdown tracking with 1 stay(s) not carried by another Markdown file (a)"
+        ],
+        "hasErrors": false
+      }
+    },
+    {
+      "name": "rename-into-markdown-starts-without-a-baseline",
+      "entries": [
+        {
+          "status": "R",
+          "src": "notes.txt",
+          "dst": "notes.md",
+          "before": "A.\n<!-- stay:a -->\n",
+          "after": "A without its old marker.\n"
+        }
+      ],
+      "expected": {
+        "pairings": [{ "path": "notes.md", "baseline": null }],
+        "reports": [],
+        "notes": [],
+        "hasErrors": false
+      }
+    },
+    {
+      "name": "non-markdown-and-vendored-markstay-paths-are-ignored",
+      "entries": [
+        {
+          "status": "M",
+          "src": "notes.txt",
+          "dst": "notes.txt",
+          "before": "A.\n<!-- stay:a -->\n",
+          "after": "A without its marker.\n"
+        },
+        {
+          "status": "M",
+          "src": ".markstay/PRESERVE.md",
+          "dst": ".markstay/PRESERVE.md",
+          "before": "A.\n<!-- stay:a -->\n",
+          "after": "A without its marker.\n"
+        }
+      ],
+      "expected": {
+        "pairings": [],
+        "reports": [],
+        "notes": [],
+        "hasErrors": false
+      }
+    },
+    {
+      "name": "scope-narrows-reports-but-not-whole-commit-pairing",
+      "scope": ["other.md"],
+      "entries": [
+        {
+          "status": "M",
+          "src": "a.md",
+          "dst": "a.md",
+          "before": "A.\n<!-- stay:a -->\n\nB.\n<!-- stay:b -->\n",
+          "after": "A.\n<!-- stay:a -->\n"
+        },
+        {
+          "status": "M",
+          "src": "other.md",
+          "dst": "other.md",
+          "before": "C.\n<!-- stay:c -->\n",
+          "after": "C changed.\n<!-- stay:c -->\n"
+        }
+      ],
+      "expected": {
+        "pairings": [
+          { "path": "a.md", "baseline": "a.md" },
+          { "path": "other.md", "baseline": "other.md" }
+        ],
+        "reports": [
+          {
+            "label": "other.md",
+            "findings": [
+              { "level": "warn", "code": "HASH_DRIFT", "id": "c", "line": null }
+            ]
+          }
+        ],
+        "notes": [],
+        "hasErrors": false
+      }
+    }
+  ]
+}

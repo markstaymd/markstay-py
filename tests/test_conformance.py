@@ -220,10 +220,31 @@ def v_preserve(v):
     return approx(got, v["expected"]), f"got={got!r}"
 
 
+def v_check(v):
+    """Commit-shaped baseline pairing and findings, with Git already materialized."""
+    entries = [M.CommitEntry(
+        e["status"], e["src"], e["dst"], e.get("before"), e.get("after")
+    ) for e in v["entries"]]
+    result = M.check_entries(entries, v.get("scope"))
+    got = {
+        "pairings": [{"path": path, "baseline": baseline}
+                     for path, baseline in result.pairings],
+        "reports": [
+            {"label": label,
+             "findings": [finding_dict(f, with_line=True)
+                          for f in M.sort_findings(findings)]}
+            for label, findings in result.reports
+        ],
+        "notes": result.notes,
+        "hasErrors": result.has_errors,
+    }
+    return approx(got, v["expected"]), f"got={got}"
+
+
 VERIFIERS = {
     "hash": v_hash, "markers": v_markers, "parse": v_parse, "lint": v_lint,
     "diff": v_diff, "seqmatch": v_seqmatch, "score": v_score, "resolve": v_resolve,
-    "stamp": v_stamp, "mint": v_mint, "preserve": v_preserve,
+    "stamp": v_stamp, "mint": v_mint, "preserve": v_preserve, "check": v_check,
 }
 
 

@@ -39,6 +39,141 @@
         { "content": "Block one.", "index": 0, "ids": ["dup"], "line": 1, "orphan": false },
         { "content": "Block two.", "index": 1, "ids": ["dup"], "line": 4, "orphan": false }
       ]
+    },
+    {
+      "name": "frontmatter-is-not-a-block",
+      "doc": "---\nstatus: active\nowner: tim\n---\n\n# Heading\n\nBody para.\n",
+      "blocks": [
+        { "content": "# Heading", "index": 0, "ids": [], "line": 6, "orphan": false },
+        { "content": "Body para.", "index": 1, "ids": [], "line": 8, "orphan": false }
+      ]
+    },
+    {
+      "name": "frontmatter-no-blank-line-after-closing-fence",
+      "doc": "---\ntitle: t\n---\n# Heading\n\nBody.\n",
+      "blocks": [
+        { "content": "# Heading", "index": 0, "ids": [], "line": 4, "orphan": false },
+        { "content": "Body.", "index": 1, "ids": [], "line": 6, "orphan": false }
+      ]
+    },
+    {
+      "name": "frontmatter-closed-by-yaml-end-marker",
+      "doc": "---\ntitle: t\n...\n\n# Heading\n\nBody.\n",
+      "blocks": [
+        { "content": "# Heading", "index": 0, "ids": [], "line": 5, "orphan": false },
+        { "content": "Body.", "index": 1, "ids": [], "line": 7, "orphan": false }
+      ]
+    },
+    {
+      "name": "frontmatter-list-payload",
+      "doc": "---\n- one\n- two\n---\n\nBody.\n",
+      "blocks": [
+        { "content": "Body.", "index": 0, "ids": [], "line": 6, "orphan": false }
+      ]
+    },
+    {
+      "name": "frontmatter-closing-fence-trailing-whitespace",
+      "doc": "---\nkey: v\n---   \n\nBody.\n",
+      "blocks": [
+        { "content": "Body.", "index": 0, "ids": [], "line": 5, "orphan": false }
+      ]
+    },
+    {
+      "name": "frontmatter-marker-after-closing-fence-is-orphan",
+      "doc": "---\nkey: v\n---\n<!-- stay:x -->\n\nBody.\n",
+      "blocks": [
+        { "content": "", "index": -1, "ids": ["x"], "line": 4, "orphan": true },
+        { "content": "Body.", "index": 0, "ids": [], "line": 6, "orphan": false }
+      ]
+    },
+    {
+      "name": "frontmatter-marker-binds-forward-with-no-blank-line",
+      "doc": "---\nkey: v\n---\n<!-- stay:x -->\nBody.\n",
+      "blocks": [
+        { "content": "Body.", "index": 0, "ids": ["x"], "line": 4, "orphan": false }
+      ]
+    },
+    {
+      "name": "frontmatter-marker-inside-payload-is-dropped",
+      "doc": "---\nkey: v\n<!-- stay:x -->\n---\n\nBody.\n",
+      "blocks": [
+        { "content": "Body.", "index": 0, "ids": [], "line": 6, "orphan": false }
+      ]
+    },
+    {
+      "name": "leading-thematic-break-without-closing-fence",
+      "doc": "---\n\n# Heading\n\nBody para.\n",
+      "blocks": [
+        { "content": "---", "index": 0, "ids": [], "line": 1, "orphan": false },
+        { "content": "# Heading", "index": 1, "ids": [], "line": 3, "orphan": false },
+        { "content": "Body para.", "index": 2, "ids": [], "line": 5, "orphan": false }
+      ]
+    },
+    {
+      "name": "leading-thematic-break-around-a-paragraph",
+      "doc": "---\n\nIntro paragraph.\n\n---\n\nBody.\n",
+      "blocks": [
+        { "content": "---", "index": 0, "ids": [], "line": 1, "orphan": false },
+        { "content": "Intro paragraph.", "index": 1, "ids": [], "line": 3, "orphan": false },
+        { "content": "---", "index": 2, "ids": [], "line": 5, "orphan": false },
+        { "content": "Body.", "index": 3, "ids": [], "line": 7, "orphan": false }
+      ]
+    },
+    {
+      "name": "leading-thematic-break-with-setext-heading",
+      "doc": "---\nTitle\n---\n\nBody.\n",
+      "blocks": [
+        { "content": "---\nTitle\n---", "index": 0, "ids": [], "line": 1, "orphan": false },
+        { "content": "Body.", "index": 1, "ids": [], "line": 5, "orphan": false }
+      ]
+    },
+    {
+      "name": "leading-thematic-break-with-atx-heading",
+      "doc": "---\n# Heading\n---\nBody.\n",
+      "blocks": [
+        { "content": "---\n# Heading\n---\nBody.", "index": 0, "ids": [], "line": 1, "orphan": false }
+      ]
+    },
+    {
+      "name": "frontmatter-payload-with-a-blank-line-is-content",
+      "doc": "---\nstatus: active\n\nowner: tim\n---\n\nBody.\n",
+      "blocks": [
+        { "content": "---\nstatus: active", "index": 0, "ids": [], "line": 1, "orphan": false },
+        { "content": "owner: tim\n---", "index": 1, "ids": [], "line": 4, "orphan": false },
+        { "content": "Body.", "index": 2, "ids": [], "line": 7, "orphan": false }
+      ]
+    },
+    {
+      "name": "frontmatter-empty-payload-is-content",
+      "doc": "---\n---\n\nBody.\n",
+      "blocks": [
+        { "content": "---\n---", "index": 0, "ids": [], "line": 1, "orphan": false },
+        { "content": "Body.", "index": 1, "ids": [], "line": 4, "orphan": false }
+      ]
+    },
+    {
+      "name": "frontmatter-only-at-document-start",
+      "doc": "# Heading\n\n---\ntitle: not frontmatter\n---\n\nBody.\n",
+      "blocks": [
+        { "content": "# Heading", "index": 0, "ids": [], "line": 1, "orphan": false },
+        { "content": "---\ntitle: not frontmatter\n---", "index": 1, "ids": [], "line": 3, "orphan": false },
+        { "content": "Body.", "index": 2, "ids": [], "line": 7, "orphan": false }
+      ]
+    },
+    {
+      "name": "frontmatter-key-starting-with-a-non-ascii-space-is-metadata",
+      "doc": "---\n\u00a0key: v\n---\n\nBody.\n",
+      "blocks": [
+        { "content": "Body.", "index": 0, "ids": [], "line": 5, "orphan": false }
+      ]
+    },
+    {
+      "name": "frontmatter-key-starting-with-an-ascii-control-is-content",
+      "doc": "---\n\u001ckey: v\n---\n\nBody.\n",
+      "blocks": [
+        { "content": "---\n\u001ckey: v\n---", "index": 0, "ids": [], "line": 1, "orphan": false },
+        { "content": "Body.", "index": 1, "ids": [], "line": 5, "orphan": false }
+      ]
     }
   ]
 }
