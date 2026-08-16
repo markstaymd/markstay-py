@@ -3,6 +3,7 @@
   "tier": "gen",
   "vectors": [
     {
+      "name": "marker-tier-survives-reorder",
       "before": "First paragraph here.\n<!-- stay:p1 -->\n\nSecond paragraph here.\n<!-- stay:p2 -->\n",
       "after": "Second paragraph here.\n<!-- stay:p2 -->\n\nFirst paragraph here.\n<!-- stay:p1 -->\n",
       "threshold": 0.5,
@@ -18,10 +19,10 @@
           "target": 0,
           "score": 1.0
         }
-      },
-      "name": "resolve-000"
+      }
     },
     {
+      "name": "hash-tier-recovers-stripped-verbatim",
       "before": "First paragraph here.\n<!-- stay:p1 -->\n\nSecond paragraph here.\n<!-- stay:p2 -->\n",
       "after": "Second paragraph here.\n\nFirst paragraph here.\n",
       "threshold": 0.5,
@@ -37,10 +38,29 @@
           "target": 0,
           "score": 1.0
         }
-      },
-      "name": "resolve-001"
+      }
     },
     {
+      "name": "deleted-block-detaches-below-threshold",
+      "before": "The order pipeline ingests partner messages.\n<!-- stay:keep -->\n\nInvalid payloads route to a dead-letter queue.\n<!-- stay:gone -->\n",
+      "after": "The order pipeline ingests partner messages.\n",
+      "threshold": 0.5,
+      "margin": 0.05,
+      "resolutions": {
+        "keep": {
+          "method": "hash",
+          "target": 0,
+          "score": 1.0
+        },
+        "gone": {
+          "method": "detached",
+          "target": null,
+          "score": 0.3111111111111111
+        }
+      }
+    },
+    {
+      "name": "deleted-block-quote-attaches-to-similar-survivor",
       "before": "First paragraph here.\n<!-- stay:p1 -->\n\nSecond paragraph here.\n<!-- stay:p2 -->\n",
       "after": "First paragraph here.\n",
       "threshold": 0.5,
@@ -56,10 +76,10 @@
           "target": 0,
           "score": 0.7906976744186046
         }
-      },
-      "name": "resolve-002"
+      }
     },
     {
+      "name": "paraphrase-quote-recovers-one-detaches-other",
       "before": "The order pipeline ingests and normalizes partner messages.\n<!-- stay:ing -->\n\nInvalid payloads route to a dead-letter queue for replay.\n<!-- stay:dlq -->\n",
       "after": "Partner messages are ingested and normalized by the pipeline.\n\nBad payloads are sent to a dead-letter queue so they can be replayed.\n",
       "threshold": 0.5,
@@ -68,29 +88,70 @@
         "ing": {
           "method": "detached",
           "target": null,
-          "score": 0.3208333333333333
+          "score": 0.32438596491228067
         },
         "dlq": {
           "method": "quote",
           "target": 1,
-          "score": 0.7740691292093161
+          "score": 0.7751984126984127
         }
-      },
-      "name": "resolve-003"
+      }
     },
     {
+      "name": "near-dup-margin-guard-detaches",
       "before": "# Retry Policy Reference\n\n<!-- stay:pre -->\nThe ingest stage retries failed operations three times with exponential backoff before routing the message to the dead-letter queue for manual review.\n\nThe persist stage retries failed operations five times with exponential backoff before routing the message to the dead-letter queue for manual review.\n\nThe dispatch stage retries failed operations seven times with exponential backoff before routing the message to the dead-letter queue for manual review.\n\nOperators can override these defaults per partner, but every override expires after thirty days so that stale tuning never silently persists in production.\n\nThe checklist before a deployment is short and must be completed in order without skipping any step.\n\nThe checklist before a rollback is short and must be completed in order without skipping any step.\n\nEach completed run is recorded in the audit log together with the operator name, the affected partner, and the exact timestamp of the change.\n",
-      "after": "# Retry Policy Reference\n\nThe ingest stage retries failed operations three times with exponential backoff before routing the message to the dead-letter queue for manual review.\n\nThe persist stage retries failed operations five times with exponential backoff before routing the message to the dead-letter queue for manual review.\n\nThe dispatch stage retries failed operations seven times with exponential backoff before routing the message to the dead-letter queue for manual review.\n\nOperators can override these defaults per partner, but every override expires after thirty days so that stale tuning never silently persists in production.\n\nThe checklist before a deployment is short and must be completed in order without skipping any step.\n\nThe checklist before a rollback is short and must be completed in order without skipping any step.\n\nEach completed run is recorded in the audit log together with the operator name, the affected partner, and the exact timestamp of the change.\n",
+      "after": "# Retry Policy Reference\n\nThe persist stage retries failed operations five times with exponential backoff before routing the message to the dead-letter queue for manual review.\n\nThe dispatch stage retries failed operations seven times with exponential backoff before routing the message to the dead-letter queue for manual review.\n\nOperators can override these defaults per partner, but every override expires after thirty days so that stale tuning never silently persists in production.\n\nThe checklist before a deployment is short and must be completed in order without skipping any step.\n\nThe checklist before a rollback is short and must be completed in order without skipping any step.\n\nEach completed run is recorded in the audit log together with the operator name, the affected partner, and the exact timestamp of the change.\n",
       "threshold": 0.5,
       "margin": 0.05,
       "resolutions": {
         "pre": {
-          "method": "hash",
+          "method": "detached",
+          "target": null,
+          "score": 1.0
+        }
+      }
+    },
+    {
+      "name": "clamp-flattens-matched-context-on-identical-twins",
+      "before": "Retry policy overview.\n\nThe ingest stage retries failed operations three times.\n<!-- stay:ing -->\n\nEscalation contacts are listed below.\n",
+      "after": "Retry policy overview.\n\nThe ingest stage retries failed operations three times.\n\nEscalation contacts are listed below.\n\nUnrelated appendix note about billing exports.\n\nThe ingest stage retries failed operations three times.\n",
+      "threshold": 0.5,
+      "margin": 0.05,
+      "resolutions": {
+        "ing": {
+          "method": "detached",
+          "target": null,
+          "score": 1.0
+        }
+      }
+    },
+    {
+      "name": "long-neighbours-do-not-starve-the-context-bonus",
+      "before": "Operators can override these retry defaults on a per-partner basis, but every override expires automatically after thirty days so that stale tuning never silently persists in production.\n\nThe ingest stage retries failed operations three times.\n<!-- stay:ing -->\n\nEach completed run is recorded in the audit log together with the operator name, the affected partner, and the exact timestamp of the change, so the history is always reconstructable.\n",
+      "after": "Operators can override these retry defaults on a per-partner basis, but every override expires automatically after thirty days so that stale tuning never silently persists in production.\n\nThe ingest stage retries failed operations four times.\n\nEach completed run is recorded in the audit log together with the operator name, the affected partner, and the exact timestamp of the change, so the history is always reconstructable.\n\nUnrelated appendix note about billing exports.\n\nThe ingest stage retries failed operations four times.\n",
+      "threshold": 0.5,
+      "margin": 0.05,
+      "resolutions": {
+        "ing": {
+          "method": "quote",
           "target": 1,
           "score": 1.0
         }
-      },
-      "name": "resolve-004"
+      }
+    },
+    {
+      "name": "margin-binary64-one-step-under-detaches",
+      "before": "alpha bravo x\n<!-- stay:q1 -->\n",
+      "after": "alpha b\n\nalpha bravo x wmnqjkzgyfudp\n",
+      "threshold": 0.5,
+      "margin": 0.05,
+      "resolutions": {
+        "q1": {
+          "method": "detached",
+          "target": null,
+          "score": 0.7
+        }
+      }
     }
   ]
 }

@@ -38,6 +38,20 @@ from difflib import SequenceMatcher
 # spec records the number the attachment eval measured.
 CONTEXT_CHARS = 48
 
+
+def window_prefix(text: str) -> str:
+    """The last CONTEXT_CHARS characters of a preceding neighbour (SPEC.md §9:
+    prefix/suffix "carry up to 48 characters of the neighbour on each side").
+
+    Applied to raw text before normalization, on both sides of the comparison, so
+    whitespace collapse cannot change how much text survives on one side only."""
+    return text[-CONTEXT_CHARS:]
+
+
+def window_suffix(text: str) -> str:
+    """The first CONTEXT_CHARS characters of a following neighbour."""
+    return text[:CONTEXT_CHARS]
+
 # §9 matching normalization is pinned to ASCII for exact cross-implementation
 # agreement (SPEC.md §9, SPEC_DECISIONS.md): lowercase only ASCII A-Z and collapse
 # only ASCII whitespace. Non-ASCII characters pass through unchanged and identical
@@ -98,9 +112,11 @@ def context_bonus(sel: Selector, prev_text: str, next_text: str) -> float:
     that score equally on body."""
     bonus = 0.0
     if sel.prefix:
-        bonus += 0.05 * _ratio(normalize(sel.prefix), normalize(prev_text[-CONTEXT_CHARS:]))
+        bonus += 0.05 * _ratio(normalize(window_prefix(sel.prefix)),
+                               normalize(window_prefix(prev_text)))
     if sel.suffix:
-        bonus += 0.05 * _ratio(normalize(sel.suffix), normalize(next_text[:CONTEXT_CHARS]))
+        bonus += 0.05 * _ratio(normalize(window_suffix(sel.suffix)),
+                               normalize(window_suffix(next_text)))
     return bonus
 
 

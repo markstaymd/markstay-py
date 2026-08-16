@@ -68,9 +68,18 @@ def expect_hash(body: str) -> dict:
     }
 
 
-def expect_resolve(before: str, after: str, threshold: float, margin: float) -> dict:
+def expect_resolve(before: str, after: str,
+                   threshold: float | None = None,
+                   margin: float | None = None) -> dict:
+    """`threshold`/`margin` of None means the vector omitted them, so the
+    package's own SPEC.md §9 defaults (0.5 / 0.05) must be what applies."""
+    kw = {}
+    if threshold is not None:
+        kw["threshold"] = threshold
+    if margin is not None:
+        kw["margin"] = margin
     anchors = M.build_anchors(before)
-    res = M.resolve(anchors, after, threshold=threshold, margin=margin)
+    res = M.resolve(anchors, after, **kw)
     return {
         r.id: {"method": r.method, "target": r.target, "score": r.score}
         for r in res.values()
@@ -152,8 +161,29 @@ def v_score(v):
 
 
 def v_resolve(v):
-    got = expect_resolve(v["before"], v["after"], v["threshold"], v["margin"])
+    """An ABSENT threshold/margin asserts the package's own SPEC.md §9 default,
+    and each field defaults independently. A field that is present is used as
+    given, including a null, which fails loudly rather than reading as omitted."""
+    got = expect_resolve(
+        v["before"], v["after"],
+        v["threshold"] if "threshold" in v else None,
+        v["margin"] if "margin" in v else None,
+    )
     return approx(got, v["resolutions"]), f"got={got}"
+
+
+def v_anchors(v):
+    """What `build_anchors` STORES (SPEC.md §9), as opposed to what `resolve`
+    decides. Resolution cannot see it: an implementation storing whole neighbour
+    blocks and one storing the 48-character window resolve identically, because
+    both window at match time. §9 constrains the stored field, so this category
+    asserts the stored field."""
+    got = [
+        {"id": a.id, "hash": a.hash, "quote": a.selector.quote,
+         "prefix": a.selector.prefix, "suffix": a.selector.suffix}
+        for a in M.build_anchors(v["document"])
+    ]
+    return approx(got, v["anchors"]), f"got={got}"
 
 
 def _id_factory(ids):
@@ -245,6 +275,7 @@ VERIFIERS = {
     "hash": v_hash, "markers": v_markers, "parse": v_parse, "lint": v_lint,
     "diff": v_diff, "seqmatch": v_seqmatch, "score": v_score, "resolve": v_resolve,
     "stamp": v_stamp, "mint": v_mint, "preserve": v_preserve, "check": v_check,
+    "anchors": v_anchors,
 }
 
 

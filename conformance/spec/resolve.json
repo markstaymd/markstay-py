@@ -6,39 +6,382 @@
       "name": "marker-tier-survives-reorder",
       "before": "First paragraph here.\n<!-- stay:p1 -->\n\nSecond paragraph here.\n<!-- stay:p2 -->\n",
       "after": "Second paragraph here.\n<!-- stay:p2 -->\n\nFirst paragraph here.\n<!-- stay:p1 -->\n",
-      "threshold": 0.5, "margin": 0.05,
+      "threshold": 0.5,
+      "margin": 0.05,
       "resolutions": {
-        "p1": { "method": "marker", "target": 1, "score": 1.0 },
-        "p2": { "method": "marker", "target": 0, "score": 1.0 }
+        "p1": {
+          "method": "marker",
+          "target": 1,
+          "score": 1.0
+        },
+        "p2": {
+          "method": "marker",
+          "target": 0,
+          "score": 1.0
+        }
       }
     },
     {
       "name": "hash-tier-recovers-stripped-verbatim",
       "before": "First paragraph here.\n<!-- stay:p1 -->\n\nSecond paragraph here.\n<!-- stay:p2 -->\n",
       "after": "Second paragraph here.\n\nFirst paragraph here.\n",
-      "threshold": 0.5, "margin": 0.05,
+      "threshold": 0.5,
+      "margin": 0.05,
       "resolutions": {
-        "p1": { "method": "hash", "target": 1, "score": 1.0 },
-        "p2": { "method": "hash", "target": 0, "score": 1.0 }
+        "p1": {
+          "method": "hash",
+          "target": 1,
+          "score": 1.0
+        },
+        "p2": {
+          "method": "hash",
+          "target": 0,
+          "score": 1.0
+        }
       }
     },
     {
       "name": "deleted-block-detaches",
       "before": "Only block here.\n<!-- stay:solo -->\n",
       "after": "",
-      "threshold": 0.5, "margin": 0.05,
+      "threshold": 0.5,
+      "margin": 0.05,
       "resolutions": {
-        "solo": { "method": "detached", "target": null, "score": 0.0 }
+        "solo": {
+          "method": "detached",
+          "target": null,
+          "score": 0.0
+        }
       }
     },
     {
       "name": "near-dup-twins-detach-despite-high-score",
       "before": "Same body.\n<!-- stay:a -->\n\nSame body.\n<!-- stay:b -->\n",
       "after": "Same body.\n\nSame body.\n",
-      "threshold": 0.5, "margin": 0.05,
+      "threshold": 0.5,
+      "margin": 0.05,
       "resolutions": {
-        "a": { "method": "detached", "target": null, "score": 1.0 },
-        "b": { "method": "detached", "target": null, "score": 1.0 }
+        "a": {
+          "method": "detached",
+          "target": null,
+          "score": 1.0
+        },
+        "b": {
+          "method": "detached",
+          "target": null,
+          "score": 1.0
+        }
+      }
+    },
+    {
+      "name": "quote-tier-recovers-an-edited-block",
+      "note": "The QUOTE tier's positive case, which the corpus had no normative vector for. 'ing' lost its marker and had a word inserted, so marker and hash both miss; it recovers at 0.9865 (body 0.9365 plus the full 0.05 of context) against a runner-up of 0.2586. 'dlq' survived verbatim and short-circuits at the hash tier, so the vector also pins the ladder reaching QUOTE only when the stronger evidence fails. The score was 0.9822 through v1.2, when the stored suffix carried the whole 57-character neighbour against a candidate side windowed to 48 and so could only reach 0.0457 of its 0.05; §9 allows the selector 48 characters and windowing both sides restores it.",
+      "before": "The order pipeline ingests and normalizes partner messages.\n<!-- stay:ing -->\n\nInvalid payloads route to a dead-letter queue for replay.\n<!-- stay:dlq -->\n",
+      "after": "The order pipeline ingests and normalizes inbound partner messages.\n\nInvalid payloads route to a dead-letter queue for replay.\n",
+      "threshold": 0.5,
+      "margin": 0.05,
+      "resolutions": {
+        "ing": {
+          "method": "quote",
+          "target": 0,
+          "score": 0.9865079365079366
+        },
+        "dlq": {
+          "method": "hash",
+          "target": 1,
+          "score": 1.0
+        }
+      }
+    },
+    {
+      "name": "quote-prefix-supplies-the-margin",
+      "note": "Two near-duplicate candidates 0.0097 apart on body score, which is under the 0.05 margin, so body-only scoring MUST detach. The stored prefix matches the preceding block of the better candidate and contributes the full 0.05 (§9's context bonus), lifting the margin to 0.0597 and committing to block 2. An implementation that applies the commit rule to body score rather than to the aggregate score fails this vector.",
+      "before": "Retry policy overview.\n\nThe ingest stage retries failed operations three times.\n<!-- stay:ing -->\n",
+      "after": "The ingest stage retries failed operations four times.\n\nRetry policy overview.\n\nThe ingest stage retries failed operations seven times.\n\nUnrelated appendix note about billing exports.\n",
+      "threshold": 0.5,
+      "margin": 0.05,
+      "resolutions": {
+        "ing": {
+          "method": "quote",
+          "target": 2,
+          "score": 0.9954545454545455
+        }
+      }
+    },
+    {
+      "name": "quote-suffix-supplies-the-margin",
+      "note": "The prefix vector's mirror. The anchor is the first block of its document so its stored prefix is empty and only the suffix can contribute: same 0.0097 body gap, same 0.0597 aggregate margin, commits to block 0.",
+      "before": "The ingest stage retries failed operations three times.\n<!-- stay:ing -->\n\nEscalation contacts are listed below.\n",
+      "after": "The ingest stage retries failed operations seven times.\n\nEscalation contacts are listed below.\n\nUnrelated appendix note about billing exports.\n\nThe ingest stage retries failed operations four times.\n",
+      "threshold": 0.5,
+      "margin": 0.05,
+      "resolutions": {
+        "ing": {
+          "method": "quote",
+          "target": 0,
+          "score": 0.9954545454545455
+        }
+      }
+    },
+    {
+      "name": "quote-same-candidates-without-stored-context-detach",
+      "note": "The control for the two vectors above. Byte-identical after-document, but the anchor is its before-document's only block so it carries no prefix or suffix. The 0.0097 body gap is all that remains and the margin guard refuses. Together the three vectors pin the context bonus as load-bearing, not decorative.",
+      "before": "The ingest stage retries failed operations three times.\n<!-- stay:ing -->\n",
+      "after": "The ingest stage retries failed operations four times.\n\nRetry policy overview.\n\nThe ingest stage retries failed operations seven times.\n\nUnrelated appendix note about billing exports.\n",
+      "threshold": 0.5,
+      "margin": 0.05,
+      "resolutions": {
+        "ing": {
+          "method": "detached",
+          "target": null,
+          "score": 0.9454545454545454
+        }
+      }
+    },
+    {
+      "name": "quote-context-lifts-the-best-over-the-threshold",
+      "note": "The threshold half of the same question. The only real candidate scores 24/49 = 0.4898 on body alone, below §9's 0.5, so body-only scoring detaches however large the gap to the runner-up. The stored prefix matches its preceding block and adds the full 0.05, taking the aggregate to 0.5398 and committing. The three vectors above pin the context bonus against the margin; this one pins it against the threshold.",
+      "before": "Retry policy overview.\n\nalpha bravos\n<!-- stay:q1 -->\n",
+      "after": "Retry policy overview.\n\nalpha bravos wxyzqjklmnopdfgtuv012345\n\nzulu yankee xray whiskey victor uniform\n",
+      "threshold": 0.5,
+      "margin": 0.05,
+      "resolutions": {
+        "q1": {
+          "method": "quote",
+          "target": 1,
+          "score": 0.539795918367347
+        }
+      }
+    },
+    {
+      "name": "quote-context-outranks-a-better-body-match",
+      "note": "Ranking is by aggregate score, not by body score with context used only as a tiebreak afterwards. Block 0 is the better body match (40/44 = 0.9091); block 2 is worse (40/45 = 0.8889) but sits between both stored neighbours and takes the full 0.10, reaching 0.9889 against 0.9243. The commit goes to block 2, the block that loses on body. No score exceeds 1.0 here, so the outcome does not involve the clamp. An implementation that ranks on body and consults context only to break a tie commits to block 0 or detaches; either way it fails.",
+      "before": "Retry policy overview.\n\nalpha bravo charlies\n<!-- stay:q1 -->\n\nEscalation contacts are listed below.\n",
+      "after": "alpha bravo charlies wxy\n\nRetry policy overview.\n\nalpha bravo charlies wxyz\n\nEscalation contacts are listed below.\n\nUnrelated appendix note about billing exports.\n",
+      "threshold": 0.5,
+      "margin": 0.05,
+      "resolutions": {
+        "q1": {
+          "method": "quote",
+          "target": 2,
+          "score": 0.9888888888888888
+        }
+      }
+    },
+    {
+      "name": "quote-near-duplicate-not-identical-commits-on-context-alone",
+      "note": "The reachable near-duplicate hazard. Two byte-identical candidates that both differ from the quote, so their body scores are exactly equal (0.9358) and no body-score difference exists to decide between them: context is the whole reason one is chosen. The favoured candidate's raw aggregate is 1.0358, which the reported score clamps to 1.0, leaving a guarded margin of 0.0525 over the other twin's 0.9475. The corpus's other near-duplicate vector (near-dup-twins-detach-despite-high-score) is the identical-twin case, where both candidates reach 1.0 on body alone and the clamp leaves no margin at all. Here the id commits, which is what §9 permits when it allows up to 0.05 per side against a 0.05 margin.",
+      "before": "Retry policy overview.\n\nThe ingest stage retries failed operations three times.\n<!-- stay:ing -->\n\nEscalation contacts are listed below.\n",
+      "after": "Retry policy overview.\n\nThe ingest stage retries failed operations four times.\n\nEscalation contacts are listed below.\n\nUnrelated appendix note about billing exports.\n\nThe ingest stage retries failed operations four times.\n",
+      "threshold": 0.5,
+      "margin": 0.05,
+      "resolutions": {
+        "ing": {
+          "method": "quote",
+          "target": 1,
+          "score": 1.0
+        }
+      }
+    },
+    {
+      "name": "quote-single-candidate-has-a-runner-up-of-zero",
+      "note": "One surviving block, so there is no runner-up at all. §9's commit rule still applies and an absent runner-up scores 0, not undefined: the best clears the threshold and the margin is the whole score, so the id commits. An implementation that reads 'beats the runner-up' as presupposing a second candidate, and refuses to commit without one, detaches here.",
+      "before": "alpha bravos\n<!-- stay:q1 -->\n",
+      "after": "alpha bravos wxyzqjk\n",
+      "threshold": 0.5,
+      "margin": 0.05,
+      "resolutions": {
+        "q1": {
+          "method": "quote",
+          "target": 0,
+          "score": 0.75
+        }
+      }
+    },
+    {
+      "name": "quote-surviving-half-of-a-split-block-recovers",
+      "note": "§9's split case: the block was cut in two and the quote is the whole original, so a surviving half is a strict substring of it. The half scores 2*20/(40+20) = 2/3, comfortably over the threshold, and recovers. This is the guarantee §9 describes when it says a surviving half must not 'score arbitrarily low'. Note that the containment floor §9 names for the job cannot be what delivers it: under containment the metric already returns 2s/(s+l), which exceeds the floor's s/l for every l > s, so the floor never raises a score. The guarantee holds; the named mechanism is inert.",
+      "before": "alpha bravo charlie delta echo foxtrot\n<!-- stay:q1 -->\n",
+      "after": "alpha bravo charlie \n\nzulu yankee xray whiskey\n",
+      "threshold": 0.5,
+      "margin": 0.05,
+      "resolutions": {
+        "q1": {
+          "method": "quote",
+          "target": 0,
+          "score": 0.6666666666666666
+        }
+      }
+    },
+    {
+      "name": "quote-best-exactly-at-threshold-commits",
+      "note": "Body score is exactly 1/2: Ratcliff/Obershelp 2M/T = 24/48, the 12-char quote contained in a 36-char candidate. §9 says 'score >= 0.5', so the boundary commits. The anchor is its document's only block, so there is no context bonus and the score is pure body similarity.",
+      "before": "alpha bravos\n<!-- stay:q1 -->\n",
+      "after": "alpha bravos wxyzqjklmnopdfgtuv01234\n\nzulu yankee xray whiskey victor uniform\n",
+      "threshold": 0.5,
+      "margin": 0.05,
+      "resolutions": {
+        "q1": {
+          "method": "quote",
+          "target": 0,
+          "score": 0.5
+        }
+      }
+    },
+    {
+      "name": "quote-best-just-below-threshold-detaches",
+      "note": "One character longer than the vector above: 24/49 = 0.4898 < 0.5, so the same shape detaches. The pair brackets the threshold from both sides.",
+      "before": "alpha bravos\n<!-- stay:q1 -->\n",
+      "after": "alpha bravos wxyzqjklmnopdfgtuv012345\n\nzulu yankee xray whiskey victor uniform\n",
+      "threshold": 0.5,
+      "margin": 0.05,
+      "resolutions": {
+        "q1": {
+          "method": "detached",
+          "target": null,
+          "score": 0.4897959183673469
+        }
+      }
+    },
+    {
+      "name": "quote-margin-exactly-met-commits",
+      "note": "24/30 - 24/32 = 4/5 - 3/4 = 1/20, exactly §9's margin, and 'margin >= 0.05' commits at the boundary. The two ratios are exact rationals, so this holds under any arithmetic. Also pins that a runner-up above the threshold does not block a commit (0.75 clears 0.5 comfortably): §9's rule is a margin over the runner-up, not uniqueness above the threshold.",
+      "before": "alpha bravos\n<!-- stay:q1 -->\n",
+      "after": "alpha bravos wxyzq\n\nalpha bravos wxyzqjk\n",
+      "threshold": 0.5,
+      "margin": 0.05,
+      "resolutions": {
+        "q1": {
+          "method": "quote",
+          "target": 0,
+          "score": 0.8
+        }
+      }
+    },
+    {
+      "name": "quote-margin-just-under-detaches",
+      "note": "23/28 - 44/57 = 79/1596 = 0.049499, under §9's margin by an amount no representation choice can close, so the same shape detaches. Paired with quote-margin-exactly-met-commits this brackets the margin without depending on how an implementation represents the numbers. (The corpus does have a binary64-sensitive pair either side of 0.05, but §9 states a mathematical condition and does not mandate binary64, so that pair is frozen in gen/ as reference behaviour rather than asserted here as a requirement.)",
+      "before": "alpha bravo charlie del\n<!-- stay:q1 -->\n",
+      "after": "alpha bravo charlie del wxyzqjkmn\n\nalpha bravo charlie de wxyzqjkmnpq\n",
+      "threshold": 0.5,
+      "margin": 0.05,
+      "resolutions": {
+        "q1": {
+          "method": "detached",
+          "target": null,
+          "score": 0.8214285714285714
+        }
+      }
+    },
+    {
+      "name": "quote-margin-met-to-the-exact-value-commits",
+      "note": "§9 says 'margin >= 0.05', and the >= is load-bearing. No pair of Ratcliff/Obershelp ratios differs by exactly the double 0.05, so the margin is instead supplied as the gap itself: 23/28 - 44/57 = 0.04949874686716793, injected verbatim. An implementation reading the rule as a strict '>' detaches here. Same document as quote-margin-just-under-detaches, which detaches at the default 0.05, so the pair separates the comparison from the constant.",
+      "before": "alpha bravo charlie del\n<!-- stay:q1 -->\n",
+      "after": "alpha bravo charlie del wxyzqjkmn\n\nalpha bravo charlie de wxyzqjkmnpq\n",
+      "threshold": 0.5,
+      "margin": 0.04949874686716793,
+      "resolutions": {
+        "q1": {
+          "method": "quote",
+          "target": 0,
+          "score": 0.8214285714285714
+        }
+      }
+    },
+    {
+      "name": "quote-exact-tie-selects-the-later-candidate",
+      "note": "Two byte-identical candidates score exactly equal, so under the default margin the guard always refuses and which one ranks first is unobservable. With the margin injected as 0 the selection becomes visible, and it must be the LATER candidate, which is what the score category already requires of `best_match` (conformance/spec/score.json, exact-tie case). This carries that rule up to the resolve level, where an implementation sorting stably from the front would otherwise pick block 0 unseen.",
+      "before": "The ingest stage retries failed operations three times.\n<!-- stay:ing -->\n",
+      "after": "The ingest stage retries failed operations four times.\n\nThe ingest stage retries failed operations four times.\n",
+      "threshold": 0.5,
+      "margin": 0.0,
+      "resolutions": {
+        "ing": {
+          "method": "quote",
+          "target": 1,
+          "score": 0.9357798165137615
+        }
+      }
+    },
+    {
+      "name": "quote-normalization-is-ascii-only",
+      "note": "§9 folds ASCII case only, so 'CAFE' with an acute accent and its lowercase form are NOT the same string: they score 0.9412, not 1.0. An implementation using Unicode casefold (or `\\s` for whitespace, which matches U+00A0 where §9's set does not) scores 1.0 here and reports a different number. The fold is pinned this way precisely so two implementations agree without carrying Unicode case tables, and this is the resolve-level vector for it; the score and seqmatch categories cover the metric on non-ASCII input but not the fold inside a resolution.",
+      "before": "CAFÉ ordering pipeline NAÏVE retry\n<!-- stay:q1 -->\n",
+      "after": "café ordering pipeline naïve retry\n\nzulu yankee xray whiskey victor uniform\n",
+      "threshold": 0.5,
+      "margin": 0.05,
+      "resolutions": {
+        "q1": {
+          "method": "quote",
+          "target": 0,
+          "score": 0.9411764705882353
+        }
+      }
+    },
+    {
+      "name": "quote-defaults-threshold-is-0.5",
+      "note": "This vector supplies NO threshold and NO margin, so a conforming implementation must apply §9's 0.5 and 0.05 itself. Every other vector in the category injects both, which is exactly how an implementation could compile in different constants and still pass. Same shape as quote-best-exactly-at-threshold-commits: any compiled-in threshold above 0.5 detaches instead of committing.",
+      "before": "alpha bravos\n<!-- stay:q1 -->\n",
+      "after": "alpha bravos wxyzqjklmnopdfgtuv01234\n\nzulu yankee xray whiskey victor uniform\n",
+      "resolutions": {
+        "q1": {
+          "method": "quote",
+          "target": 0,
+          "score": 0.5
+        }
+      }
+    },
+    {
+      "name": "quote-defaults-margin-is-0.05",
+      "note": "The margin half of the same check, both constants omitted. Same shape as quote-margin-just-under-detaches: any compiled-in margin at or below 0.049499 commits instead of detaching.",
+      "before": "alpha bravo charlie del\n<!-- stay:q1 -->\n",
+      "after": "alpha bravo charlie del wxyzqjkmn\n\nalpha bravo charlie de wxyzqjkmnpq\n",
+      "resolutions": {
+        "q1": {
+          "method": "detached",
+          "target": null,
+          "score": 0.8214285714285714
+        }
+      }
+    },
+    {
+      "name": "quote-defaults-threshold-is-not-lower-than-0.5",
+      "note": "The other side of the same bracket, both constants omitted. quote-defaults-threshold-is-0.5 catches a default set too HIGH (it commits at exactly 0.5, so 0.6 would detach) but a default set too LOW passes it unchanged. This is the 24/49 = 0.4898 shape: it detaches at 0.5 and commits at anything below 0.4898, so the two vectors together pin the constant from both directions.",
+      "before": "alpha bravos\n<!-- stay:q1 -->\n",
+      "after": "alpha bravos wxyzqjklmnopdfgtuv012345\n\nzulu yankee xray whiskey victor uniform\n",
+      "resolutions": {
+        "q1": {
+          "method": "detached",
+          "target": null,
+          "score": 0.4897959183673469
+        }
+      }
+    },
+    {
+      "name": "quote-defaults-margin-is-not-higher-than-0.05",
+      "note": "The other side of the margin bracket, both constants omitted. quote-defaults-margin-is-0.05 catches a default set too LOW; this is the 4/5 - 3/4 = 1/20 shape, which commits at exactly 0.05 and detaches at anything above it.",
+      "before": "alpha bravos\n<!-- stay:q1 -->\n",
+      "after": "alpha bravos wxyzq\n\nalpha bravos wxyzqjk\n",
+      "resolutions": {
+        "q1": {
+          "method": "quote",
+          "target": 0,
+          "score": 0.8
+        }
+      }
+    },
+    {
+      "name": "quote-defaults-apply-per-field-not-all-or-nothing",
+      "note": "Threshold supplied, margin omitted. The two vectors above omit both fields together, which an implementation could pass by treating 'no options at all' as a special case; this one requires each constant to default independently. Same shape again, so it detaches only if the defaulted margin is 0.05.",
+      "before": "alpha bravo charlie del\n<!-- stay:q1 -->\n",
+      "after": "alpha bravo charlie del wxyzqjkmn\n\nalpha bravo charlie de wxyzqjkmnpq\n",
+      "threshold": 0.5,
+      "resolutions": {
+        "q1": {
+          "method": "detached",
+          "target": null,
+          "score": 0.8214285714285714
+        }
       }
     }
   ]

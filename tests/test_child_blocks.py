@@ -293,3 +293,43 @@ def test_cli_rejects_hashless_child_stamping_without_traceback(tmp_path):
     assert result.returncode == 2
     assert "requires child subhash evidence" in result.stderr
     assert "Traceback" not in result.stderr
+
+
+def test_child_anchor_context_is_windowed_to_48_characters():
+    """SPEC.md §9's 48-character limit, applied to the child ladder as well.
+
+    `resolve_children` is exported from this package, so the storage asymmetry
+    corrected in the block path was shipped here too. The child ladder has no
+    conformance vectors (it is opt-in and its spec text is unmerged), so this
+    test is what holds the two paths consistent.
+    """
+    long_sibling = (
+        "Ship the linter and then "
+        + "wait for the release train " * 3
+        + "wait for the release train"
+    )
+    long_before = "A preceding block far longer than forty-eight characters, easily."
+    long_after = "A following block also far longer than forty-eight characters here."
+    md = (
+        f"{long_before}\n\n"
+        f"- {long_sibling}\n"
+        f"- Document the command\n\n"
+        f"{long_after}\n"
+    )
+    stamped_md = stamped(md)
+    anchors = list(M.build_child_anchors(stamped_md))
+    second = next(a for a in anchors if a.selector.quote == "Document the command")
+    sibling_body = next(
+        a.selector.quote for a in anchors if a.selector.quote.startswith("Ship the")
+    )
+    assert len(second.selector.prefix) == 48
+    assert second.selector.prefix == sibling_body[-48:]
+    # The parent selector is block context and IS governed by §9.
+    parent = second.parent
+    assert len(parent.selector.prefix) == 48
+    assert parent.selector.prefix == long_before[-48:]
+    assert len(parent.selector.suffix) == 48
+    assert parent.selector.suffix == long_after[:48]
+    # 48 is a cap, not a fixed width: a short neighbour is stored whole.
+    first = next(a for a in anchors if a.selector.quote.startswith("Ship the"))
+    assert first.selector.suffix == "Document the command"

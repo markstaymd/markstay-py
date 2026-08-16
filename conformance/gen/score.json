@@ -107,6 +107,24 @@
       "name": "score-013"
     },
     {
+      "fn": "context_bonus",
+      "prefix": "Operators can override these retry defaults on a per-partner basis, but every override expires after thirty days.",
+      "suffix": "",
+      "prev": "Operators can override these retry defaults on a per-partner basis, but every override expires after thirty days.",
+      "next": "irrelevant",
+      "bonus": 0.05,
+      "name": "score-014"
+    },
+    {
+      "fn": "context_bonus",
+      "prefix": "s, but every override expires after thirty days.",
+      "suffix": "",
+      "prev": "Operators can override these retry defaults on a per-partner basis, but every override expires after thirty days.",
+      "next": "irrelevant",
+      "bonus": 0.05,
+      "name": "score-015"
+    },
+    {
       "fn": "best_match",
       "quote": "the quick brown fox jumps",
       "prefix": "",
@@ -119,7 +137,7 @@
       "index": 0,
       "score": 1.0,
       "runner_up": 0.8,
-      "name": "score-014"
+      "name": "score-016"
     },
     {
       "fn": "best_match",
@@ -133,7 +151,7 @@
       "index": 1,
       "score": 0.3548387096774194,
       "runner_up": 0.14814814814814814,
-      "name": "score-015"
+      "name": "score-017"
     },
     {
       "fn": "best_match",
@@ -147,7 +165,7 @@
       "index": 1,
       "score": 1.0,
       "runner_up": 1.0,
-      "name": "score-016"
+      "name": "score-018"
     }
   ]
 }

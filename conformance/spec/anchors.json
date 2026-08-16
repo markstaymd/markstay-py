@@ -1,0 +1,55 @@
+{
+  "category": "anchors",
+  "tier": "spec",
+  "vectors": [
+    {
+      "name": "stored-context-is-windowed-to-48-characters",
+      "note": "SPEC.md §9: prefix/suffix 'carry up to 48 characters of the neighbour on each side'. Both neighbours here are ~185 characters, so a conforming build stores the LAST 48 of the preceding block and the FIRST 48 of the following one. This is the only category that can catch a producer storing whole neighbour blocks: every resolve vector windows both sides at match time, so a nonconformant producer resolves identically and passes the whole resolve category. Through v1.2 every implementation stored the whole block and this vector is what would have caught it.",
+      "document": "Operators can override these retry defaults on a per-partner basis, but every override expires automatically after thirty days so that stale tuning never silently persists in production.\n\nThe ingest stage retries failed operations three times.\n<!-- stay:ing -->\n\nEach completed run is recorded in the audit log together with the operator name, the affected partner, and the exact timestamp of the change, so the history is always reconstructable.\n",
+      "anchors": [
+        {
+          "id": "ing",
+          "hash": "7454f2e2bbd810d1f6aee1b41a4a4bb782d4a1b285dc3f9374fdd00b4bfe3f82",
+          "quote": "The ingest stage retries failed operations three times.",
+          "prefix": "le tuning never silently persists in production.",
+          "suffix": "Each completed run is recorded in the audit log "
+        }
+      ]
+    },
+    {
+      "name": "short-neighbours-are-stored-whole",
+      "note": "48 is a cap, not a fixed width. Neighbours under the limit are stored verbatim, so an implementation that pads, truncates to a fixed length, or normalizes at build time fails here. Storage is raw text; §9's ASCII fold is a matching-time operation.",
+      "document": "Retry policy overview.\n\nThe ingest stage retries failed operations three times.\n<!-- stay:ing -->\n\nEscalation contacts are listed below.\n",
+      "anchors": [
+        {
+          "id": "ing",
+          "hash": "7454f2e2bbd810d1f6aee1b41a4a4bb782d4a1b285dc3f9374fdd00b4bfe3f82",
+          "quote": "The ingest stage retries failed operations three times.",
+          "prefix": "Retry policy overview.",
+          "suffix": "Escalation contacts are listed below."
+        }
+      ]
+    },
+    {
+      "name": "document-edges-have-empty-context",
+      "note": "The first block has no preceding neighbour and the last has no following one, so those sides are the empty string rather than a wrapped or duplicated block. The unmarked middle block contributes no anchor while still serving as both neighbours, which pins that anchors follow markers and context follows position.",
+      "document": "First block, no preceding neighbour.\n<!-- stay:one -->\n\nMiddle block.\n\nLast block, no following neighbour.\n<!-- stay:three -->\n",
+      "anchors": [
+        {
+          "id": "one",
+          "hash": "3863088a88f7b5eed531a0802ff84b574300b1f342422acdb82b993a160c5e9f",
+          "quote": "First block, no preceding neighbour.",
+          "prefix": "",
+          "suffix": "Middle block."
+        },
+        {
+          "id": "three",
+          "hash": "6d96ca7735e22ee0647788ad7de50f10566bbc69a6db4062bb6ac85ff3c69fd7",
+          "quote": "Last block, no following neighbour.",
+          "prefix": "Middle block.",
+          "suffix": ""
+        }
+      ]
+    }
+  ]
+}

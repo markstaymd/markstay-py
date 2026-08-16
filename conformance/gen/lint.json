@@ -8,7 +8,7 @@
       "name": "lint-000"
     },
     {
-      "doc": "Users authenticate with an API key.\n<!-- stay:8f24 hash=sha256:9690 -->\n",
+      "doc": "Users authenticate with an API token.\n<!-- stay:8f24 hash=sha256:298A -->\n",
       "findings": [],
       "name": "lint-001"
     },

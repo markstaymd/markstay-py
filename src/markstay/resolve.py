@@ -33,7 +33,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from . import lint as L
-from .quote import Selector, best_match
+from .quote import Selector, best_match, window_prefix, window_suffix
 
 # Default thresholds for the QUOTE tier. A recovery is committed only when the
 # best candidate clears `threshold` AND beats the runner-up by `margin`.
@@ -95,7 +95,12 @@ def build_anchors(before_md: str, mode: str = "blank-line") -> list[Anchor]:
     for i, b in enumerate(blocks):
         prev_text = blocks[i - 1].content if i > 0 else ""
         next_text = blocks[i + 1].content if i + 1 < len(blocks) else ""
-        sel = Selector(quote=b.content, prefix=prev_text, suffix=next_text)
+        # SPEC.md §9: the stored prefix/suffix carry up to 48 characters of the
+        # neighbour on each side. Storing whole blocks caps the achievable ratio
+        # near 2*48/(len+48), because the candidate side is windowed at match time.
+        sel = Selector(quote=b.content,
+                       prefix=window_prefix(prev_text),
+                       suffix=window_suffix(next_text))
         for mk in b.markers:
             if mk.id and not mk.malformed:
                 anchors.append(
@@ -188,17 +193,23 @@ def build_child_anchors(before_md: str, mode: str = "blank-line") -> list[ChildA
                 hash=L.body_hash(block.content),
                 selector=Selector(
                     quote=block.content,
-                    prefix=blocks[bi - 1].content if bi > 0 else "",
-                    suffix=blocks[bi + 1].content if bi + 1 < len(blocks) else "",
+                    prefix=window_prefix(blocks[bi - 1].content) if bi > 0 else "",
+                    suffix=(
+                        window_suffix(blocks[bi + 1].content)
+                        if bi + 1 < len(blocks)
+                        else ""
+                    ),
                 ),
             )
         for ci, child in enumerate(block.children):
             child_hash = L.body_hash(child.content)
             selector = Selector(
                 quote=child.content,
-                prefix=block.children[ci - 1].content if ci > 0 else "",
+                prefix=(
+                    window_prefix(block.children[ci - 1].content) if ci > 0 else ""
+                ),
                 suffix=(
-                    block.children[ci + 1].content
+                    window_suffix(block.children[ci + 1].content)
                     if ci + 1 < len(block.children)
                     else ""
                 ),
