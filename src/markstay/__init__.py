@@ -67,11 +67,14 @@ from .stamp import (
 )
 from .quote import (
     CONTEXT_CHARS,
+    Candidate,
+    Evidence,
     Selector,
     best_match,
     body_score,
     context_bonus,
     normalize,
+    rank_candidates,
 )
 from .resolve import (
     DEFAULT_MARGIN,
@@ -92,7 +95,7 @@ from .preserve import (
 )
 from .staged import CommitEntry, StagedCheck, check_entries
 
-__version__ = "0.7.0"
+__version__ = "0.8.0"
 
 __all__ = [
     "__version__",
@@ -136,10 +139,13 @@ __all__ = [
     "DEFAULT_HASH_LENGTH",
     # quote / §9 recovery
     "Selector",
+    "Evidence",
+    "Candidate",
     "normalize",
     "body_score",
     "context_bonus",
     "best_match",
+    "rank_candidates",
     "CONTEXT_CHARS",
     # resolve / §9.1 ladder
     "Anchor",

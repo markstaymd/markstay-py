@@ -9,6 +9,7 @@ naturally and the two ecosystems converge:
                                           as a ready editing prompt
     markstay lint    FILE...              well-formedness + intra-doc checks
     markstay lint    --before OLD.md NEW  regeneration diff (SPEC.md §11)
+    markstay resolve --before OLD.md NEW  explain attachment or detachment (§9)
     markstay check-staged [FILE...]       the same diff against the staged commit,
                                           for a pre-commit hook (§11)
     markstay stamp   FILE... [-w]         mint ids for unmarked blocks (§6)
@@ -33,7 +34,19 @@ from pathlib import Path
 
 from . import lint as L
 from .lint import Finding
+from .resolve import (
+    DEFAULT_MARGIN,
+    DEFAULT_THRESHOLD,
+    build_anchors,
+    build_child_anchors,
+    resolve,
+    resolve_children,
+)
 from .stamp import DEFAULT_HASH_LENGTH, repair_duplicates, restamp, stamp
+
+
+RESOLVE_SCHEMA = "markstay.resolve/v1"
+RESOLVE_DIAGNOSTICS_SCHEMA = "markstay.resolve-diagnostics/v1"
 
 
 def render_text(label: str, findings: list[Finding], show_drift: bool = False) -> str:
@@ -183,6 +196,190 @@ def _cmd_lint(args, ap) -> int:
     return 1 if any(L.has_errors(fs) for _, fs in results) else 0
 
 
+def _target_detail(target: int, targets: dict[int, object]) -> dict:
+    block = targets[target]
+    content = block.content.replace("\n", " ").strip()
+    return {
+        "index": target,
+        "line": block.line,
+        "preview": content[:120],
+    }
+
+
+def _candidate_dict(candidate, targets: dict[int, object]) -> dict:
+    return {
+        "target": _target_detail(candidate.target, targets),
+        "score": candidate.score,
+        "provenance": candidate.provenance,
+        "evidence": [
+            {
+                "code": evidence.code,
+                "label": evidence.label,
+                "contribution": evidence.contribution,
+            }
+            for evidence in candidate.evidence
+        ],
+    }
+
+
+def _resolution_dict(result, targets: dict[int, object], threshold: float, margin: float):
+    observed_margin = result.score - result.runner_up_score
+    payload = {
+        "id": result.id,
+        "method": result.method,
+        "reason": result.reason,
+        "committed": result.target is not None,
+        "target": (
+            _target_detail(result.target, targets) if result.target is not None else None
+        ),
+        "score": result.score,
+        "runner_up_score": result.runner_up_score,
+        "threshold": threshold,
+        "required_margin": margin,
+        "observed_margin": observed_margin,
+    }
+    if result.method == "detached":
+        diagnostics = {
+            "schema": RESOLVE_DIAGNOSTICS_SCHEMA,
+            "diagnostic": True,
+            "candidate_set": "diagnostic, not an attachment recommendation",
+            "candidates": [
+                _candidate_dict(candidate, targets) for candidate in result.candidates
+            ],
+        }
+        proposed_target = getattr(result, "proposed_target", None)
+        if proposed_target is not None:
+            diagnostics["contest"] = {
+                "proposed_target": _target_detail(proposed_target, targets),
+                "contested_with": result.contested_with,
+                "provenance": result.proposal_provenance,
+                "outcome": "same target proposed by multiple stays; assigned to none",
+            }
+        payload["diagnostics"] = diagnostics
+    blocked_by = getattr(result, "blocked_by", None)
+    if blocked_by is not None:
+        payload["blocked_by"] = {
+            "id": blocked_by.id,
+            "method": blocked_by.method,
+            "reason": blocked_by.reason,
+            "committed": blocked_by.target is not None,
+            "score": blocked_by.score,
+            "proposed_target_index": blocked_by.proposed_target,
+            "contested_with": blocked_by.contested_with,
+            "proposal_provenance": blocked_by.proposal_provenance,
+        }
+    return payload
+
+
+def _render_resolution(result, targets: dict[int, object], threshold: float, margin: float):
+    if result.target is not None:
+        target = _target_detail(result.target, targets)
+        return [
+            f"{result.id}: {result.method} -> block[{target['index']}] L{target['line']} "
+            f"(score {result.score:.3f}, attachment committed)"
+        ]
+    observed = result.score - result.runner_up_score
+    lines = [
+        f"{result.id}: detached ({result.reason}; score {result.score:.3f}, "
+        f"runner-up {result.runner_up_score:.3f}, threshold {threshold:.3f}, "
+        f"required margin {margin:.3f}, observed margin {observed:.3f}; "
+        "no attachment committed)"
+    ]
+    blocked_by = getattr(result, "blocked_by", None)
+    if blocked_by is not None:
+        lines.append(
+            f"  blocked by parent {blocked_by.id}: {blocked_by.reason or blocked_by.method}"
+        )
+        if blocked_by.contested_with:
+            lines.append(
+                "  parent proposal contested with "
+                + ", ".join(blocked_by.contested_with)
+                + "; assigned to no stay"
+            )
+    proposed_target = getattr(result, "proposed_target", None)
+    if proposed_target is not None:
+        target = _target_detail(proposed_target, targets)
+        lines.append(
+            f"  contested proposal: block[{target['index']}] L{target['line']} also "
+            f"proposed by {', '.join(result.contested_with)}; assigned to no stay"
+        )
+    return lines
+
+
+def _cmd_resolve(args, ap) -> int:
+    mode = "commonmark" if args.commonmark else "blank-line"
+    before_md = Path(args.before).read_text(encoding="utf-8")
+    after_md = Path(args.file).read_text(encoding="utf-8")
+    if args.child_blocks:
+        anchors = build_child_anchors(before_md, mode=mode)
+        resolved = resolve_children(
+            anchors,
+            after_md,
+            threshold=args.threshold,
+            margin=args.margin,
+            mode=mode,
+        )
+        blocks = [
+            block
+            for block in L.parse_document(after_md, mode=mode, child_blocks=True)
+            if block.index >= 0
+        ]
+        targets = {
+            child.index: child for block in blocks for child in block.children
+        }
+        granularity = "child"
+    else:
+        anchors = build_anchors(before_md, mode=mode)
+        resolved = resolve(
+            anchors,
+            after_md,
+            threshold=args.threshold,
+            margin=args.margin,
+            mode=mode,
+        )
+        blocks = [
+            block for block in L.parse_document(after_md, mode=mode) if block.index >= 0
+        ]
+        targets = {index: block for index, block in enumerate(blocks)}
+        granularity = "block"
+
+    ordered = [resolved[anchor.id] for anchor in anchors]
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    "schema": RESOLVE_SCHEMA,
+                    "before": args.before,
+                    "after": args.file,
+                    "segmenter": mode,
+                    "granularity": granularity,
+                    "threshold": args.threshold,
+                    "required_margin": args.margin,
+                    "resolutions": [
+                        _resolution_dict(result, targets, args.threshold, args.margin)
+                        for result in ordered
+                    ],
+                },
+                indent=2,
+            )
+        )
+        return 0
+
+    lines = []
+    for result in ordered:
+        lines.extend(_render_resolution(result, targets, args.threshold, args.margin))
+        if args.show_candidates:
+            for number, candidate in enumerate(result.candidates, 1):
+                target = _target_detail(candidate.target, targets)
+                labels = ", ".join(evidence.label for evidence in candidate.evidence)
+                lines.append(
+                    f"  diagnostic candidate {number}: block[{target['index']}] "
+                    f"L{target['line']} score {candidate.score:.3f} ({labels})"
+                )
+    print("\n".join(lines))
+    return 0
+
+
 def _run_write(verb: str, args, ap, op) -> int:
     """Shared driver for the write verbs: run ``op(text) -> (text, note)`` per
     file, then either emit to stdout or edit in place."""
@@ -289,6 +486,13 @@ def _positive_int(s: str) -> int:
     return n
 
 
+def _unit_interval(s: str) -> float:
+    value = float(s)
+    if not 0.0 <= value <= 1.0:
+        raise argparse.ArgumentTypeError("must be between 0 and 1")
+    return value
+
+
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="markstay", description="markstay reference CLI")
     sub = ap.add_subparsers(dest="command", required=True, metavar="<command>")
@@ -352,6 +556,45 @@ def build_parser() -> argparse.ArgumentParser:
     p_lint.add_argument("--commonmark", action="store_true", help=commonmark_help)
     p_lint.add_argument("--child-blocks", action="store_true", help=child_help)
     p_lint.set_defaults(func=_cmd_lint)
+
+    p_resolve = sub.add_parser(
+        "resolve",
+        help="resolve baseline stays against an edited document and explain detachments",
+    )
+    p_resolve.add_argument(
+        "file", metavar="NEW.md", help="edited Markdown document to resolve against"
+    )
+    p_resolve.add_argument(
+        "--before",
+        required=True,
+        metavar="OLD.md",
+        help="marked baseline that supplies ids and recovery evidence",
+    )
+    p_resolve.add_argument(
+        "--json", action="store_true", help="emit the versioned structured result"
+    )
+    p_resolve.add_argument(
+        "--show-candidates",
+        action="store_true",
+        dest="show_candidates",
+        help="show diagnostic candidates for detached stays in text output; "
+        "this does not change --json",
+    )
+    p_resolve.add_argument(
+        "--threshold",
+        type=_unit_interval,
+        default=DEFAULT_THRESHOLD,
+        help=f"quote commit threshold (default {DEFAULT_THRESHOLD})",
+    )
+    p_resolve.add_argument(
+        "--margin",
+        type=_unit_interval,
+        default=DEFAULT_MARGIN,
+        help=f"required lead over the runner-up (default {DEFAULT_MARGIN})",
+    )
+    p_resolve.add_argument("--commonmark", action="store_true", help=commonmark_help)
+    p_resolve.add_argument("--child-blocks", action="store_true", help=child_help)
+    p_resolve.set_defaults(func=_cmd_resolve)
 
     p_staged = sub.add_parser(
         "check-staged",

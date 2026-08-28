@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import re
 import string
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 
 # How much neighbour context to keep on each side. Short enough to stay cheap,
@@ -82,6 +82,25 @@ class Selector:
         return normalize(self.quote)
 
 
+@dataclass(frozen=True)
+class Evidence:
+    """One non-normative explanation of a candidate's score."""
+
+    code: str
+    label: str
+    contribution: float
+
+
+@dataclass(frozen=True)
+class Candidate:
+    """A diagnostic candidate, ranked without implying an attachment."""
+
+    target: int
+    score: float
+    evidence: tuple[Evidence, ...] = field(default_factory=tuple)
+    provenance: str = "independent-per-anchor"
+
+
 def _ratio(a: str, b: str) -> float:
     if not a or not b:
         return 0.0
@@ -120,24 +139,89 @@ def context_bonus(sel: Selector, prev_text: str, next_text: str) -> float:
     return bonus
 
 
-def best_match(sel: Selector, candidates: list[str]) -> tuple[int, float, float]:
-    """Rank candidate block bodies against a selector.
+def rank_candidates(
+    sel: Selector,
+    candidates: list[str],
+    targets: list[int] | None = None,
+    provenance: str = "independent-per-anchor",
+) -> list[Candidate]:
+    """Return every candidate in the resolver's exact historical order.
 
-    Returns (best_index, best_score, runner_up_score). The runner-up is returned
-    so the resolver can require a margin: a confident recovery needs not just a
-    high score but a *clear winner*, which is how "surface, don't guess" is
-    enforced for genuinely ambiguous re-attachment.
+    Ranking remains ``(score, candidate_index)`` descending, so equal scores
+    keep choosing the later candidate. ``targets`` lets subset callers preserve
+    document-global indices without changing the tie-break.
     """
-    scored = []
-    for i, c in enumerate(candidates):
-        s = body_score(sel, c)
-        prev_text = candidates[i - 1] if i > 0 else ""
-        next_text = candidates[i + 1] if i + 1 < len(candidates) else ""
-        scored.append((s + context_bonus(sel, prev_text, next_text), i))
-    if not scored:
+    if targets is not None and len(targets) != len(candidates):
+        raise ValueError("targets and candidates must have the same length")
+
+    scored: list[tuple[float, int, tuple[Evidence, ...]]] = []
+    for i, candidate in enumerate(candidates):
+        score = body_score(sel, candidate)
+        previous = candidates[i - 1] if i > 0 else ""
+        following = candidates[i + 1] if i + 1 < len(candidates) else ""
+        total = score + context_bonus(sel, previous, following)
+        evidence = [Evidence("body_similarity", "body similarity", score)]
+        if sel.prefix:
+            contribution = 0.05 * _ratio(
+                normalize(window_prefix(sel.prefix)),
+                normalize(window_prefix(previous)),
+            )
+            evidence.append(
+                Evidence(
+                    (
+                        "candidate_prefix_context"
+                        if provenance != "independent-per-anchor"
+                        else "prefix_context"
+                    ),
+                    (
+                        f"preceding candidate in {provenance.replace('-', ' ')}"
+                        if provenance != "independent-per-anchor"
+                        else "preceding context"
+                    ),
+                    contribution,
+                )
+            )
+        if sel.suffix:
+            contribution = 0.05 * _ratio(
+                normalize(window_suffix(sel.suffix)),
+                normalize(window_suffix(following)),
+            )
+            evidence.append(
+                Evidence(
+                    (
+                        "candidate_suffix_context"
+                        if provenance != "independent-per-anchor"
+                        else "suffix_context"
+                    ),
+                    (
+                        f"following candidate in {provenance.replace('-', ' ')}"
+                        if provenance != "independent-per-anchor"
+                        else "following context"
+                    ),
+                    contribution,
+                )
+            )
+        scored.append((total, i, tuple(evidence)))
+    scored.sort(key=lambda row: (row[0], row[1]), reverse=True)
+    return [
+        Candidate(
+            target=targets[index] if targets is not None else index,
+            score=min(score, 1.0),
+            evidence=evidence,
+            provenance=provenance,
+        )
+        for score, index, evidence in scored
+    ]
+
+
+def best_match(sel: Selector, candidates: list[str]) -> tuple[int, float, float]:
+    """Compatibility wrapper returning ``(index, score, runner-up score)``.
+
+    The runner-up keeps the historical margin-check API intact while new callers
+    can inspect ``rank_candidates``.
+    """
+    ranked = rank_candidates(sel, candidates)
+    if not ranked:
         return -1, 0.0, 0.0
-    scored.sort(reverse=True)
-    best_score, best_index = scored[0]
-    runner_up = scored[1][0] if len(scored) > 1 else 0.0
-    # Clamp the context bonus back out of the reported score's ceiling at 1.0.
-    return best_index, min(best_score, 1.0), min(runner_up, 1.0)
+    runner_up = ranked[1].score if len(ranked) > 1 else 0.0
+    return ranked[0].target, ranked[0].score, runner_up

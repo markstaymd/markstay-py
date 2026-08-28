@@ -3,11 +3,11 @@
 [![PyPI](https://img.shields.io/pypi/v/markstay)](https://pypi.org/project/markstay/)
 [![Python versions](https://img.shields.io/pypi/pyversions/markstay)](https://pypi.org/project/markstay/)
 [![tests](https://img.shields.io/github/actions/workflow/status/markstaymd/markstay-py/test.yml?label=tests)](https://github.com/markstaymd/markstay-py/actions/workflows/test.yml)
-[![spec](https://img.shields.io/badge/spec-v1.2-blue)](https://markstay.org)
+[![spec](https://img.shields.io/badge/spec-v1.4-blue)](https://markstay.org)
 ![License](https://img.shields.io/pypi/l/markstay)
 
 The Python reference implementation of the [markstay spec](https://markstay.org)
-(v1.2). markstay is a source-level identity primitive for Markdown blocks: an id
+(v1.4). markstay is a source-level identity primitive for Markdown blocks: an id
 token that **stays** bound to its block across edits (marker `stay:`), so a
 reference to a block survives the document being rewritten, including by an LLM.
 
@@ -18,6 +18,12 @@ It mirrors the JavaScript reference
 ([`markstay` on npm](https://www.npmjs.com/package/markstay)); both are gated by a
 shared language-neutral conformance corpus, which turns "two implementations
 agree" from an assertion into a tested fact.
+
+**Child-block identity (§5.5) is implemented here**, behind `--child-blocks` on the CLI
+and `child_blocks=True` in the API: a direct list item may carry its own stay under the
+reserved `subhash` key, resolved through the §9.2 ladder. It is opt-in because §16 makes
+segmenting and resolving child blocks optional. The write-path shim §16 *does* make
+mandatory is unconditional here, as it is in every implementation.
 
 ## Install
 
@@ -86,6 +92,10 @@ M.body_hash("some block body")
 anchors = M.build_anchors(before_md)
 resolutions = M.resolve(anchors, after_md)   # id -> marker | hash | quote | detached
 
+detached = resolutions["a1b2"]
+detached.reason       # ambiguous | unmatched, or a child-path reason
+detached.candidates   # diagnostic contenders for ambiguity, never a committed target
+
 # write path: mint ids for unmarked blocks (§6), append the §3.1 trailing marker
 res = M.stamp("First paragraph.\n\nSecond paragraph.\n")
 res.text     # each block now carries <!-- stay:ID hash=sha256:... -->
@@ -132,7 +142,8 @@ experimental Python-only): `normalize_body`, `body_hash`,
 `lint_document`, `lint_diff`, `sort_findings`, `has_errors`, `mint_id`,
 `ID_CHARSET`, `format_marker`, `format_attr_value`, `stamp`, `restamp`,
 `repair_duplicates`, `DEFAULT_HASH_LENGTH`, `Selector`, `normalize`,
-`body_score`, `context_bonus`, `best_match`, `CONTEXT_CHARS`, `Anchor`,
+`body_score`, `context_bonus`, `rank_candidates`, `best_match`, `CONTEXT_CHARS`,
+`Evidence`, `Candidate`, `Anchor`,
 `Resolution`, `build_anchors`, `resolve`, `ChildAnchor`, `ChildResolution`,
 `build_child_anchors`, `resolve_children`, `DEFAULT_THRESHOLD`, `DEFAULT_MARGIN`,
 `PRESERVE_INSTRUCTION`, `PRESERVE_RETURN_ONLY`, `preserve_wrap`, `CommitEntry`,
@@ -148,6 +159,9 @@ markstay lint    --before OLD.md NEW  # regeneration diff (dropped/duplicated/re
 markstay lint    --json ...           # machine-readable findings
 markstay lint    --commonmark ...     # §5.2 CommonMark-tree segmentation (needs the extra)
 markstay lint    --child-blocks --commonmark ...  # experimental list-item identity
+markstay resolve --before OLD.md NEW.md  # explain each attachment or detachment
+markstay resolve --before OLD.md NEW.md --show-candidates  # show ambiguous contenders
+markstay resolve --before OLD.md NEW.md --json  # versioned structured diagnostics
 markstay check-staged [FILE...]       # the same diff against the staged commit
 markstay check-worktree [FILE...]     # check files on disk before the next commit
 markstay stamp   FILE... [-w]         # mint ids for unmarked blocks (§6)
@@ -157,6 +171,25 @@ markstay repair  FILE... [-w]         # mint fresh ids for duplicate ids (§7)
 
 `--child-blocks` is also accepted by `check-staged`, `check-worktree`, `stamp`,
 `restamp`, and `repair`. It remains off unless requested.
+
+`resolve` always requires the marked baseline and the edited document. Its normal
+text output reports every state but keeps candidate details behind
+`--show-candidates`. JSON uses `markstay.resolve/v1`; detached entries carry
+`committed: false` and a `markstay.resolve-diagnostics/v1` object containing the
+failed threshold and margin context, structured evidence codes, optional human
+labels, and candidate provenance. The candidate set is diagnostic and is not an
+attachment recommendation. `unmatched` omits sub-threshold candidates by design.
+
+Block detachments use `ambiguous` or `unmatched`. The child path can also report
+`unscored` when no match was attempted, `unaddressed` for a surviving child marker
+that owns no direct child, and `contested` when multiple stays propose the same
+tier-start candidate. A contest carries the proposed target and the ids of the
+other stays that proposed it, while keeping `candidates` empty. Snapshot context
+evidence is labelled as adjacency within that filtered candidate snapshot. A child
+contest still continues to weaker tiers as §9.2 requires; only a stay that remains
+detached reports its strongest contest. A child blocked by an unresolved parent
+carries that parent resolution in `blocked_by`; a surviving child marker still
+resolves independently.
 
 `lint` exits non-zero when any error-level finding is reported, so it gates a
 commit hook or an agent's post-edit step. The write verbs print the result to

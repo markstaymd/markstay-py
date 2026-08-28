@@ -49,8 +49,18 @@ MDX_MARKER = re.compile(r"\{/\*\s*(?P<body>stay:.*?)\s*\*/\}", re.DOTALL)
 # (`stay:8f24`). A first token that contains `=` (a bare k=v with no id) leaves
 # the marker without an id, which is malformed.
 ID_RE = re.compile(r"stay:\s*(?P<id>[A-Za-z0-9_-]+)(?=\s|$)")
-HASH_RE = re.compile(r"\bhash\s*=\s*sha256:(?P<hash>[0-9a-fA-F]+)")
-SUBHASH_RE = re.compile(r"\bsubhash\s*=\s*sha256:(?P<hash>[0-9a-fA-F]+)")
+# The boundary is whitespace, not `\b`: an attribute is a whitespace-separated token
+# (SPEC.md §4), and a word boundary accepts a custom key merely ENDING in a reserved
+# one, since a hyphen is not a word character. Under `\b`, `x-hash=sha256:ab` reads as
+# the block hash and `restamp` rewrites its value, destroying a key §4 requires to be
+# preserved verbatim. `rehash` was already refused; the hyphenated form was not.
+HASH_RE = re.compile(r"(?<![^\s])hash\s*=\s*sha256:(?P<hash>[0-9a-fA-F]+)")
+# SPEC.md §4: `subhash` is a reserved key, and an attribute is a whitespace-separated
+# token, so the boundary that identifies it is whitespace (or the body's start), not a
+# word boundary. `\b` would accept a custom key ENDING in the reserved one, because a
+# hyphen is not a word character: `x-subhash=sha256:ab` would read as the reserved key
+# and a tool would act on an attribute §4 tells it to preserve and ignore.
+SUBHASH_RE = re.compile(r"(?<![^\s])subhash\s*=\s*sha256:(?P<hash>[0-9a-fA-F]+)")
 
 LEVELS = {"error": 0, "warn": 1, "info": 2}
 
@@ -408,7 +418,7 @@ def _restricted_child_spans(chunk: str, start: int) -> list[_ChildSpan]:
     item_lines: list[str] = []
     content_indent = 0
     saw_parent_marker = False
-    signature: tuple[str, str] | None = None
+    signature: tuple[tuple[str, str], str] | None = None
     for off, raw in enumerate(lines):
         clean = strip_markers(raw).strip(" \t\r\f\v")
         markers = find_markers(raw, line_offset=start + off - 1)
@@ -426,9 +436,16 @@ def _restricted_child_spans(chunk: str, start: int) -> list[_ChildSpan]:
             if item_start is not None:
                 items.append((item_start, off - 1, "\n".join(item_lines)))
             marker = m.group("marker")
-            current = (
-                ("ordered", marker[-1]) if marker[0].isdigit() else ("bullet", marker)
-            )
+            kind = ("ordered", marker[-1]) if marker[0].isdigit() else ("bullet", marker)
+            # The marker's own indentation is part of the signature, not just the
+            # kind: `_LIST_PREFIX_RE` allows up to three leading spaces, so an
+            # indented `  - Nested` matches as happily as a top-level one and
+            # would be emitted as a *sibling* of the item that contains it. That
+            # is a child block SPEC.md §5.5 says does not exist (nested content
+            # belongs to its ancestor's body), and it would also shift every
+            # later ordinal, so the two segmenters would disagree about which
+            # item a child stay addresses.
+            current = (kind, m.group("indent"))
             if signature is None:
                 signature = current
             elif signature != current:
@@ -693,6 +710,27 @@ def lint_document(
         for mk in b.markers:
             check_marker(mk, b.content, orphan=orphan)
         if child_blocks and b.index >= 0:
+            # SPEC.md §5.5: a `subhash` marker that no child block owns addresses
+            # nothing. It reaches here from an item nested inside another item,
+            # which v1.3 does not address, and it is not the container's stay
+            # either. Reporting it is the SHOULD in §5.5: silence is
+            # indistinguishable from a marker that resolved.
+            for mk in b.markers:
+                if mk.subhash is not None and mk.id and not mk.malformed:
+                    why = (
+                        "nested items are not child blocks in v1.3"
+                        if b.children
+                        else "this segmenter emitted no child blocks for the block"
+                    )
+                    findings.append(
+                        Finding(
+                            "warn",
+                            "CHILD_UNADDRESSED",
+                            f"child id {mk.id} addresses no list item ({why})",
+                            id=mk.id,
+                            line=mk.line,
+                        )
+                    )
             has_parent = any(
                 mk.id and not mk.malformed and mk.subhash is None for mk in b.markers
             )

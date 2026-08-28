@@ -222,9 +222,13 @@ def stamp(
     for start, chunk in _segments_for_mode(norm, mode):
         content = strip_markers(chunk).strip(_ASCII_TRIM)
         chunk_markers = find_markers(chunk, line_offset=start - 1)
+        # SPEC.md §16: a marker carrying `subhash` addresses a list item, so it never
+        # makes the block around it stamped. Unconditional, exactly as the write-path
+        # rule above it is: a run that did not recognise a child still has to leave the
+        # container stampable, or a child-stamped list never gets a stay of its own and
+        # every child in it resolves through §9.2 tier 4 on weaker evidence.
         has_id = any(
-            mk.id and not mk.malformed and (not child_blocks or mk.subhash is None)
-            for mk in chunk_markers
+            mk.id and not mk.malformed and mk.subhash is None for mk in chunk_markers
         )
         if content != "":
             n_lines = len(chunk.split("\n"))
@@ -342,8 +346,12 @@ def restamp(
             if now == mk.subhash:
                 return None
             refreshed.append(mk.id)
+            # Same whitespace boundary as the read-path SUBHASH_RE. A word boundary
+            # here would rewrite the value of a §4 custom key ending in the reserved
+            # one (`x-subhash`) and leave the real `subhash` untouched, which is both
+            # halves of the defect at once.
             return re.sub(
-                r"\bsubhash\s*=\s*sha256:[0-9a-fA-F]+",
+                r"(?<![^\s])subhash\s*=\s*sha256:[0-9a-fA-F]+",
                 f"subhash=sha256:{now}",
                 mk.raw,
                 count=1,
@@ -357,15 +365,25 @@ def restamp(
             if now == mk.hash:
                 return None  # unchanged at this precision
             refreshed.append(mk.id)
-            # \b mirrors the read-path HASH_RE: without it the sub false-matches the
-            # `hash` inside a custom key like `rehash` and corrupts a §4-preserved key.
+            # The whitespace boundary mirrors the read-path HASH_RE: without it the
+            # sub false-matches the `hash` inside a custom key (`rehash`, `x-hash`) and
+            # corrupts a §4-preserved key.
             return re.sub(
-                r"\bhash\s*=\s*sha256:[0-9a-fA-F]+",
+                r"(?<![^\s])hash\s*=\s*sha256:[0-9a-fA-F]+",
                 f"hash=sha256:{now}",
                 mk.raw,
                 count=1,
             )
         if add_missing:
+            if mk.subhash is not None:
+                # SPEC.md §5.5: a marker carrying `subhash` addresses a child
+                # block and never the container, so the container's digest must
+                # not be added beside it. The guard is unconditional rather than
+                # gated on ``child_blocks``: a tool asked to segment a loose list
+                # without a CommonMark parser sees no children at all, and that
+                # is exactly the run that would otherwise write the wrong digest
+                # onto every item of a child-stamped list.
+                return None
             now = body_hash(
                 content, hash_length if hash_length is not None else DEFAULT_HASH_LENGTH
             )
@@ -453,7 +471,7 @@ def repair_duplicates(
                 raw = re.sub(r"stay:\s*[A-Za-z0-9_-]+", f"stay:{fresh}", raw, count=1)
                 changed = True
         if child_blocks and mk.subhash is not None and mk.id in injected and mk.hash:
-            raw = re.sub(r"\s+\bhash\s*=\s*sha256:[0-9a-fA-F]+", "", raw, count=1)
+            raw = re.sub(r"\s+hash\s*=\s*sha256:[0-9a-fA-F]+", "", raw, count=1)
             cleaned.append(mk.id)
             changed = True
         return raw if changed else None

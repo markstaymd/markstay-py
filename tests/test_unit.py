@@ -7,6 +7,7 @@ No network or credentials: the package is fully local and deterministic.
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -257,6 +258,33 @@ def test_deleted_block_detaches():
     res = M.resolve(M.build_anchors(BEFORE), after)
     assert res["b"].method == "detached"
     assert res["b"].target is None
+
+
+def test_detached_reasons_split_ambiguity_from_no_match():
+    before = "Repeated body.\n<!-- stay:a -->\n"
+    anchors = M.build_anchors(before)
+    ambiguous = M.resolve(anchors, "Repeated body.\n\nRepeated body.\n")["a"]
+    assert ambiguous.reason == "ambiguous"
+    assert [candidate.target for candidate in ambiguous.candidates] == [1, 0]
+    assert ambiguous.runner_up_score == 1.0
+    assert all(
+        candidate.provenance == "independent-per-anchor"
+        for candidate in ambiguous.candidates
+    )
+    assert all(
+        candidate.evidence[0].code == "body_similarity"
+        for candidate in ambiguous.candidates
+    )
+
+    unmatched = M.resolve(anchors, "xxxxxxxxxxxxxxxxxxxxxxxx\n")["a"]
+    assert unmatched.reason == "unmatched"
+    assert unmatched.candidates == []
+
+
+def test_attached_resolutions_keep_empty_diagnostics():
+    resolved = M.resolve(M.build_anchors(BEFORE), BEFORE)
+    assert all(result.reason is None for result in resolved.values())
+    assert all(result.candidates == [] for result in resolved.values())
 
 
 def test_determinism():
@@ -557,6 +585,95 @@ def _cli(*args):
     return subprocess.run(
         [sys.executable, "-m", "markstay.cli", *args], capture_output=True, text=True
     )
+
+
+def test_cli_resolve_surfaces_ambiguity_without_recommending_attachment(tmp_path):
+    before = tmp_path / "before.md"
+    after = tmp_path / "after.md"
+    before.write_text("Repeated body.\n<!-- stay:a -->\n")
+    after.write_text("Repeated body.\n\nRepeated body.\n")
+
+    hidden = _cli("resolve", "--before", str(before), str(after))
+    assert hidden.returncode == 0, hidden.stderr
+    assert "a: detached (ambiguous" in hidden.stdout
+    assert "no attachment committed" in hidden.stdout
+    assert "diagnostic candidate" not in hidden.stdout
+
+    shown = _cli(
+        "resolve", "--show-candidates", "--before", str(before), str(after)
+    )
+    assert shown.returncode == 0, shown.stderr
+    assert shown.stdout.count("diagnostic candidate") == 2
+    for language in ("winner", "best", "recommended", "attach to"):
+        assert language not in shown.stdout.lower()
+
+    structured = _cli("resolve", "--json", "--before", str(before), str(after))
+    with_display_flag = _cli(
+        "resolve",
+        "--json",
+        "--show-candidates",
+        "--before",
+        str(before),
+        str(after),
+    )
+    assert structured.stdout == with_display_flag.stdout
+    payload = json.loads(structured.stdout)
+    assert payload["schema"] == "markstay.resolve/v1"
+    result = payload["resolutions"][0]
+    assert result["committed"] is False
+    assert result["reason"] == "ambiguous"
+    assert result["threshold"] == M.DEFAULT_THRESHOLD
+    assert result["required_margin"] == M.DEFAULT_MARGIN
+    assert result["diagnostics"]["schema"] == "markstay.resolve-diagnostics/v1"
+    assert result["diagnostics"]["diagnostic"] is True
+    assert len(result["diagnostics"]["candidates"]) == 2
+    assert all(
+        candidate["provenance"] == "independent-per-anchor"
+        for candidate in result["diagnostics"]["candidates"]
+    )
+    assert all(
+        candidate["evidence"][0]["code"] == "body_similarity"
+        for candidate in result["diagnostics"]["candidates"]
+    )
+
+
+def test_cli_resolve_requires_a_baseline_and_hides_unmatched_noise(tmp_path):
+    before = tmp_path / "before.md"
+    after = tmp_path / "after.md"
+    before.write_text("Repeated body.\n<!-- stay:a -->\n")
+    after.write_text("xxxxxxxxxxxxxxxxxxxxxxxx\n")
+    assert _cli("resolve", str(after)).returncode == 2
+    payload = json.loads(
+        _cli("resolve", "--json", "--before", str(before), str(after)).stdout
+    )
+    result = payload["resolutions"][0]
+    assert result["reason"] == "unmatched"
+    assert result["diagnostics"]["candidates"] == []
+
+
+def test_cli_resolve_reports_the_actual_committed_quote_margin(tmp_path):
+    before_text = (
+        "The deploy retries three times.\n<!-- stay:a -->\n\n"
+        "Rollback uses the previous image.\n<!-- stay:b -->\n"
+    )
+    after_text = (
+        "The deployment retries failed work three times.\n\n"
+        "Rollback uses the previous image.\n<!-- stay:b -->\n"
+    )
+    before = tmp_path / "before.md"
+    after = tmp_path / "after.md"
+    before.write_text(before_text)
+    after.write_text(after_text)
+    expected = M.resolve(M.build_anchors(before_text), after_text)["a"]
+    assert expected.method == "quote"
+    assert expected.runner_up_score > 0.0
+
+    payload = json.loads(
+        _cli("resolve", "--json", "--before", str(before), str(after)).stdout
+    )
+    result = next(row for row in payload["resolutions"] if row["id"] == "a")
+    assert result["runner_up_score"] == expected.runner_up_score
+    assert result["observed_margin"] == expected.score - expected.runner_up_score
 
 
 def test_cli_preserve_prints_the_instruction_verbatim():

@@ -30,10 +30,10 @@ Marker parsing and hashing are reused from the linter core, not reimplemented:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from . import lint as L
-from .quote import Selector, best_match, window_prefix, window_suffix
+from .quote import Candidate, Selector, rank_candidates, window_prefix, window_suffix
 
 # Default thresholds for the QUOTE tier. A recovery is committed only when the
 # best candidate clears `threshold` AND beats the runner-up by `margin`.
@@ -57,6 +57,12 @@ class Resolution:
     method: str  # 'marker' | 'hash' | 'quote' | 'detached'
     target: int | None  # content-block index in the after-doc, or None
     score: float  # confidence in [0, 1] (1.0 for marker/hash)
+    reason: str | None = None
+    candidates: list[Candidate] = field(default_factory=list)
+    runner_up_score: float = 0.0
+    proposed_target: int | None = None
+    contested_with: list[str] = field(default_factory=list)
+    proposal_provenance: str | None = None
 
 
 @dataclass
@@ -80,6 +86,23 @@ class ChildResolution:
     target: int | None  # global ChildBlock.index in the edited document
     score: float
     parent_target: int | None = None
+    reason: str | None = None
+    candidates: list[Candidate] = field(default_factory=list)
+    runner_up_score: float = 0.0
+    blocked_by: Resolution | None = None
+    proposed_target: int | None = None
+    contested_with: list[str] = field(default_factory=list)
+    proposal_provenance: str | None = None
+
+
+def _ambiguous_candidates(
+    ranked: list[Candidate], margin: float
+) -> list[Candidate]:
+    """Keep the contenders that explain a failed margin, not lower-ranked noise."""
+    if not ranked:
+        return []
+    best = ranked[0].score
+    return [candidate for candidate in ranked if best - candidate.score < margin]
 
 
 def build_anchors(before_md: str, mode: str = "blank-line") -> list[Anchor]:
@@ -150,11 +173,33 @@ def resolve(
             out[a.id] = Resolution(a.id, "hash", hits[0], 1.0)
             continue
         # Tier 3: quote recovery, committed only on a clear winner.
-        idx, score, runner = best_match(a.selector, bodies)
+        ranked = rank_candidates(a.selector, bodies)
+        idx = ranked[0].target if ranked else -1
+        score = ranked[0].score if ranked else 0.0
+        runner = ranked[1].score if len(ranked) > 1 else 0.0
         if idx >= 0 and score >= threshold and (score - runner) >= margin:
-            out[a.id] = Resolution(a.id, "quote", idx, score)
+            out[a.id] = Resolution(
+                a.id, "quote", idx, score, runner_up_score=runner
+            )
+        elif idx >= 0 and score >= threshold:
+            out[a.id] = Resolution(
+                a.id,
+                "detached",
+                None,
+                score,
+                reason="ambiguous",
+                candidates=_ambiguous_candidates(ranked, margin),
+                runner_up_score=runner,
+            )
         else:
-            out[a.id] = Resolution(a.id, "detached", None, score)
+            out[a.id] = Resolution(
+                a.id,
+                "detached",
+                None,
+                score,
+                reason="unmatched",
+                runner_up_score=runner,
+            )
     return out
 
 
@@ -242,7 +287,7 @@ def _resolve_parents(
     threshold: float = DEFAULT_THRESHOLD,
     margin: float = DEFAULT_MARGIN,
     mode: str = "blank-line",
-) -> dict[str, tuple[int, str]]:
+) -> dict[str, Resolution]:
     """Resolve every distinct parent stay at once, assigning exclusively.
 
     Resolving each parent in isolation lets two anchors claim the same block: a
@@ -258,16 +303,20 @@ def _resolve_parents(
         if anchor.parent is not None:
             reps.setdefault(anchor.parent.id, anchor.parent)
 
-    out: dict[str, tuple[int, str]] = {}
+    out: dict[str, Resolution] = {}
     claimed: set[int] = set()
 
     for pid in reps:
         for idx, block in enumerate(blocks):
             if any(mk.id == pid and not mk.malformed for mk in block.markers):
-                out[pid] = (idx, "marker")
+                out[pid] = Resolution(pid, "marker", idx, 1.0)
                 claimed.add(idx)
                 break
 
+    # Every stay proposes against the same tier-start snapshot. A block reached
+    # by two stays at one tier goes to neither (§9.2), so hash assignment cannot
+    # depend on parent enumeration order.
+    hash_proposals: dict[str, int] = {}
     for pid, parent in reps.items():
         if pid in out:
             continue
@@ -277,27 +326,118 @@ def _resolve_parents(
             if L.body_hash(block.content) == parent.hash and idx not in claimed
         ]
         if len(hits) == 1:
-            out[pid] = (hits[0], "hash")
-            claimed.add(hits[0])
+            hash_proposals[pid] = hits[0]
+    hash_claimants: dict[int, list[str]] = {}
+    for pid, target in hash_proposals.items():
+        hash_claimants.setdefault(target, []).append(pid)
+    hash_contests: dict[str, tuple[int, list[str]]] = {}
+    for pid, target in hash_proposals.items():
+        claimants = hash_claimants[target]
+        if len(claimants) == 1:
+            out[pid] = Resolution(pid, "hash", target, 1.0)
+            claimed.add(target)
+        else:
+            hash_contests[pid] = (
+                target,
+                [other for other in claimants if other != pid],
+            )
 
-    # Quote claims run last and in descending score order, so the best-supported
-    # parent picks from the unclaimed blocks first rather than whichever anchor
-    # happened to be enumerated first.
-    pending: list[tuple[float, str, int]] = []
+    # Quote scoring also uses one snapshot. The former score-priority arbitration
+    # silently awarded a contested block to one stay; §9.2 requires neither.
+    quote_proposals: dict[str, Candidate] = {}
+    quote_rankings: dict[str, list[Candidate]] = {}
+    quote_failed: dict[str, Resolution] = {}
     for pid, parent in reps.items():
         if pid in out:
             continue
         candidates = [idx for idx in range(len(blocks)) if idx not in claimed]
-        idx, score, runner = best_match(
-            parent.selector, [blocks[i].content for i in candidates]
+        ranked = rank_candidates(
+            parent.selector,
+            [blocks[i].content for i in candidates],
+            targets=candidates,
+            provenance="parent-snapshot",
         )
-        if idx >= 0 and score >= threshold and (score - runner) >= margin:
-            pending.append((score, pid, candidates[idx]))
-    for _, pid, target in sorted(pending, key=lambda row: -row[0]):
-        if target in claimed:
+        quote_rankings[pid] = ranked
+        score = ranked[0].score if ranked else 0.0
+        runner = ranked[1].score if len(ranked) > 1 else 0.0
+        if ranked and score >= threshold and score - runner >= margin:
+            quote_proposals[pid] = ranked[0]
+        elif ranked and score >= threshold:
+            quote_failed[pid] = Resolution(
+                pid,
+                "detached",
+                None,
+                score,
+                reason="ambiguous",
+                candidates=_ambiguous_candidates(ranked, margin),
+                runner_up_score=runner,
+            )
+        else:
+            quote_failed[pid] = Resolution(
+                pid,
+                "detached",
+                None,
+                score,
+                reason="unmatched",
+                runner_up_score=runner,
+            )
+    quote_claimants: dict[int, list[str]] = {}
+    quote_contests: dict[str, tuple[Candidate, list[str], float]] = {}
+    for pid, candidate in quote_proposals.items():
+        quote_claimants.setdefault(candidate.target, []).append(pid)
+    for pid, candidate in quote_proposals.items():
+        ranked = quote_rankings[pid]
+        runner = ranked[1].score if len(ranked) > 1 else 0.0
+        claimants = quote_claimants[candidate.target]
+        if len(claimants) == 1:
+            out[pid] = Resolution(
+                pid,
+                "quote",
+                candidate.target,
+                candidate.score,
+                runner_up_score=runner,
+            )
+            claimed.add(candidate.target)
+        else:
+            quote_contests[pid] = (
+                candidate,
+                [other for other in claimants if other != pid],
+                runner,
+            )
+
+    # A contest does not stop the ladder: §9.2 sends the stay to weaker tiers.
+    # If no weaker tier attaches it, retain the strongest contest as the most
+    # useful explanation of the final detachment.
+    for pid in reps:
+        if pid in out:
             continue
-        out[pid] = (target, "quote")
-        claimed.add(target)
+        if pid in hash_contests:
+            target, contested_with = hash_contests[pid]
+            out[pid] = Resolution(
+                pid,
+                "detached",
+                None,
+                1.0,
+                reason="contested",
+                proposed_target=target,
+                contested_with=contested_with,
+                proposal_provenance="parent-hash-tier-snapshot",
+            )
+        elif pid in quote_contests:
+            candidate, contested_with, runner = quote_contests[pid]
+            out[pid] = Resolution(
+                pid,
+                "detached",
+                None,
+                candidate.score,
+                reason="contested",
+                runner_up_score=runner,
+                proposed_target=candidate.target,
+                contested_with=contested_with,
+                proposal_provenance=candidate.provenance,
+            )
+        else:
+            out[pid] = quote_failed[pid]
     return out
 
 
@@ -331,11 +471,42 @@ def resolve_children(
     for child in all_children:
         by_hash.setdefault(L.body_hash(child.content), []).append(child)
 
+    # SPEC.md §5.5: a `subhash` marker that no direct child owns addresses
+    # nothing, and "nobody's stay" is not a licence to recover the id from
+    # weaker evidence. The marker is still in the document, so a tool honouring
+    # the reader rule reports it unaddressed (`CHILD_UNADDRESSED`) while a
+    # resolver walking the ladder would bind the same id to a *different* item:
+    # the two halves of one implementation disagreeing about one document, which
+    # is the §13 failure the rule exists to prevent. Reaches here from an item
+    # nested inside another item, and from a segmenter that emitted no children
+    # for the block at all. Both fail closed.
+    # Narrower than "a `subhash` marker sits block-level somewhere": an id whose
+    # marker is *also* owned by a direct child still has a marker doing its job,
+    # and a stray nested copy of it is a §7 duplicate for the linter to report
+    # (`DUPLICATE_ID`), not a reason to lose an anchor that never moved.
+    unaddressed: set[str] = {
+        mk.id
+        for block in blocks
+        for mk in block.markers
+        if mk.subhash is not None and mk.id and not mk.malformed
+    } - set(by_marker)
+
     parents = _resolve_parents(
         anchors, blocks, after_md, threshold=threshold, margin=margin, mode=mode
     )
     out: dict[str, ChildResolution] = {}
     claimed: set[int] = set()
+
+    for anchor in anchors:
+        if anchor.id in unaddressed:
+            out[anchor.id] = ChildResolution(
+                anchor.id,
+                "detached",
+                None,
+                0.0,
+                None,
+                reason="unaddressed",
+            )
 
     # Tier 1 runs ahead of the parent gate, not behind it. A surviving child
     # marker is stored identity; where the parent lives is an inference about
@@ -344,6 +515,8 @@ def resolve_children(
     # block-level marker sits on its own line and is easy to drop, while the
     # child markers ride inline inside the bullet text being rewritten.
     for anchor in anchors:
+        if anchor.id in out:
+            continue
         hit = by_marker.get(anchor.id)
         if hit is not None:
             out[anchor.id] = ChildResolution(
@@ -355,95 +528,244 @@ def resolve_children(
         if anchor.parent is None:
             return None
         found = parents.get(anchor.parent.id)
-        return found[0] if found is not None else None
+        return found.target if found is not None else None
 
     def _gated(anchor: ChildAnchor) -> bool:
         """A child whose parent stay exists but could not be found has no
         sibling scope, so every structural tier below is unavailable to it."""
-        return anchor.parent is not None and anchor.parent.id not in parents
+        return (
+            anchor.parent is not None
+            and (
+                anchor.parent.id not in parents
+                or parents[anchor.parent.id].target is None
+            )
+        )
 
+    def _parent_block_of(anchor: ChildAnchor) -> tuple[int | None, L.Block | None]:
+        target = _parent_target(anchor)
+        block = (
+            blocks[target]
+            if target is not None and 0 <= target < len(blocks)
+            else None
+        )
+        return target, block
+
+    contest_history: dict[
+        str, tuple[int, int | None, float, float, list[str], str]
+    ] = {}
+
+    def _commit(
+        tier: str,
+        proposals: dict[str, tuple[int, int | None, float]],
+        provenance: str,
+        runners: dict[str, float] | None = None,
+    ) -> None:
+        """Commit a tier's proposals, dropping any candidate two stays reached.
+
+        SPEC.md §9.2: assignment is exclusive, and a contested candidate is
+        taken by neither stay. Committing as each anchor is visited instead
+        would hand the item to whichever one this loop happened to see first,
+        so two implementations agreeing about every hash would still disagree
+        about the document.
+        """
+        claimants: dict[int, list[str]] = {}
+        for anchor_id, (candidate, _, _) in proposals.items():
+            claimants.setdefault(candidate, []).append(anchor_id)
+        for anchor_id, (candidate, parent_target, score) in proposals.items():
+            if len(claimants[candidate]) != 1:
+                contest_history.setdefault(
+                    anchor_id,
+                    (
+                        candidate,
+                        parent_target,
+                        score,
+                        runners.get(anchor_id, 0.0) if runners else 0.0,
+                        [
+                            other
+                            for other in claimants[candidate]
+                            if other != anchor_id
+                        ],
+                        provenance,
+                    ),
+                )
+                continue
+            out[anchor_id] = ChildResolution(
+                anchor_id,
+                tier,
+                candidate,
+                score,
+                parent_target,
+                runner_up_score=(
+                    runners.get(anchor_id, 0.0) if runners else 0.0
+                ),
+            )
+            claimed.add(candidate)
+
+    # Tier 2, the container is unchanged so markerless children map by ordinal.
+    ordinal_proposals: dict[str, tuple[int, int | None, float]] = {}
     for anchor in anchors:
         if anchor.id in out or _gated(anchor):
             continue
-        parent_target = _parent_target(anchor)
-        parent_block = (
-            blocks[parent_target]
-            if parent_target is not None and 0 <= parent_target < len(blocks)
-            else None
-        )
-        if parent_block is not None:
-            if L.body_hash(parent_block.content) == anchor.parent_hash:
-                ordinal = anchor.ordinal - 1
-                if 0 <= ordinal < len(parent_block.children):
-                    candidate = parent_block.children[ordinal]
-                    if not candidate.markers and candidate.index not in claimed:
-                        out[anchor.id] = ChildResolution(
-                            anchor.id,
-                            "parent-hash",
-                            candidate.index,
-                            1.0,
-                            parent_target,
-                        )
-                        claimed.add(candidate.index)
-                        continue
+        parent_target, parent_block = _parent_block_of(anchor)
+        if parent_block is None:
+            continue
+        if L.body_hash(parent_block.content) != anchor.parent_hash:
+            continue
+        ordinal = anchor.ordinal - 1
+        if not 0 <= ordinal < len(parent_block.children):
+            continue
+        candidate = parent_block.children[ordinal]
+        if candidate.markers or candidate.index in claimed:
+            continue
+        ordinal_proposals[anchor.id] = (candidate.index, parent_target, 1.0)
+    _commit(
+        "parent-hash",
+        ordinal_proposals,
+        "child-parent-hash-tier-snapshot",
+    )
 
-            sibling_hits = [
-                child
-                for child in parent_block.children
-                if L.body_hash(child.content) == anchor.hash
-                and child.index not in claimed
-            ]
-            if len(sibling_hits) == 1 and anchor.sibling_hash_count == 1:
-                out[anchor.id] = ChildResolution(
-                    anchor.id, "hash", sibling_hits[0].index, 1.0, parent_target
-                )
-                claimed.add(sibling_hits[0].index)
-                continue
+    # Tier 3, the child hash against its own siblings.
+    sibling_proposals: dict[str, tuple[int, int | None, float]] = {}
+    for anchor in anchors:
+        if anchor.id in out or _gated(anchor):
+            continue
+        parent_target, parent_block = _parent_block_of(anchor)
+        if parent_block is None or anchor.sibling_hash_count != 1:
+            continue
+        sibling_hits = [
+            child
+            for child in parent_block.children
+            if L.body_hash(child.content) == anchor.hash
+            and child.index not in claimed
+        ]
+        if len(sibling_hits) == 1:
+            sibling_proposals[anchor.id] = (sibling_hits[0].index, parent_target, 1.0)
+    _commit("hash", sibling_proposals, "child-sibling-hash-tier-snapshot")
 
+    # Tier 4, the child hash anywhere in the document (§7's move guarantee).
+    document_proposals: dict[str, tuple[int, int | None, float]] = {}
+    for anchor in anchors:
+        if anchor.id in out or _gated(anchor):
+            continue
+        if anchor.document_hash_count != 1:
+            continue
         document_hits = [
             child
             for child in by_hash.get(anchor.hash, [])
             if child.index not in claimed
         ]
-        if len(document_hits) == 1 and anchor.document_hash_count == 1:
+        if len(document_hits) == 1:
             hit = document_hits[0]
-            out[anchor.id] = ChildResolution(
-                anchor.id, "document-hash", hit.index, 1.0, hit.parent_index
-            )
-            claimed.add(hit.index)
+            document_proposals[anchor.id] = (hit.index, hit.parent_index, 1.0)
+    _commit(
+        "document-hash",
+        document_proposals,
+        "child-document-hash-tier-snapshot",
+    )
 
-    # Quote scoring runs only over what no stronger tier took.
+    # Tier 5, quote scoring over siblings, and only over what no stronger tier
+    # took. Proposed then committed like the tiers above, so a candidate two
+    # stays both score onto goes to neither of them (§9.2).
+    quote_proposals: dict[str, tuple[int, int | None, float]] = {}
+    quote_failed: dict[str, ChildResolution] = {}
+    quote_runners: dict[str, float] = {}
     for anchor in anchors:
         if anchor.id in out or _gated(anchor):
             continue
-        parent_target = _parent_target(anchor)
-        parent_block = (
-            blocks[parent_target]
-            if parent_target is not None and 0 <= parent_target < len(blocks)
-            else None
-        )
-        if parent_block is None or anchor.sibling_hash_count != 1:
-            out[anchor.id] = ChildResolution(anchor.id, "detached", None, 0.0, None)
+        parent_target, parent_block = _parent_block_of(anchor)
+        if parent_block is None:
+            quote_failed[anchor.id] = ChildResolution(
+                anchor.id,
+                "detached",
+                None,
+                0.0,
+                parent_target,
+                reason="unscored",
+            )
             continue
         candidates = [
             child for child in parent_block.children if child.index not in claimed
         ]
-        idx, score, runner = best_match(
-            anchor.selector, [child.content for child in candidates]
+        ranked = rank_candidates(
+            anchor.selector,
+            [child.content for child in candidates],
+            targets=[child.index for child in candidates],
+            provenance="child-tier-snapshot",
         )
-        if idx >= 0 and score >= threshold and (score - runner) >= margin:
-            hit = candidates[idx]
-            out[anchor.id] = ChildResolution(
-                anchor.id, "quote", hit.index, score, parent_target
+        score = ranked[0].score if ranked else 0.0
+        runner = ranked[1].score if len(ranked) > 1 else 0.0
+        quote_runners[anchor.id] = runner
+        if ranked and score >= threshold and (score - runner) >= margin:
+            quote_proposals[anchor.id] = (
+                ranked[0].target,
+                parent_target,
+                score,
             )
-            claimed.add(hit.index)
+        elif ranked and score >= threshold:
+            quote_failed[anchor.id] = ChildResolution(
+                anchor.id,
+                "detached",
+                None,
+                score,
+                parent_target,
+                reason="ambiguous",
+                candidates=_ambiguous_candidates(ranked, margin),
+                runner_up_score=runner,
+            )
         else:
-            out[anchor.id] = ChildResolution(
-                anchor.id, "detached", None, score, parent_target
+            quote_failed[anchor.id] = ChildResolution(
+                anchor.id,
+                "detached",
+                None,
+                score,
+                parent_target,
+                reason="unmatched",
+                runner_up_score=runner,
             )
+    _commit(
+        "quote",
+        quote_proposals,
+        "child-tier-snapshot",
+        runners=quote_runners,
+    )
+    for anchor_id, resolution in quote_failed.items():
+        if anchor_id not in contest_history:
+            out.setdefault(anchor_id, resolution)
+    for anchor_id, contest in contest_history.items():
+        if anchor_id in out:
+            continue
+        (
+            proposed_target,
+            parent_target,
+            score,
+            runner,
+            contested_with,
+            provenance,
+        ) = contest
+        out[anchor_id] = ChildResolution(
+            anchor_id,
+            "detached",
+            None,
+            score,
+            parent_target,
+            reason="contested",
+            runner_up_score=runner,
+            proposed_target=proposed_target,
+            contested_with=contested_with,
+            proposal_provenance=provenance,
+        )
 
     for anchor in anchors:
-        out.setdefault(
-            anchor.id, ChildResolution(anchor.id, "detached", None, 0.0, None)
+        if anchor.id in out:
+            continue
+        blocked_by = parents.get(anchor.parent.id) if anchor.parent is not None else None
+        out[anchor.id] = ChildResolution(
+            anchor.id,
+            "detached",
+            None,
+            0.0,
+            None,
+            reason="unscored",
+            blocked_by=blocked_by,
         )
     return out

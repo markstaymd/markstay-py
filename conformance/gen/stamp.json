@@ -272,6 +272,61 @@
           "x"
         ]
       }
+    },
+    {
+      "name": "stamp-subhash-marker-does-not-count-as-stamped",
+      "op": "stamp",
+      "input": "- Ship the linter <!-- stay:c1 subhash=sha256:9d2f -->\n- Ship the hook <!-- stay:c2 subhash=sha256:41ac -->\n",
+      "options": {},
+      "ids": [
+        "cont1"
+      ],
+      "expected": {
+        "text": "- Ship the linter <!-- stay:c1 subhash=sha256:9d2f -->\n- Ship the hook <!-- stay:c2 subhash=sha256:41ac -->\n<!-- stay:cont1 hash=sha256:68391927a8d4 -->\n",
+        "minted": [
+          {
+            "id": "cont1",
+            "line": 2
+          }
+        ]
+      }
+    },
+    {
+      "name": "restamp-add-missing-leaves-a-subhash-marker-alone",
+      "op": "restamp",
+      "input": "- Alpha <!-- stay:k1 subhash=sha256:8655 -->\n- Beta\n",
+      "options": {
+        "addMissing": true
+      },
+      "expected": {
+        "text": "- Alpha <!-- stay:k1 subhash=sha256:8655 -->\n- Beta\n",
+        "refreshed": []
+      }
+    },
+    {
+      "name": "restamp-preserves-custom-key-with-hyphen-ending-in-hash",
+      "op": "restamp",
+      "input": "Edited body now.\n<!-- stay:x x-hash=sha256:abc hash=sha256:d085cd66582d -->",
+      "options": {},
+      "expected": {
+        "text": "Edited body now.\n<!-- stay:x x-hash=sha256:abc hash=sha256:a590a10c023e -->",
+        "refreshed": [
+          "x"
+        ]
+      }
+    },
+    {
+      "name": "stamp-custom-key-ending-in-subhash-still-stamps",
+      "op": "stamp",
+      "input": "A paragraph.\n<!-- stay:x1 resubhash=sha256:abcd -->\n\nAnother paragraph.\n<!-- stay:x2 x-subhash=sha256:abcd -->\n",
+      "options": {},
+      "ids": [
+        "unused"
+      ],
+      "expected": {
+        "text": "A paragraph.\n<!-- stay:x1 resubhash=sha256:abcd -->\n\nAnother paragraph.\n<!-- stay:x2 x-subhash=sha256:abcd -->\n",
+        "minted": []
+      }
     }
   ]
 }
