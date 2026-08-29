@@ -22,12 +22,15 @@ from .lint import (
     Marker,
     _blank_frontmatter,
     body_hash,
+    code_lines,
+    fence_state,
     find_markers,
     parse_document,
     rewrite_markers,
     segment_blank_line,
     segment_commonmark,
     strip_markers,
+    strip_markers_outside_code,
 )
 
 # Default truncation for a freshly written hash (§8 permits any prefix). 12 hex =
@@ -201,8 +204,16 @@ def stamp(
 
     norm = md.replace("\r\n", "\n").replace("\r", "\n")
     lines = norm.split("\n")
+    # SPEC.md §3.3, computed on the blanked text so it agrees line-for-line with
+    # what parse_document sees. `open_after` is the writer's half of the rule: a
+    # marker appended after a line a fence is still open on lands *inside the
+    # listing*, which is how this project's own §4 grammar block acquired a real
+    # marker in the middle of its ABNF.
+    code, fence_open_after = fence_state(_blank_frontmatter(norm))
 
-    # Existing ids across the whole document, so a minted id can't collide.
+    # Existing ids across the whole document, so a minted id can't collide. The
+    # raw scan is deliberate: an id shown in a fenced example is not an id, but
+    # minting the same token beside it would read as one to every human.
     used = {mk.id for mk in find_markers(norm) if mk.id and not mk.malformed}
     next_id = _unique_minter(used, _default_minter(new_id, length, alphabet, random))
 
@@ -220,8 +231,14 @@ def stamp(
         else {}
     )
     for start, chunk in _segments_for_mode(norm, mode):
-        content = strip_markers(chunk).strip(_ASCII_TRIM)
-        chunk_markers = find_markers(chunk, line_offset=start - 1)
+        content = strip_markers_outside_code(
+            chunk, code, line_offset=start - 1
+        ).strip(_ASCII_TRIM)
+        chunk_markers = [
+            mk
+            for mk in find_markers(chunk, line_offset=start - 1)
+            if mk.line not in code  # §3.3: an example never stamps its block
+        ]
         # SPEC.md §16: a marker carrying `subhash` addresses a list item, so it never
         # makes the block around it stamped. Unconditional, exactly as the write-path
         # rule above it is: a run that did not recognise a child still has to leave the
@@ -251,6 +268,20 @@ def stamp(
                 "content": content,
                 "has_id": has_id,
                 "children": children,
+                # §3.3 writer rule, in the two halves it actually has. A block
+                # is refused when a fence was already open *before* its first
+                # line (its span lies inside a listing), or when one is still
+                # open after its last (the marker would be written into the
+                # listing). Both are needed and neither implies the other: the
+                # baseline segmenter splits a blank-line fence into halves, and
+                # the second half starts inside the fence while ending on the
+                # closing line, where an insertion-point test alone would happily
+                # stamp half a listing. "Before its first line" rather than "its
+                # first line is code" is what keeps a complete fence stampable
+                # under §5.2, where the block *is* the fence and takes its stay
+                # after the closing line in the ordinary way.
+                "in_fence": (start - 1) in fence_open_after
+                or (start + n_lines - 1) in fence_open_after,
             }
             needs_stamp.append(current)
         elif current is not None:
@@ -263,7 +294,7 @@ def stamp(
     minted: list[dict] = []
     for blk in needs_stamp:
         for child in blk["children"]:
-            if child["has_id"]:
+            if child["has_id"] or (child["marker_line0"] + 1) in code:
                 continue
             new = next_id()
             hex_ = body_hash(child["content"], hash_length)
@@ -274,7 +305,7 @@ def stamp(
             )
             append_inline.setdefault(child["marker_line0"], []).append(marker)
             minted.append({"id": new, "line": child["marker_line0"] + 1})
-        if blk["has_id"]:
+        if blk["has_id"] or blk["in_fence"]:
             continue
         new = next_id()
         hex_ = body_hash(blk["content"], hash_length) if hash else None
@@ -393,7 +424,13 @@ def restamp(
             )
         return None
 
-    return RestampResult(text=rewrite_markers(norm, transform), refreshed=refreshed)
+    # §3.3: an illustrative marker in a fence is not this document's marker, and
+    # rewriting its `hash=` to the digest of the fence around it is the defect
+    # that opened the rule.
+    return RestampResult(
+        text=rewrite_markers(norm, transform, code_lines(_blank_frontmatter(norm))),
+        refreshed=refreshed,
+    )
 
 
 def repair_duplicates(
@@ -477,5 +514,7 @@ def repair_duplicates(
         return raw if changed else None
 
     return RepairResult(
-        text=rewrite_markers(norm, transform), renamed=renamed, cleaned=cleaned
+        text=rewrite_markers(norm, transform, code_lines(_blank_frontmatter(norm))),
+        renamed=renamed,
+        cleaned=cleaned,
     )

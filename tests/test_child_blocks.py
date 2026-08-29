@@ -100,7 +100,15 @@ def test_child_stamping_skips_item_without_safe_inline_paragraph_carrier():
     result = M.stamp(md, mode="commonmark", child_blocks=True, new_id=ids())
     assert "subhash=" not in result.text
     assert result.text.startswith(md.rstrip("\n"))
-    assert result.text.count(" hash=sha256:") == 1  # parent list stay still minted
+    # SPEC.md §3.3 takes the parent stay away as well, and the cause is the line
+    # scan rather than this item's carrier. The item's opening fence shares a line
+    # with the list marker, so the line rule cannot see it open; the closing
+    # `  ``` ` is then the first fence-shaped line it does see, reads as an
+    # *opener*, and runs unclosed to the end of the document. Every insertion
+    # point after it is inside a fence, so the writer rule refuses. It fails
+    # closed (nothing is stamped, nothing is corrupted) and it is the sharpest
+    # case of the limit §3.3 names for a fence the line rule cannot see.
+    assert result.text.count(" hash=sha256:") == 0
 
 
 def test_marker_in_a_nested_item_addresses_nothing_and_says_so():

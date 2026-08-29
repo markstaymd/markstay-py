@@ -1,178 +1,991 @@
 {
   "category": "parse",
   "tier": "spec",
+  "note": "Block segmentation vectors (SPEC.md §5), verified by every string implementation. A vector carrying `relation: \"diverges\"` is outside §5.4's agreement subset: the string core's answer below is normative and the CommonMark-tree segmenter reaches a different one, for the reason its `note` gives. The string runners verify those vectors like any other; the remark adapter's parity harness skips them and asserts they really do diverge, so the field cannot be used to silence a parity failure.",
   "vectors": [
     {
       "name": "marker-no-blank-attaches-to-block",
       "doc": "Just one paragraph.\n<!-- stay:p1 -->\n",
       "blocks": [
-        { "content": "Just one paragraph.", "index": 0, "ids": ["p1"], "line": 1, "orphan": false }
+        {
+          "content": "Just one paragraph.",
+          "index": 0,
+          "ids": [
+            "p1"
+          ],
+          "line": 1,
+          "orphan": false
+        }
       ]
     },
     {
       "name": "marker-only-chunk-attaches-to-previous",
       "doc": "Some content.\n\n<!-- stay:x -->\n",
       "blocks": [
-        { "content": "Some content.", "index": 0, "ids": ["x"], "line": 1, "orphan": false }
+        {
+          "content": "Some content.",
+          "index": 0,
+          "ids": [
+            "x"
+          ],
+          "line": 1,
+          "orphan": false
+        }
       ]
     },
     {
       "name": "orphan-marker-at-top",
       "doc": "<!-- stay:loose -->\n\nReal content below.\n",
       "blocks": [
-        { "content": "", "index": -1, "ids": ["loose"], "line": 1, "orphan": true },
-        { "content": "Real content below.", "index": 0, "ids": [], "line": 3, "orphan": false }
+        {
+          "content": "",
+          "index": -1,
+          "ids": [
+            "loose"
+          ],
+          "line": 1,
+          "orphan": true
+        },
+        {
+          "content": "Real content below.",
+          "index": 0,
+          "ids": [],
+          "line": 3,
+          "orphan": false
+        }
       ]
     },
     {
       "name": "two-paragraphs",
       "doc": "A.\n<!-- stay:a -->\n\nB.\n<!-- stay:b -->\n",
       "blocks": [
-        { "content": "A.", "index": 0, "ids": ["a"], "line": 1, "orphan": false },
-        { "content": "B.", "index": 1, "ids": ["b"], "line": 4, "orphan": false }
+        {
+          "content": "A.",
+          "index": 0,
+          "ids": [
+            "a"
+          ],
+          "line": 1,
+          "orphan": false
+        },
+        {
+          "content": "B.",
+          "index": 1,
+          "ids": [
+            "b"
+          ],
+          "line": 4,
+          "orphan": false
+        }
       ]
     },
     {
       "name": "duplicate-id-two-blocks",
       "doc": "Block one.\n<!-- stay:dup -->\n\nBlock two.\n<!-- stay:dup -->\n",
       "blocks": [
-        { "content": "Block one.", "index": 0, "ids": ["dup"], "line": 1, "orphan": false },
-        { "content": "Block two.", "index": 1, "ids": ["dup"], "line": 4, "orphan": false }
+        {
+          "content": "Block one.",
+          "index": 0,
+          "ids": [
+            "dup"
+          ],
+          "line": 1,
+          "orphan": false
+        },
+        {
+          "content": "Block two.",
+          "index": 1,
+          "ids": [
+            "dup"
+          ],
+          "line": 4,
+          "orphan": false
+        }
       ]
     },
     {
       "name": "frontmatter-is-not-a-block",
       "doc": "---\nstatus: active\nowner: tim\n---\n\n# Heading\n\nBody para.\n",
       "blocks": [
-        { "content": "# Heading", "index": 0, "ids": [], "line": 6, "orphan": false },
-        { "content": "Body para.", "index": 1, "ids": [], "line": 8, "orphan": false }
+        {
+          "content": "# Heading",
+          "index": 0,
+          "ids": [],
+          "line": 6,
+          "orphan": false
+        },
+        {
+          "content": "Body para.",
+          "index": 1,
+          "ids": [],
+          "line": 8,
+          "orphan": false
+        }
       ]
     },
     {
       "name": "frontmatter-no-blank-line-after-closing-fence",
       "doc": "---\ntitle: t\n---\n# Heading\n\nBody.\n",
       "blocks": [
-        { "content": "# Heading", "index": 0, "ids": [], "line": 4, "orphan": false },
-        { "content": "Body.", "index": 1, "ids": [], "line": 6, "orphan": false }
+        {
+          "content": "# Heading",
+          "index": 0,
+          "ids": [],
+          "line": 4,
+          "orphan": false
+        },
+        {
+          "content": "Body.",
+          "index": 1,
+          "ids": [],
+          "line": 6,
+          "orphan": false
+        }
       ]
     },
     {
       "name": "frontmatter-closed-by-yaml-end-marker",
       "doc": "---\ntitle: t\n...\n\n# Heading\n\nBody.\n",
       "blocks": [
-        { "content": "# Heading", "index": 0, "ids": [], "line": 5, "orphan": false },
-        { "content": "Body.", "index": 1, "ids": [], "line": 7, "orphan": false }
+        {
+          "content": "# Heading",
+          "index": 0,
+          "ids": [],
+          "line": 5,
+          "orphan": false
+        },
+        {
+          "content": "Body.",
+          "index": 1,
+          "ids": [],
+          "line": 7,
+          "orphan": false
+        }
       ]
     },
     {
       "name": "frontmatter-list-payload",
       "doc": "---\n- one\n- two\n---\n\nBody.\n",
       "blocks": [
-        { "content": "Body.", "index": 0, "ids": [], "line": 6, "orphan": false }
+        {
+          "content": "Body.",
+          "index": 0,
+          "ids": [],
+          "line": 6,
+          "orphan": false
+        }
       ]
     },
     {
       "name": "frontmatter-closing-fence-trailing-whitespace",
       "doc": "---\nkey: v\n---   \n\nBody.\n",
       "blocks": [
-        { "content": "Body.", "index": 0, "ids": [], "line": 5, "orphan": false }
+        {
+          "content": "Body.",
+          "index": 0,
+          "ids": [],
+          "line": 5,
+          "orphan": false
+        }
       ]
     },
     {
       "name": "frontmatter-marker-after-closing-fence-is-orphan",
       "doc": "---\nkey: v\n---\n<!-- stay:x -->\n\nBody.\n",
       "blocks": [
-        { "content": "", "index": -1, "ids": ["x"], "line": 4, "orphan": true },
-        { "content": "Body.", "index": 0, "ids": [], "line": 6, "orphan": false }
+        {
+          "content": "",
+          "index": -1,
+          "ids": [
+            "x"
+          ],
+          "line": 4,
+          "orphan": true
+        },
+        {
+          "content": "Body.",
+          "index": 0,
+          "ids": [],
+          "line": 6,
+          "orphan": false
+        }
       ]
     },
     {
       "name": "frontmatter-marker-binds-forward-with-no-blank-line",
       "doc": "---\nkey: v\n---\n<!-- stay:x -->\nBody.\n",
       "blocks": [
-        { "content": "Body.", "index": 0, "ids": ["x"], "line": 4, "orphan": false }
+        {
+          "content": "Body.",
+          "index": 0,
+          "ids": [
+            "x"
+          ],
+          "line": 4,
+          "orphan": false
+        }
       ]
     },
     {
       "name": "frontmatter-marker-inside-payload-is-dropped",
       "doc": "---\nkey: v\n<!-- stay:x -->\n---\n\nBody.\n",
       "blocks": [
-        { "content": "Body.", "index": 0, "ids": [], "line": 6, "orphan": false }
+        {
+          "content": "Body.",
+          "index": 0,
+          "ids": [],
+          "line": 6,
+          "orphan": false
+        }
       ]
     },
     {
       "name": "leading-thematic-break-without-closing-fence",
       "doc": "---\n\n# Heading\n\nBody para.\n",
       "blocks": [
-        { "content": "---", "index": 0, "ids": [], "line": 1, "orphan": false },
-        { "content": "# Heading", "index": 1, "ids": [], "line": 3, "orphan": false },
-        { "content": "Body para.", "index": 2, "ids": [], "line": 5, "orphan": false }
+        {
+          "content": "---",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        },
+        {
+          "content": "# Heading",
+          "index": 1,
+          "ids": [],
+          "line": 3,
+          "orphan": false
+        },
+        {
+          "content": "Body para.",
+          "index": 2,
+          "ids": [],
+          "line": 5,
+          "orphan": false
+        }
       ]
     },
     {
       "name": "leading-thematic-break-around-a-paragraph",
       "doc": "---\n\nIntro paragraph.\n\n---\n\nBody.\n",
       "blocks": [
-        { "content": "---", "index": 0, "ids": [], "line": 1, "orphan": false },
-        { "content": "Intro paragraph.", "index": 1, "ids": [], "line": 3, "orphan": false },
-        { "content": "---", "index": 2, "ids": [], "line": 5, "orphan": false },
-        { "content": "Body.", "index": 3, "ids": [], "line": 7, "orphan": false }
+        {
+          "content": "---",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        },
+        {
+          "content": "Intro paragraph.",
+          "index": 1,
+          "ids": [],
+          "line": 3,
+          "orphan": false
+        },
+        {
+          "content": "---",
+          "index": 2,
+          "ids": [],
+          "line": 5,
+          "orphan": false
+        },
+        {
+          "content": "Body.",
+          "index": 3,
+          "ids": [],
+          "line": 7,
+          "orphan": false
+        }
       ]
     },
     {
       "name": "leading-thematic-break-with-setext-heading",
       "doc": "---\nTitle\n---\n\nBody.\n",
       "blocks": [
-        { "content": "---\nTitle\n---", "index": 0, "ids": [], "line": 1, "orphan": false },
-        { "content": "Body.", "index": 1, "ids": [], "line": 5, "orphan": false }
+        {
+          "content": "---\nTitle\n---",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        },
+        {
+          "content": "Body.",
+          "index": 1,
+          "ids": [],
+          "line": 5,
+          "orphan": false
+        }
       ]
     },
     {
       "name": "leading-thematic-break-with-atx-heading",
       "doc": "---\n# Heading\n---\nBody.\n",
       "blocks": [
-        { "content": "---\n# Heading\n---\nBody.", "index": 0, "ids": [], "line": 1, "orphan": false }
+        {
+          "content": "---\n# Heading\n---\nBody.",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        }
       ]
     },
     {
       "name": "frontmatter-payload-with-a-blank-line-is-content",
       "doc": "---\nstatus: active\n\nowner: tim\n---\n\nBody.\n",
       "blocks": [
-        { "content": "---\nstatus: active", "index": 0, "ids": [], "line": 1, "orphan": false },
-        { "content": "owner: tim\n---", "index": 1, "ids": [], "line": 4, "orphan": false },
-        { "content": "Body.", "index": 2, "ids": [], "line": 7, "orphan": false }
+        {
+          "content": "---\nstatus: active",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        },
+        {
+          "content": "owner: tim\n---",
+          "index": 1,
+          "ids": [],
+          "line": 4,
+          "orphan": false
+        },
+        {
+          "content": "Body.",
+          "index": 2,
+          "ids": [],
+          "line": 7,
+          "orphan": false
+        }
       ]
     },
     {
       "name": "frontmatter-empty-payload-is-content",
       "doc": "---\n---\n\nBody.\n",
       "blocks": [
-        { "content": "---\n---", "index": 0, "ids": [], "line": 1, "orphan": false },
-        { "content": "Body.", "index": 1, "ids": [], "line": 4, "orphan": false }
+        {
+          "content": "---\n---",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        },
+        {
+          "content": "Body.",
+          "index": 1,
+          "ids": [],
+          "line": 4,
+          "orphan": false
+        }
       ]
     },
     {
       "name": "frontmatter-only-at-document-start",
       "doc": "# Heading\n\n---\ntitle: not frontmatter\n---\n\nBody.\n",
       "blocks": [
-        { "content": "# Heading", "index": 0, "ids": [], "line": 1, "orphan": false },
-        { "content": "---\ntitle: not frontmatter\n---", "index": 1, "ids": [], "line": 3, "orphan": false },
-        { "content": "Body.", "index": 2, "ids": [], "line": 7, "orphan": false }
+        {
+          "content": "# Heading",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        },
+        {
+          "content": "---\ntitle: not frontmatter\n---",
+          "index": 1,
+          "ids": [],
+          "line": 3,
+          "orphan": false
+        },
+        {
+          "content": "Body.",
+          "index": 2,
+          "ids": [],
+          "line": 7,
+          "orphan": false
+        }
       ]
     },
     {
       "name": "frontmatter-key-starting-with-a-non-ascii-space-is-metadata",
-      "doc": "---\n\u00a0key: v\n---\n\nBody.\n",
+      "doc": "---\n key: v\n---\n\nBody.\n",
       "blocks": [
-        { "content": "Body.", "index": 0, "ids": [], "line": 5, "orphan": false }
+        {
+          "content": "Body.",
+          "index": 0,
+          "ids": [],
+          "line": 5,
+          "orphan": false
+        }
       ]
     },
     {
       "name": "frontmatter-key-starting-with-an-ascii-control-is-content",
       "doc": "---\n\u001ckey: v\n---\n\nBody.\n",
       "blocks": [
-        { "content": "---\n\u001ckey: v\n---", "index": 0, "ids": [], "line": 1, "orphan": false },
-        { "content": "Body.", "index": 1, "ids": [], "line": 5, "orphan": false }
+        {
+          "content": "---\n\u001ckey: v\n---",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        },
+        {
+          "content": "Body.",
+          "index": 1,
+          "ids": [],
+          "line": 5,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "fence-marker-is-content",
+      "doc": "Intro.\n\n```md\nThe paragraph.\n<!-- stay:demo hash=sha256:7a9c -->\n```\n",
+      "blocks": [
+        {
+          "content": "Intro.",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        },
+        {
+          "content": "```md\nThe paragraph.\n<!-- stay:demo hash=sha256:7a9c -->\n```",
+          "index": 1,
+          "ids": [],
+          "line": 3,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "fence-tilde-marker-is-content",
+      "doc": "Intro.\n\n~~~md\nThe paragraph.\n<!-- stay:demo hash=sha256:7a9c -->\n~~~\n",
+      "blocks": [
+        {
+          "content": "Intro.",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        },
+        {
+          "content": "~~~md\nThe paragraph.\n<!-- stay:demo hash=sha256:7a9c -->\n~~~",
+          "index": 1,
+          "ids": [],
+          "line": 3,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "fence-info-string-marker-is-content",
+      "doc": "Intro.\n\n```md <!-- stay:demo -->\na listing\n```\n",
+      "blocks": [
+        {
+          "content": "Intro.",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        },
+        {
+          "content": "```md <!-- stay:demo -->\na listing\n```",
+          "index": 1,
+          "ids": [],
+          "line": 3,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "fence-tilde-info-string-may-hold-a-backtick",
+      "doc": "Intro.\n\n~~~md `x` <!-- stay:demo -->\na listing\n~~~\n",
+      "blocks": [
+        {
+          "content": "Intro.",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        },
+        {
+          "content": "~~~md `x` <!-- stay:demo -->\na listing\n~~~",
+          "index": 1,
+          "ids": [],
+          "line": 3,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "fence-backtick-info-string-with-a-backtick-is-not-a-fence",
+      "doc": "Intro.\n\n```md `x`\n<!-- stay:live -->\n",
+      "blocks": [
+        {
+          "content": "Intro.",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        },
+        {
+          "content": "```md `x`",
+          "index": 1,
+          "ids": [
+            "live"
+          ],
+          "line": 3,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "fence-longer-opener-contains-a-shorter-one",
+      "doc": "````md\n```\n<!-- stay:demo -->\n```\n````\n",
+      "blocks": [
+        {
+          "content": "````md\n```\n<!-- stay:demo -->\n```\n````",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "fence-unclosed-runs-to-end-of-document",
+      "doc": "Intro.\n\n```md\n<!-- stay:demo -->\n",
+      "blocks": [
+        {
+          "content": "Intro.",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        },
+        {
+          "content": "```md\n<!-- stay:demo -->",
+          "index": 1,
+          "ids": [],
+          "line": 3,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "fence-closer-takes-space-or-tab-and-nothing-else",
+      "doc": "```\ncode\n``` \n\nAfter.\n<!-- stay:live -->\n",
+      "blocks": [
+        {
+          "content": "```\ncode\n```",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        },
+        {
+          "content": "After.",
+          "index": 1,
+          "ids": [
+            "live"
+          ],
+          "line": 5,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "fence-closer-with-trailing-text-does-not-close",
+      "doc": "```\ncode\n```x\n<!-- stay:demo -->\n",
+      "blocks": [
+        {
+          "content": "```\ncode\n```x\n<!-- stay:demo -->",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "fence-four-space-indent-is-not-a-fence",
+      "doc": "Intro.\n\n    ```\n    <!-- stay:live -->\n    ```\n",
+      "relation": "diverges",
+      "note": "An indented code block. §3.3's line rule sees no fence, so the string core binds the marker; a parser sees a `code` node and leaves it literal. §3.3 states this exclusion.",
+      "blocks": [
+        {
+          "content": "Intro.",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        },
+        {
+          "content": "```\n    \n    ```",
+          "index": 1,
+          "ids": [
+            "live"
+          ],
+          "line": 3,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "fence-tab-indent-is-not-a-fence",
+      "doc": "Intro.\n\n\t```\n\t<!-- stay:live -->\n\t```\n",
+      "relation": "diverges",
+      "note": "A tab-indented block, which CommonMark reads as indented code for the same reason as above: §3.3 will not expand a tab, because that needs a column model the line rule does not have.",
+      "blocks": [
+        {
+          "content": "Intro.",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        },
+        {
+          "content": "```\n\t\n\t```",
+          "index": 1,
+          "ids": [
+            "live"
+          ],
+          "line": 3,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "fence-three-space-indent-opens-and-closes",
+      "doc": "Intro.\n\n   ```\n   <!-- stay:demo -->\n   ```\n",
+      "blocks": [
+        {
+          "content": "Intro.",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        },
+        {
+          "content": "```\n   <!-- stay:demo -->\n   ```",
+          "index": 1,
+          "ids": [],
+          "line": 3,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "fence-closer-may-end-with-a-tab",
+      "doc": "```\ncode\n```\t\n\nAfter.\n<!-- stay:live -->\n",
+      "blocks": [
+        {
+          "content": "```\ncode\n```",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        },
+        {
+          "content": "After.",
+          "index": 1,
+          "ids": [
+            "live"
+          ],
+          "line": 5,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "fence-crlf-twin-of-fence-marker-is-content",
+      "doc": "Intro.\r\n\r\n```md\r\nThe paragraph.\r\n<!-- stay:demo hash=sha256:7a9c -->\r\n```\r\n",
+      "blocks": [
+        {
+          "content": "Intro.",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        },
+        {
+          "content": "```md\nThe paragraph.\n<!-- stay:demo hash=sha256:7a9c -->\n```",
+          "index": 1,
+          "ids": [],
+          "line": 3,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "fence-after-frontmatter-keeps-the-mask-aligned",
+      "doc": "---\nstatus: active\n---\n\n```md\n<!-- stay:demo -->\n```\n\nAfter.\n<!-- stay:live -->\n",
+      "blocks": [
+        {
+          "content": "```md\n<!-- stay:demo -->\n```",
+          "index": 0,
+          "ids": [],
+          "line": 5,
+          "orphan": false
+        },
+        {
+          "content": "After.",
+          "index": 1,
+          "ids": [
+            "live"
+          ],
+          "line": 9,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "fence-on-its-own-line-in-a-list-item",
+      "doc": "- item:\n\n  ```py\n  <!-- stay:demo -->\n  ```\n\nAfter.\n<!-- stay:live -->\n",
+      "relation": "diverges",
+      "note": "A loose list, which §5.2 already lists as a construct the tree lifts into one node while blank-line segmentation splits it. The fence inside it is seen the same way by both.",
+      "blocks": [
+        {
+          "content": "- item:",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        },
+        {
+          "content": "```py\n  <!-- stay:demo -->\n  ```",
+          "index": 1,
+          "ids": [],
+          "line": 3,
+          "orphan": false
+        },
+        {
+          "content": "After.",
+          "index": 2,
+          "ids": [
+            "live"
+          ],
+          "line": 7,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "fence-opened-on-a-list-marker-line-is-invisible-to-the-line-rule",
+      "doc": "- ```txt\n  code\n  ```\n\nA later paragraph.\n<!-- stay:live hash=sha256:dead -->\n",
+      "relation": "diverges",
+      "note": "The rule's sharpest limit: the parser sees a fence inside the list item, while the line rule never sees it open and reads the CLOSING line as an opener, masking the rest of the document.",
+      "blocks": [
+        {
+          "content": "- ```txt\n  code\n  ```",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        },
+        {
+          "content": "A later paragraph.\n<!-- stay:live hash=sha256:dead -->",
+          "index": 1,
+          "ids": [],
+          "line": 5,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "fence-in-a-blockquote-is-invisible-to-the-line-rule",
+      "doc": "> ```\n> <!-- stay:live -->\n> ```\n",
+      "relation": "diverges",
+      "note": "The parser sees a fence inside the blockquote; the line rule cannot see through the `>` prefix, which is the container §5.2 exists to avoid needing.",
+      "blocks": [
+        {
+          "content": "> ```\n> \n> ```",
+          "index": 0,
+          "ids": [
+            "live"
+          ],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "inline-code-span-still-carries-a-marker",
+      "doc": "A line showing `<!-- stay:live -->` inline.\n",
+      "relation": "diverges",
+      "note": "The one marker-in-code divergence §3.3 deliberately leaves open: the string core binds a marker inside backticks, the tree leaves it literal.",
+      "blocks": [
+        {
+          "content": "A line showing `` inline.",
+          "index": 0,
+          "ids": [
+            "live"
+          ],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "marker-opening-outside-a-fence-and-closing-inside-it",
+      "doc": "Intro. <!-- stay:live\n```txt\nlisting -->\nmore\n```\n",
+      "relation": "diverges",
+      "note": "Two causes stacked, and the segmentation one comes first: a fence touching a paragraph with no blank line between them is already outside §5.4's agreement subset, so the tree splits where blank-line segmentation joins. On top of that §3.3 judges the crossing marker by the line it OPENS on, which is outside the fence, so the string core reads it as a marker and removing it takes the listing bytes its span covers.",
+      "blocks": [
+        {
+          "content": "Intro. \nmore\n```",
+          "index": 0,
+          "ids": [
+            "live"
+          ],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "marker-opening-inside-a-fence-and-closing-outside-it",
+      "doc": "```txt\n<!-- stay:demo\nlisting\n```\nstill the body -->\nAfter.\n",
+      "relation": "diverges",
+      "note": "The mirror of the case above, crossing the other way: the marker opens inside the fence, so §3.3 makes it content and the whole span stays in the body. The tree splits at the closing fence for the same no-blank-line reason.",
+      "blocks": [
+        {
+          "content": "```txt\n<!-- stay:demo\nlisting\n```\nstill the body -->\nAfter.",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "fence-a-longer-run-closes-a-shorter-opener",
+      "doc": "```\ncode\n<!-- stay:demo -->\n````\n\nAfter.\n<!-- stay:live -->\n",
+      "blocks": [
+        {
+          "content": "```\ncode\n<!-- stay:demo -->\n````",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        },
+        {
+          "content": "After.",
+          "index": 1,
+          "ids": [
+            "live"
+          ],
+          "line": 6,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "fence-a-different-character-cannot-close",
+      "doc": "```\ncode\n~~~\n<!-- stay:demo -->\n",
+      "blocks": [
+        {
+          "content": "```\ncode\n~~~\n<!-- stay:demo -->",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "fence-closer-with-a-form-feed-does-not-close",
+      "doc": "```\ncode\n```\f\n<!-- stay:demo -->\n",
+      "blocks": [
+        {
+          "content": "```\ncode\n```\f\n<!-- stay:demo -->",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "fence-closer-with-a-no-break-space-does-not-close",
+      "doc": "```\ncode\n``` \n<!-- stay:demo -->\n",
+      "blocks": [
+        {
+          "content": "```\ncode\n``` \n<!-- stay:demo -->",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "fence-mixed-run-is-not-a-fence",
+      "doc": "Intro.\n\n``~`\n<!-- stay:live -->\n",
+      "blocks": [
+        {
+          "content": "Intro.",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        },
+        {
+          "content": "``~`",
+          "index": 1,
+          "ids": [
+            "live"
+          ],
+          "line": 3,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "fence-closer-may-be-less-indented-than-its-opener",
+      "doc": "   ```\ncode\n```\n\nAfter.\n<!-- stay:live -->\n",
+      "blocks": [
+        {
+          "content": "```\ncode\n```",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        },
+        {
+          "content": "After.",
+          "index": 1,
+          "ids": [
+            "live"
+          ],
+          "line": 5,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "fence-closer-may-be-more-indented-than-its-opener",
+      "doc": "```\ncode\n   ```\n\nAfter.\n<!-- stay:live -->\n",
+      "blocks": [
+        {
+          "content": "```\ncode\n   ```",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        },
+        {
+          "content": "After.",
+          "index": 1,
+          "ids": [
+            "live"
+          ],
+          "line": 5,
+          "orphan": false
+        }
       ]
     }
   ]

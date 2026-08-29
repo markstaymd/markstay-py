@@ -147,7 +147,15 @@ def body_hash(text: str, length: int | None = None) -> str:
 
 def find_markers(text: str, line_offset: int = 0) -> list[Marker]:
     """All markstay markers in ``text``, ordered by position. ``line_offset`` is
-    the 0-based line index where ``text`` begins in the full document."""
+    the 0-based line index where ``text`` begins in the full document.
+
+    A raw grammar-level primitive, and deliberately code-blind: it answers "is
+    this a well-formed marker" for a string with no document around it, which is
+    what the conformance corpus needs. SPEC.md §3.3 (a marker inside a fenced
+    code block is content) is a *document*-level rule and cannot be applied here,
+    because this function is handed chunks and a chunk that begins inside a fence
+    carries no opener. Callers that segment a whole document filter the result
+    against :func:`code_lines`."""
     raw = []
     for pat, syntax in ((HTML_MARKER, "html"), (MDX_MARKER, "mdx")):
         for m in pat.finditer(text):
@@ -182,6 +190,9 @@ def find_markers(text: str, line_offset: int = 0) -> list[Marker]:
 
 
 def strip_markers(text: str) -> str:
+    """Remove every marker-shaped string. A raw grammar-level primitive: it is
+    code-blind, so a caller that must honour SPEC.md §3.3 passes a document-level
+    mask to :func:`strip_markers_outside_code` instead."""
     return MDX_MARKER.sub("", HTML_MARKER.sub("", text))
 
 
@@ -192,16 +203,119 @@ COMBINED_MARKER = re.compile(
     r"<!--\s*(?P<html>stay:.*?)\s*-->|\{/\*\s*(?P<mdx>stay:.*?)\s*\*/\}", re.DOTALL
 )
 
+# --- fenced code blocks (SPEC.md §3.3, v1.5) ------------------------------
 
-def rewrite_markers(text: str, transform) -> str:
+# An opening fence may carry an info string; a *closing* fence may not, and a
+# backtick fence's info string may not contain a backtick (CommonMark 4.5).
+_FENCE_OPEN_RE = re.compile(r"^ {0,3}(?P<run>`{3,}|~{3,})(?P<info>.*)$")
+_FENCE_CLOSE_RE = re.compile(r"^ {0,3}(?P<run>`{3,}|~{3,})[ \t]*$")
+
+
+def fence_state(text: str) -> tuple[set[int], set[int]]:
+    """Fence geometry for one document (SPEC.md §3.3, v1.5): the 1-based line
+    numbers that lie inside a fenced code block, and the 1-based line numbers a
+    fence is still open *after*.
+
+    The second set is what the write path needs and it is not derivable from the
+    first: a marker appended after line L lands on a new line inside the fence
+    exactly when a fence is open at the end of L, and an unclosed fence runs to
+    the end of the document, where there is no later line to test.
+
+    Recognition is line-based and deliberately narrow, so both segmenters (§5)
+    and every tool agree on it without a block parser:
+
+    * the scan runs on LF-split lines, so a CRLF document and its LF twin give
+      the same answer (§8);
+    * an opening fence has at most three leading **spaces** and then three or
+      more backticks or tildes. A tab is not one of the three: CommonMark
+      expands it to the next four-column stop, which needs a column model this
+      rule deliberately does not have. A backtick fence's info string may not
+      contain a backtick;
+    * it closes at the first later line with at most three leading spaces that
+      is a run of the **same** character, **at least as long** as the opener,
+      followed by nothing but spaces and tabs. A longer opener is what lets a
+      fence contain a shorter one, and the whitespace set is named rather than
+      left to "whitespace" because three implementations picking three sets is
+      the way this rule fails quietly;
+    * an unclosed fence runs to the end of the document.
+
+    The fence lines themselves are inside the block, deliberately rather than as
+    an edge case: a marker-shaped string can sit in an opening fence's info
+    string, where before §3.3 it was read as a marker and bound to whatever block
+    preceded it."""
+    lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    inside: set[int] = set()
+    open_after: set[int] = set()
+    fence: str | None = None
+    for num, line in enumerate(lines, 1):
+        if fence is None:
+            opener = _FENCE_OPEN_RE.match(line)
+            if opener is None or (
+                opener.group("run")[0] == "`" and "`" in opener.group("info")
+            ):
+                continue
+            fence = opener.group("run")
+            inside.add(num)
+            open_after.add(num)
+            continue
+        inside.add(num)
+        closer = _FENCE_CLOSE_RE.match(line)
+        if (
+            closer
+            and closer.group("run")[0] == fence[0]
+            and len(closer.group("run")) >= len(fence)
+        ):
+            fence = None
+        else:
+            open_after.add(num)
+    return inside, open_after
+
+
+def code_lines(text: str) -> set[int]:
+    """The 1-based line numbers inside a fenced code block (SPEC.md §3.3). Text
+    there is content: a marker-shaped string on one of these lines identifies no
+    block, is hashed with the body (§8), and does not make its block stamped."""
+    return fence_state(text)[0]
+
+
+def strip_markers_outside_code(text: str, code: set[int], line_offset: int = 0) -> str:
+    """Remove markers from ``text``, leaving marker-shaped strings inside a fenced
+    code block in place (SPEC.md §3.3: they are content, and §8 hashes them with
+    the body). ``line_offset`` is the 0-based line index at which ``text`` begins
+    in the document ``code`` was computed over.
+
+    A marker is judged by the line it *opens* on, which is the only line a reader
+    can see it start on; the grammar is DOTALL, so one can span lines."""
+    if not code:
+        return strip_markers(text)
+    out: list[str] = []
+    prev = 0
+    for m in COMBINED_MARKER.finditer(text):
+        if line_offset + text.count("\n", 0, m.start()) + 1 in code:
+            continue
+        out.append(text[prev : m.start()])
+        prev = m.end()
+    out.append(text[prev:])
+    return "".join(out)
+
+
+
+def rewrite_markers(text: str, transform, code: set[int] | None = None) -> str:
     """Rewrite markers in place, in document order, without disturbing
     surrounding text. ``transform(marker)`` receives a :class:`Marker` (``line``
     is 0 here, position is not tracked) and returns a replacement string, or
     ``None`` to leave the marker unchanged. The write helpers (restamp,
     repair_duplicates) build on this so marker edits reuse the one canonical
-    grammar instead of re-deriving it."""
+    grammar instead of re-deriving it.
+
+    ``code`` is the SPEC.md §3.3 mask for ``text`` (1-based line numbers inside a
+    fenced code block). Matches opening on one of those lines are left byte-for-
+    byte alone: they are an example, not a marker, and rewriting one is how a
+    restamp overwrites a document's illustrative ``hash=`` values."""
 
     def repl(m: "re.Match[str]") -> str:
+        if code and text.count("\n", 0, m.start()) + 1 in code:
+            return m.group(0)
         body = m.group("html")
         syntax = "html"
         if body is None:
@@ -367,15 +481,27 @@ class _ChildSpan:
     excluded_lines: set[int] = field(default_factory=set)
 
 
-def child_body(text: str) -> str:
+def child_body(text: str, code: set[int] | None = None, line_offset: int = 0) -> str:
     """Return a list item's hash body.
 
     Stay markers are cut first, then the first line's indentation, list marker,
     and following syntactic gap are removed. The rest of the source slice stays
     byte-for-byte subject to normal §8 normalization, including nested content.
+
+    ``code`` is the SPEC.md §3.3 mask for the document ``text`` was sliced from,
+    and ``line_offset`` the 0-based line index at which the slice begins. Without
+    them the cut is code-blind, which lets a fenced example inside a list item be
+    removed from the child's body while the container holding the same fence keeps
+    it: one document, two §8 answers. Only the CommonMark child profile can reach
+    that shape, since the dependency-free profile refuses any item carrying a
+    fence, but the parameter is threaded from both.
     """
 
-    clean = strip_markers(text)
+    clean = (
+        strip_markers(text)
+        if not code
+        else strip_markers_outside_code(text, code, line_offset)
+    )
     lines = clean.split("\n")
     if lines:
         match = _LIST_PREFIX_RE.match(lines[0])
@@ -489,6 +615,7 @@ def _commonmark_child_spans(chunk: str, start: int) -> list[_ChildSpan]:
     ]
     if len(roots) != 1:
         return []
+    raw_lines = chunk.split("\n")
     root = roots[0]
     spans: list[_ChildSpan] = []
     for t in tokens:
@@ -520,7 +647,6 @@ def _commonmark_child_spans(chunk: str, start: int) -> list[_ChildSpan]:
         ]
         if paragraph_ends:
             marker_line = start + paragraph_ends[-1] - 1
-        raw_lines = chunk.split("\n")
         spans.append(
             _ChildSpan(
                 start + s,
@@ -564,6 +690,12 @@ def parse_document(
     is a counterexample to that agreement), and a chunk that is only markers
     attaches to the previous content block."""
     text = _blank_frontmatter(md.replace("\r\n", "\n").replace("\r", "\n"))
+    # SPEC.md §3.3: text inside a fenced code block is content. The rule is
+    # computed once over the whole document and threaded, on the
+    # :func:`_blank_frontmatter` precedent, because neither segmenter has a
+    # concept of a fence and :func:`find_markers` is handed chunks. Blanking
+    # preserves line numbers, so this mask indexes the caller's text too.
+    code = code_lines(text)
     if mode == "commonmark":
         chunks = segment_commonmark(text)
     elif mode == "blank-line":
@@ -596,8 +728,12 @@ def parse_document(
     cidx = 0
     child_idx = 0
     for start, chunk in chunks:
-        markers = find_markers(chunk, line_offset=start - 1)
-        content = strip_markers(chunk).strip(
+        markers = [
+            mk
+            for mk in find_markers(chunk, line_offset=start - 1)
+            if mk.line not in code  # §3.3: content, not a marker
+        ]
+        content = strip_markers_outside_code(chunk, code, line_offset=start - 1).strip(
             " \t\n\r\f\v"
         )  # ASCII strip (SPEC.md §5/§8)
         if content == "":
@@ -621,7 +757,9 @@ def parse_document(
                     child_marker_ids.update(id(mk) for mk in owned)
                     children.append(
                         ChildBlock(
-                            content=child_body(span.text),
+                            content=child_body(
+                                span.text, code, span.start_line - 1
+                            ),
                             markers=owned,
                             line=span.start_line,
                             index=child_idx,

@@ -16,36 +16,88 @@
       "name": "duplicate-id",
       "doc": "Block one.\n<!-- stay:dup -->\n\nBlock two.\n<!-- stay:dup -->\n",
       "findings": [
-        { "level": "error", "code": "DUPLICATE_ID", "id": "dup", "line": 5 }
+        {
+          "level": "error",
+          "code": "DUPLICATE_ID",
+          "id": "dup",
+          "line": 5
+        }
       ]
     },
     {
       "name": "malformed-marker",
       "doc": "A paragraph.\n<!-- stay:note=hello -->\n",
       "findings": [
-        { "level": "error", "code": "MALFORMED_MARKER", "id": null, "line": 2 }
+        {
+          "level": "error",
+          "code": "MALFORMED_MARKER",
+          "id": null,
+          "line": 2
+        }
       ]
     },
     {
       "name": "malformed-no-rescue-from-second-stay",
       "doc": "A paragraph.\n<!-- stay:note=hello stay:ok -->\n",
       "findings": [
-        { "level": "error", "code": "MALFORMED_MARKER", "id": null, "line": 2 }
+        {
+          "level": "error",
+          "code": "MALFORMED_MARKER",
+          "id": null,
+          "line": 2
+        }
       ]
     },
     {
       "name": "orphan-marker",
       "doc": "<!-- stay:loose -->\n\nReal content below.\n",
       "findings": [
-        { "level": "error", "code": "ORPHAN_MARKER", "id": "loose", "line": 1 }
+        {
+          "level": "error",
+          "code": "ORPHAN_MARKER",
+          "id": "loose",
+          "line": 1
+        }
       ]
     },
     {
       "name": "hash-drift-is-warning",
       "doc": "Edited content.\n<!-- stay:z9 hash=sha256:dead -->\n",
       "findings": [
-        { "level": "warn", "code": "HASH_DRIFT", "id": "z9", "line": 2 }
+        {
+          "level": "warn",
+          "code": "HASH_DRIFT",
+          "id": "z9",
+          "line": 2
+        }
       ]
+    },
+    {
+      "name": "two-fences-sharing-an-example-id-are-not-a-duplicate",
+      "doc": "```md\n<!-- stay:8f24 hash=sha256:7a9c -->\n```\n\n```mdx\n{/* stay:8f24 hash=sha256:7a9c */}\n```\n",
+      "findings": []
+    },
+    {
+      "name": "a-live-id-shown-in-a-fenced-example-is-not-a-duplicate",
+      "doc": "Live content.\n<!-- stay:live -->\n\n```md\n<!-- stay:live -->\n```\n",
+      "findings": []
+    },
+    {
+      "name": "a-fence-holding-an-example-drifts-against-its-own-stay",
+      "doc": "```md\nExample.\n<!-- stay:demo -->\n```\n<!-- stay:live hash=sha256:04d7f3657022 -->\n",
+      "findings": [
+        {
+          "level": "warn",
+          "code": "HASH_DRIFT",
+          "id": "live",
+          "line": 5
+        }
+      ]
+    },
+    {
+      "name": "a-fence-holding-an-example-is-clean-once-restamped",
+      "doc": "```md\nExample.\n<!-- stay:demo -->\n```\n<!-- stay:live hash=sha256:768d2c5bf9dc -->\n",
+      "findings": []
     }
   ]
 }

@@ -3,11 +3,11 @@
 [![PyPI](https://img.shields.io/pypi/v/markstay)](https://pypi.org/project/markstay/)
 [![Python versions](https://img.shields.io/pypi/pyversions/markstay)](https://pypi.org/project/markstay/)
 [![tests](https://img.shields.io/github/actions/workflow/status/markstaymd/markstay-py/test.yml?label=tests)](https://github.com/markstaymd/markstay-py/actions/workflows/test.yml)
-[![spec](https://img.shields.io/badge/spec-v1.4-blue)](https://markstay.org)
+[![spec](https://img.shields.io/badge/spec-v1.5-blue)](https://markstay.org)
 ![License](https://img.shields.io/pypi/l/markstay)
 
 The Python reference implementation of the [markstay spec](https://markstay.org)
-(v1.4). markstay is a source-level identity primitive for Markdown blocks: an id
+(v1.5). markstay is a source-level identity primitive for Markdown blocks: an id
 token that **stays** bound to its block across edits (marker `stay:`), so a
 reference to a block survives the document being rewritten, including by an LLM.
 
@@ -136,7 +136,8 @@ not because its safety is in doubt.
 
 Public API (the spec'd portion mirrors the JS `index.js` surface; child names are
 experimental Python-only): `normalize_body`, `body_hash`,
-`Marker`, `find_markers`, `strip_markers`, `rewrite_markers`,
+`Marker`, `find_markers`, `strip_markers`, `strip_markers_outside_code`,
+`rewrite_markers`, `code_lines`, `fence_state`,
 `segment_blank_line`, `segment_commonmark`, `segment_child_items`, `Block`,
 `ChildBlock`, `child_body`, `parse_document`, `Finding`,
 `lint_document`, `lint_diff`, `sort_findings`, `has_errors`, `mint_id`,
@@ -204,7 +205,7 @@ and finds each document's baseline itself, which is what a hook actually wants.
 # .pre-commit-config.yaml
 repos:
   - repo: https://github.com/markstaymd/markstay-py
-    rev: v0.6.0
+    rev: v0.9.0
     hooks:
       - id: markstay                  # or markstay-collections, to include table
                                       # rows and list bullets
@@ -253,7 +254,7 @@ reported as a move rather than a loss, so reorganising documents does not block.
 ## The conformance corpus (the actual deliverable)
 
 The corpus under [`conformance/`](conformance) is shared with the JavaScript
-reference. **332 vectors** across two tiers. The `check` category supplies 13
+reference. **408 vectors** across two tiers. The `check` category supplies 13
 commit-shaped cases with paths, statuses, before/after text, expected baseline
 pairings, findings, move/deletion/tracking-departure notes, and scope behavior.
 

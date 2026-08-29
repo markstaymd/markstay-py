@@ -1,0 +1,131 @@
+{
+  "category": "stamp",
+  "tier": "spec",
+  "note": "Write-path vectors hand-authored from SPEC.md prose, as opposed to gen/stamp.json, which is emitted from the reference for breadth. Every vector here is SPEC.md §3.3 (v1.5): text inside a fenced code block is content, so a writer must not put a marker there, must not rewrite a marker-shaped string already there, and must still let the fence itself carry a stay in the ordinary way. The read-path half of the rule is in spec/parse.json and spec/lint.json.",
+  "vectors": [
+    {
+      "name": "stamp-refuses-to-write-into-a-listing",
+      "op": "stamp",
+      "input": "```text\nfirst = a\n\nsecond = b\n```\n",
+      "options": {},
+      "ids": [],
+      "expected": {
+        "text": "```text\nfirst = a\n\nsecond = b\n```\n",
+        "minted": []
+      }
+    },
+    {
+      "name": "stamp-gives-a-fence-showing-a-marker-a-stay-of-its-own",
+      "op": "stamp",
+      "input": "```md\nThe paragraph.\n<!-- stay:demo hash=sha256:7a9c -->\n```\n",
+      "options": {},
+      "ids": [
+        "n0"
+      ],
+      "expected": {
+        "text": "```md\nThe paragraph.\n<!-- stay:demo hash=sha256:7a9c -->\n```\n<!-- stay:n0 hash=sha256:67a7501258a1 -->\n",
+        "minted": [
+          {
+            "id": "n0",
+            "line": 4
+          }
+        ]
+      }
+    },
+    {
+      "name": "stamp-refuses-the-half-that-straddles-a-fence-close",
+      "op": "stamp",
+      "input": "```text\na\n\nb\n```\nprose\n",
+      "options": {},
+      "ids": [],
+      "expected": {
+        "text": "```text\na\n\nb\n```\nprose\n",
+        "minted": []
+      }
+    },
+    {
+      "name": "stamp-refuses-an-unclosed-fence-running-to-end-of-document",
+      "op": "stamp",
+      "input": "Intro.\n\n```md\ncode\n",
+      "options": {},
+      "ids": [
+        "n0"
+      ],
+      "expected": {
+        "text": "Intro.\n<!-- stay:n0 hash=sha256:f5718c9c750d -->\n\n```md\ncode\n",
+        "minted": [
+          {
+            "id": "n0",
+            "line": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "stamp-keeps-the-mask-aligned-after-frontmatter",
+      "op": "stamp",
+      "input": "---\nstatus: active\n---\n\n```md\ncode\n```\n\nAfter.\n",
+      "options": {},
+      "ids": [
+        "n0",
+        "n1"
+      ],
+      "expected": {
+        "text": "---\nstatus: active\n---\n\n```md\ncode\n```\n<!-- stay:n0 hash=sha256:104ffe6f54c5 -->\n\nAfter.\n<!-- stay:n1 hash=sha256:0306b48ad9dd -->\n",
+        "minted": [
+          {
+            "id": "n0",
+            "line": 7
+          },
+          {
+            "id": "n1",
+            "line": 9
+          }
+        ]
+      }
+    },
+    {
+      "name": "restamp-leaves-an-illustrative-hash-alone",
+      "op": "restamp",
+      "input": "```md\nThe paragraph being identified.\n<!-- stay:8f24 hash=sha256:7a9c -->\n```\n",
+      "options": {},
+      "expected": {
+        "text": "```md\nThe paragraph being identified.\n<!-- stay:8f24 hash=sha256:7a9c -->\n```\n",
+        "refreshed": []
+      }
+    },
+    {
+      "name": "restamp-leaves-an-example-alone-even-when-the-id-is-live",
+      "op": "restamp",
+      "input": "Live content.\n<!-- stay:live hash=sha256:8646 -->\n\n```md\n<!-- stay:live hash=sha256:7a9c -->\n```\n",
+      "options": {},
+      "expected": {
+        "text": "Live content.\n<!-- stay:live hash=sha256:8646 -->\n\n```md\n<!-- stay:live hash=sha256:7a9c -->\n```\n",
+        "refreshed": []
+      }
+    },
+    {
+      "name": "repair-does-not-rename-an-example-id",
+      "op": "repair",
+      "input": "Live content.\n<!-- stay:live hash=sha256:8646 -->\n\n```md\n<!-- stay:live -->\n```\n",
+      "options": {},
+      "ids": [],
+      "expected": {
+        "text": "Live content.\n<!-- stay:live hash=sha256:8646 -->\n\n```md\n<!-- stay:live -->\n```\n",
+        "renamed": []
+      }
+    },
+    {
+      "name": "restamp-clears-the-one-time-migration-drift",
+      "op": "restamp",
+      "input": "```md\nExample.\n<!-- stay:demo -->\n```\n<!-- stay:live hash=sha256:04d7f3657022 -->\n",
+      "options": {},
+      "expected": {
+        "text": "```md\nExample.\n<!-- stay:demo -->\n```\n<!-- stay:live hash=sha256:768d2c5bf9dc -->\n",
+        "refreshed": [
+          "live"
+        ]
+      }
+    }
+  ]
+}
