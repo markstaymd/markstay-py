@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 import markstay as M
+from markstay import lint as L
 
 
 def test_readme_keeps_the_preservation_instruction_ahead_of_the_check_backstop():
@@ -101,6 +102,144 @@ def test_mdx_marker_parsed():
     assert blocks[0].markers[0].syntax == "mdx"
 
 
+def test_strict_marker_scanner_uses_host_first_closers_and_later_openers():
+    html = '<!-- stay:lost quote="x--!> tail <!-- stay:kept -->'
+    assert [marker.id for marker in M.find_markers(html)] == ["kept"]
+
+    html_normal = '<!-- stay:lost quote="x--> tail <!-- stay:kept -->'
+    assert [marker.id for marker in M.find_markers(html_normal)] == ["kept"]
+
+    mdx = '{/* stay:lost quote="x*/ tail {/* stay:kept */}'
+    assert [marker.id for marker in M.find_markers(mdx)] == ["kept"]
+
+
+def test_strict_marker_scanner_validates_complete_attributes_and_lf_quotes():
+    assert M.find_markers("<!-- stay:a note -->") == []
+    assert M.find_markers(r'<!-- stay:a note="bad\q" -->') == []
+    malformed = M.find_markers("<!-- stay:note=hello -->")
+    assert len(malformed) == 1 and malformed[0].malformed
+
+    raw = '<!-- stay:a quote="one\r\ntwo" -->'
+    marker = M.find_markers(raw)[0]
+    assert marker.id == "a"
+    assert marker.raw == raw
+
+
+def test_key_first_malformed_survives_invalid_host_closer_diagnostics():
+    html = M.find_markers("<!-- stay:note=hello --!>")[0]
+    mdx = M.find_markers("{/* stay:note=hello */x")[0]
+    assert html.malformed and html.raw == "<!-- stay:note=hello --!>"
+    assert mdx.malformed and mdx.raw == "{/* stay:note=hello */"
+    assert M.find_markers("<!-- stay:valid --!>") == []
+
+
+def test_rewrite_valid_nested_marker_inside_malformed_diagnostic_candidate():
+    md = "<!-- stay:note=hello x=<!-- stay:inner hash=sha256:dead --> -->"
+    rewritten = M.rewrite_markers(
+        md,
+        lambda marker: (
+            "<!-- stay:inner hash=sha256:cafe -->" if marker.id == "inner" else None
+        ),
+    )
+    assert rewritten == (
+        "<!-- stay:note=hello x=<!-- stay:inner hash=sha256:cafe --> -->"
+    )
+
+
+def test_rewrite_valid_marker_overlapping_fenced_code_opener():
+    md = (
+        "```md\n"
+        '<!-- stay:outer x-note="start\n'
+        "```\n"
+        "{/* stay:inner hash=sha256:dead */}\n"
+        'tail" -->\n'
+    )
+    rewritten = M.rewrite_markers(
+        md,
+        lambda marker: (
+            "{/* stay:inner hash=sha256:cafe */}" if marker.id == "inner" else None
+        ),
+        code=M.code_lines(md),
+    )
+    assert rewritten == md.replace(
+        "{/* stay:inner hash=sha256:dead */}",
+        "{/* stay:inner hash=sha256:cafe */}",
+    )
+
+
+def test_lexical_diagnostics_precede_attachment_in_source_order():
+    md = (
+        "| h |\n|---|\n"
+        "| value<!-- stay:dup subhash=sha256:dead --> |\n"
+        "<!-- stay:dup -->\n"
+    )
+    _, findings = M.lint_document(md, child_blocks=True)
+    duplicate = next(finding for finding in findings if finding.code == "DUPLICATE_ID")
+    assert duplicate.line == 4
+    assert "first at line 3" in duplicate.message
+    assert findings.index(duplicate) < next(
+        index
+        for index, finding in enumerate(findings)
+        if finding.code in {"HASH_DRIFT", "ORPHAN_CHILD"}
+    )
+
+
+def test_hashed_orphan_does_not_report_empty_body_drift():
+    _, findings = M.lint_document("<!-- stay:orphan hash=sha256:dead -->\n")
+    assert [(finding.code, finding.id) for finding in findings] == [
+        ("ORPHAN_MARKER", "orphan")
+    ]
+
+
+def test_orphan_subhash_is_reported_without_block_attribution_or_hash_drift():
+    for value in ("sha256:dead", "bogus", '"sha256:dead"'):
+        _, findings = M.lint_document(
+            f"<!-- stay:child subhash={value} hash=sha256:dead -->"
+        )
+        assert [(finding.code, finding.id) for finding in findings] == [
+            ("ORPHAN_MARKER", "child")
+        ]
+    _, control = M.lint_document("<!-- stay:block x-subhash=bogus -->")
+    assert codes(control) == ["ORPHAN_MARKER"]
+
+
+def test_parse_document_retains_raw_crlf_marker_serialization():
+    raw = 'Body.\r\n<!-- stay:a quote="one\r\ntwo" -->\r\n'
+    marker = M.parse_document(raw)[0].markers[0]
+    assert marker.raw == '<!-- stay:a quote="one\r\ntwo" -->'
+
+
+def test_exact_subhash_presence_is_separate_from_digest_validity():
+    invalid = M.find_markers("<!-- stay:a subhash=bogus -->")[0]
+    quoted = M.find_markers('<!-- stay:b subhash="sha256:abcd" -->')[0]
+    extension = M.find_markers("<!-- stay:c x-subhash=sha256:abcd -->")[0]
+    assert (invalid.has_subhash, invalid.subhash) == (True, None)
+    assert (quoted.has_subhash, quoted.subhash) == (True, None)
+    assert (extension.has_subhash, extension.subhash) == (False, None)
+
+
+def test_subhash_is_lexical_for_duplicates_but_never_a_block_stay():
+    md = (
+        "<!-- stay:dup subhash=bogus -->\n\n"
+        'Body.\n<!-- stay:dup hash=sha256:dead subhash="bogus" -->\n'
+    )
+    blocks, findings = M.lint_document(md)
+    assert codes(findings) == ["DUPLICATE_ID", "ORPHAN_MARKER"]
+    assert L._id_index(blocks) == {}
+
+    extension = "Body.\n<!-- stay:block hash=sha256:dead x-subhash=bogus -->\n"
+    _, extension_findings = M.lint_document(extension)
+    assert codes(extension_findings) == ["HASH_DRIFT"]
+
+
+def test_block_diff_ignores_subhash_but_keeps_x_subhash():
+    child = "Body.\n<!-- stay:child subhash=bogus -->\n"
+    assert M.lint_diff(child, "Body edited.\n") == []
+
+    extension = "Body.\n<!-- stay:block x-subhash=bogus -->\n"
+    assert codes(M.lint_diff(extension, "Body edited.\n")) == ["DROPPED_ID"]
+
+
 def test_strip_markers_removes_both_syntaxes():
     assert M.strip_markers("a<!-- stay:h -->b{/* stay:m */}c") == "abc"
 
@@ -155,7 +294,9 @@ def test_hash_drift_stays_warn_in_return_tuples_guardrail():
     _, doc = M.lint_document("Edited.\n<!-- stay:z9 hash=sha256:dead -->\n")
     doc_drift = [f for f in doc if f.code == "HASH_DRIFT"]
     assert doc_drift and all(f.level == "warn" for f in doc_drift)
-    diff = M.lint_diff("Alpha.\n<!-- stay:a -->\n", "Alpha, revised.\n<!-- stay:a -->\n")
+    diff = M.lint_diff(
+        "Alpha.\n<!-- stay:a -->\n", "Alpha, revised.\n<!-- stay:a -->\n"
+    )
     diff_drift = [f for f in diff if f.code == "HASH_DRIFT"]
     assert diff_drift and all(f.level == "warn" for f in diff_drift)
 
@@ -204,8 +345,12 @@ def test_collection_shrank_silent_on_inplace_edit_and_growth():
 
 
 def test_collection_shrank_fires_on_consolidation_known_fp():
-    after = _TBL.replace("| auth | done |\n| orders | wip |\n", "| auth+orders | done |\n")
-    assert "COLLECTION_SHRANK" in codes(M.lint_diff(_TBL, after, check_collections=True))
+    after = _TBL.replace(
+        "| auth | done |\n| orders | wip |\n", "| auth+orders | done |\n"
+    )
+    assert "COLLECTION_SHRANK" in codes(
+        M.lint_diff(_TBL, after, check_collections=True)
+    )
 
 
 def test_collection_shrank_distinct_from_dropped_block():
@@ -229,6 +374,21 @@ def test_marker_tier():
     res = M.resolve(anchors, BEFORE)  # unchanged: every marker survives
     assert {r.method for r in res.values()} == {"marker"}
     assert all(r.score == 1.0 for r in res.values())
+
+
+def test_block_anchors_and_marker_tier_ignore_exact_subhash_presence():
+    after = (
+        "Child-looking body.\n<!-- stay:child subhash=bogus -->\n\n"
+        "Extension body.\n<!-- stay:extension x-subhash=bogus -->\n"
+    )
+    assert [anchor.id for anchor in M.build_anchors(after)] == ["extension"]
+
+    anchor = M.Anchor(
+        id="child",
+        hash="not-a-body-hash",
+        selector=M.Selector("text absent from the edited document"),
+    )
+    assert M.resolve([anchor], after)["child"].method != "marker"
 
 
 def test_hash_tier_marker_lost_body_verbatim():
@@ -349,7 +509,11 @@ def test_frontmatter_metadata_edit_does_not_drift_a_hash():
 
 def test_frontmatter_with_no_closing_fence_is_a_thematic_break():
     md = "---\n\n# Heading\n\nBody para.\n"
-    assert [b.content for b in M.parse_document(md)] == ["---", "# Heading", "Body para."]
+    assert [b.content for b in M.parse_document(md)] == [
+        "---",
+        "# Heading",
+        "Body para.",
+    ]
 
 
 def test_frontmatter_does_not_swallow_two_thematic_breaks():
@@ -599,9 +763,7 @@ def test_cli_resolve_surfaces_ambiguity_without_recommending_attachment(tmp_path
     assert "no attachment committed" in hidden.stdout
     assert "diagnostic candidate" not in hidden.stdout
 
-    shown = _cli(
-        "resolve", "--show-candidates", "--before", str(before), str(after)
-    )
+    shown = _cli("resolve", "--show-candidates", "--before", str(before), str(after))
     assert shown.returncode == 0, shown.stderr
     assert shown.stdout.count("diagnostic candidate") == 2
     for language in ("winner", "best", "recommended", "attach to"):
@@ -687,7 +849,9 @@ def test_cli_preserve_wrap_composes_the_measured_prompt_shape(tmp_path):
     p.write_text("# Title\n\nA paragraph.\n")
     r = _cli("preserve", "--wrap", str(p), "--task", "Tighten it.")
     assert r.returncode == 0
-    assert r.stdout == M.preserve_wrap("# Title\n\nA paragraph.\n", "Tighten it.") + "\n"
+    assert (
+        r.stdout == M.preserve_wrap("# Title\n\nA paragraph.\n", "Tighten it.") + "\n"
+    )
     # task first, then the instruction, then the document behind the rule
     assert (
         r.stdout.index("Tighten it.")

@@ -160,9 +160,7 @@ def test_dropped_child_blocks_while_reworded_child_recovers_by_quote():
 
 
 def test_original_duplicate_child_hashes_can_resolve_by_quote_context():
-    before = stamped(
-        "- Alpha\n- Shared task\n- Beta\n- Shared task\n- Gamma\n"
-    )
+    before = stamped("- Alpha\n- Shared task\n- Beta\n- Shared task\n- Gamma\n")
     parent_marker = before.splitlines()[-1]
     after = (
         "- Alpha\n"
@@ -335,10 +333,7 @@ def test_two_stays_on_one_item_contest_it_and_neither_gets_it():
     assert resolved["a1"].contested_with == ["a2"]
     assert resolved["a2"].contested_with == ["a1"]
     assert resolved["a1"].candidates == []
-    assert (
-        resolved["a1"].proposal_provenance
-        == "child-parent-hash-tier-snapshot"
-    )
+    assert resolved["a1"].proposal_provenance == "child-parent-hash-tier-snapshot"
 
 
 def test_parent_quote_collision_is_contested_and_order_invariant():
@@ -446,20 +441,18 @@ def test_child_contest_history_names_the_strongest_tier():
         f" <!-- stay:a2 subhash=sha256:{digest} -->\n2. Beta\n"
     )
     container = next(
-        block
-        for block in M.parse_document(before, child_blocks=True)
-        if block.children
+        block for block in M.parse_document(before, child_blocks=True) if block.children
     )
     before += f"<!-- stay:P hash=sha256:{M.body_hash(container.content, 12)} -->\n"
-    after = before.replace("1. Alpha", "7. Alpha").replace("2. Beta", "8. Beta").replace(
-        f" <!-- stay:a1 subhash=sha256:{digest} -->", ""
-    ).replace(f" <!-- stay:a2 subhash=sha256:{digest} -->", "")
+    after = (
+        before.replace("1. Alpha", "7. Alpha")
+        .replace("2. Beta", "8. Beta")
+        .replace(f" <!-- stay:a1 subhash=sha256:{digest} -->", "")
+        .replace(f" <!-- stay:a2 subhash=sha256:{digest} -->", "")
+    )
     sibling = M.resolve_children(M.build_child_anchors(before), after)
     assert sibling["a1"].reason == "contested"
-    assert (
-        sibling["a1"].proposal_provenance
-        == "child-sibling-hash-tier-snapshot"
-    )
+    assert sibling["a1"].proposal_provenance == "child-sibling-hash-tier-snapshot"
 
     parent = M.Anchor("p", "unused", M.Selector("Control"))
     document_anchors = [
@@ -479,10 +472,7 @@ def test_child_contest_history_names_the_strongest_tier():
         mode="commonmark",
     )
     assert document["d1"].reason == "contested"
-    assert (
-        document["d1"].proposal_provenance
-        == "child-document-hash-tier-snapshot"
-    )
+    assert document["d1"].proposal_provenance == "child-document-hash-tier-snapshot"
 
     quote_anchors = [
         M.ChildAnchor(
@@ -600,9 +590,7 @@ def test_child_blocked_by_unmatched_parent_is_unscored_with_the_parent_cause(tmp
     payload = json.loads(
         subprocess.run(command, capture_output=True, text=True, check=True).stdout
     )
-    structured = next(
-        row for row in payload["resolutions"] if row["id"] == anchor.id
-    )
+    structured = next(row for row in payload["resolutions"] if row["id"] == anchor.id)
     assert structured["blocked_by"]["id"] == result.blocked_by.id
     assert structured["blocked_by"]["reason"] == "unmatched"
     assert structured["blocked_by"]["committed"] is False
@@ -638,6 +626,86 @@ def test_restamp_add_missing_never_injects_beside_a_subhash():
     # licence to write the container's digest onto a child marker.
     before = stamped("- Alpha\n- Beta\n")
     assert M.restamp(before, add_missing=True).text == before
+
+
+@pytest.mark.parametrize("value", ["bogus", '"sha256:abcd"'])
+def test_exact_subhash_presence_guards_writers_without_a_valid_digest(value):
+    md = f"- Alpha <!-- stay:child subhash={value} -->\n"
+    stamped_result = M.stamp(md, new_id=lambda: "parent")
+    assert "stay:parent hash=sha256:" in stamped_result.text
+    assert stamped_result.text.count("stay:child") == 1
+
+    restamped = M.restamp(md, add_missing=True)
+    assert restamped.text == md
+    assert " hash=sha256:" not in restamped.text
+
+
+def test_invalid_subhash_value_still_owns_a_child_and_selects_a_bare_parent():
+    md = (
+        "- Alpha <!-- stay:child subhash=bogus -->\n"
+        "<!-- stay:not-parent subhash=bogus -->\n"
+        "<!-- stay:parent -->\n"
+    )
+    block = M.parse_document(md, child_blocks=True)[0]
+    assert [marker.id for marker in block.children[0].markers] == ["child"]
+    assert [marker.id for marker in block.markers] == ["not-parent", "parent"]
+    anchor = M.build_child_anchors(md)[0]
+    assert anchor.id == "child"
+    assert anchor.parent is not None and anchor.parent.id == "parent"
+
+
+def test_multiline_child_marker_ownership_requires_full_item_containment():
+    contained = (
+        '- Alpha <!-- stay:child subhash=bogus quote="one\n'
+        '  two" -->\n'
+        "- Beta\n"
+        "<!-- stay:parent -->\n"
+    )
+    block = M.parse_document(contained, child_blocks=True)[0]
+    assert [child.content for child in block.children] == ["Alpha", "Beta"]
+    assert [marker.id for marker in block.children[0].markers] == ["child"]
+
+    crossing = (
+        '- Alpha <!-- stay:crossing subhash=bogus quote="one\n'
+        '- Beta two" --> <!-- stay:contained subhash=bogus -->\n'
+        "<!-- stay:parent -->\n"
+    )
+    blocks, findings = M.lint_document(crossing, child_blocks=True)
+    assert len(blocks[0].children) == 2
+    assert [marker.id for marker in blocks[0].children[1].markers] == ["contained"]
+    assert [marker.id for marker in blocks[0].markers] == ["crossing", "parent"]
+    assert [(finding.code, finding.id) for finding in findings] == [
+        ("CHILD_UNADDRESSED", "crossing")
+    ]
+
+
+def test_crossing_block_marker_does_not_erase_contained_child_identity():
+    md = (
+        '- Alpha <!-- stay:block quote="one\n'
+        '- Beta two" --> <!-- stay:child subhash=bogus -->\n'
+        "<!-- stay:parent -->\n"
+    )
+    block = M.parse_document(md, child_blocks=True)[0]
+    assert len(block.children) == 2
+    assert [marker.id for marker in block.children[1].markers] == ["child"]
+    assert [marker.id for marker in block.markers] == ["block", "parent"]
+    assert all("stay:" not in child.content for child in block.children)
+
+
+def test_multiline_child_strip_keeps_later_fenced_marker_as_content():
+    md = (
+        '- one <!-- stay:child subhash=bogus x-note="a\n'
+        "  b\n"
+        '  c" -->\n\n'
+        "  ```\n"
+        "  <!-- stay:example -->\n"
+        "  ```\n"
+        "<!-- stay:parent -->\n"
+    )
+    blocks = M.parse_document(md, mode="commonmark", child_blocks=True)
+    child = blocks[0].children[0]
+    assert [marker.id for marker in child.markers] == ["child"]
+    assert "<!-- stay:example -->" in child.content
 
 
 def test_stamp_without_child_blocks_still_stamps_a_child_stamped_container():
@@ -700,6 +768,30 @@ def test_child_repair_removes_v11_add_missing_parent_hash_signature():
     assert "stay:c0 subhash=" in result.text
 
 
+def test_repair_counts_invalid_subhash_markers_as_global_duplicate_ids():
+    md = (
+        "- Alpha <!-- stay:dup subhash=bogus -->\n"
+        '- Beta <!-- stay:dup subhash="bogus" -->\n'
+        "<!-- stay:parent -->\n"
+    )
+    result = M.repair_duplicates(md, child_blocks=True, new_id=lambda: "replacement")
+    assert result.renamed == [{"from": "dup", "to": "replacement"}]
+    assert result.text.count("stay:dup") == 1
+    assert result.text.count("stay:replacement") == 1
+
+
+def test_repair_cleanup_routes_on_exact_subhash_presence():
+    base = "- Alpha <!-- stay:child subhash=bogus -->\n" "<!-- stay:parent -->\n"
+    block = M.parse_document(base, child_blocks=True)[0]
+    contaminated = base.replace(
+        "stay:child ", f"stay:child hash=sha256:{M.body_hash(block.content)} ", 1
+    )
+    result = M.repair_duplicates(contaminated, child_blocks=True)
+    assert result.cleaned == ["child"]
+    assert "stay:child hash=" not in result.text
+    assert "subhash=bogus" in result.text
+
+
 def test_default_v11_path_remains_unchanged_for_child_carrier():
     md = "- Alpha <!-- stay:child subhash=sha256:dead -->\n- Beta\n"
     blocks, findings = M.lint_document(md)
@@ -752,9 +844,7 @@ def test_cli_child_contest_names_competing_stays_without_a_candidate_list(tmp_pa
         for block in M.parse_document(before_text, child_blocks=True)
         if block.children
     )
-    before_text += (
-        f"<!-- stay:P hash=sha256:{M.body_hash(container.content, 12)} -->\n"
-    )
+    before_text += f"<!-- stay:P hash=sha256:{M.body_hash(container.content, 12)} -->\n"
     after_text = before_text.replace(
         f" <!-- stay:a1 subhash=sha256:{digest} -->", ""
     ).replace(f" <!-- stay:a2 subhash=sha256:{digest} -->", "")

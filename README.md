@@ -3,11 +3,11 @@
 [![PyPI](https://img.shields.io/pypi/v/markstay)](https://pypi.org/project/markstay/)
 [![Python versions](https://img.shields.io/pypi/pyversions/markstay)](https://pypi.org/project/markstay/)
 [![tests](https://img.shields.io/github/actions/workflow/status/markstaymd/markstay-py/test.yml?label=tests)](https://github.com/markstaymd/markstay-py/actions/workflows/test.yml)
-[![spec](https://img.shields.io/badge/spec-v1.5-blue)](https://markstay.org)
+[![spec](https://img.shields.io/badge/spec-v1.6-blue)](https://markstay.org)
 ![License](https://img.shields.io/pypi/l/markstay)
 
 The Python reference implementation of the [markstay spec](https://markstay.org)
-(v1.5). markstay is a source-level identity primitive for Markdown blocks: an id
+(v1.6). markstay is a source-level identity primitive for Markdown blocks: an id
 token that **stays** bound to its block across edits (marker `stay:`), so a
 reference to a block survives the document being rewritten, including by an LLM.
 
@@ -19,11 +19,12 @@ It mirrors the JavaScript reference
 shared language-neutral conformance corpus, which turns "two implementations
 agree" from an assertion into a tested fact.
 
-**Child-block identity (§5.5) is implemented here**, behind `--child-blocks` on the CLI
-and `child_blocks=True` in the API: a direct list item may carry its own stay under the
-reserved `subhash` key, resolved through the §9.2 ladder. It is opt-in because §16 makes
-segmenting and resolving child blocks optional. The write-path shim §16 *does* make
-mandatory is unconditional here, as it is in every implementation.
+**Child-block identity (§5.5 and §5.6) is implemented here**, behind
+`--child-blocks` on the CLI and `child_blocks=True` in the API: a direct list item
+or accepted GFM table body row may carry its own stay under the reserved `subhash`
+key, resolved through the §9.2 ladder. It is opt-in because §16 makes segmenting and
+resolving child blocks optional. The read/write safety rules §16 makes mandatory are
+unconditional here, as they are in every implementation.
 
 ## Install
 
@@ -100,17 +101,20 @@ detached.candidates   # diagnostic contenders for ambiguity, never a committed t
 res = M.stamp("First paragraph.\n\nSecond paragraph.\n")
 res.text     # each block now carries <!-- stay:ID hash=sha256:... -->
 res.minted   # [{"id": ..., "line": ...}, ...]
+res.drifted  # container ids whose pre-existing drift made a row write abort
+res.refused  # why the write path declined, or None; a refusal returns the source
+             # byte for byte with nothing minted, which is what a document with
+             # nothing to do returns too
 
 # refresh a hash you edited on purpose (§8); repair duplicate ids (§7, copy mints new)
 M.restamp(edited_md)            # -> RestampResult(text, refreshed)
 M.repair_duplicates(copied_md)  # -> RepairResult(text, renamed)
 ```
 
-### Experimental list-item identity
+### Child-block identity
 
-The canonical Python reference includes an opt-in list-item prototype. It is not
-part of the spec and has no cross-language parity, so it is not a portable format
-promise. Enable it explicitly:
+The Python package implements the optional list-item and GFM table-row readers and
+writers from §5.5 and §5.6. Enable child segmentation explicitly:
 
 ```python
 seeded = M.stamp(md, mode="commonmark", child_blocks=True).text
@@ -121,9 +125,15 @@ anchors = M.build_child_anchors(seeded, mode="commonmark")
 resolved = M.resolve_children(anchors, after, mode="commonmark")
 ```
 
-Child markers are inline and use `subhash=sha256:...`; the same stamping pass mints
-the containing list's parent stay. `restamp(..., child_blocks=True)` refreshes
-`subhash` and never injects a parent `hash` into a child. If an older
+Child markers use `subhash=sha256:...`; list markers sit at the end of the item's
+last paragraph, while row markers sit flush inside the last cell. The same stamping
+pass puts the selected container's stay on a marker-only line. A legacy bare table
+stay after the last row's closing pipe is migrated only after a full-document probe
+accepts the proposed table. Pre-existing container hash drift aborts that write and
+is exposed through `StampResult.drifted` and a nonzero CLI result.
+
+`restamp(..., child_blocks=True)` refreshes `subhash` and never injects a parent
+`hash` into a child. If an older
 `restamp --add-missing` already added that parent hash,
 `repair_duplicates(..., child_blocks=True)` removes the detectable residue.
 
@@ -131,8 +141,28 @@ CommonMark mode handles direct list-item source spans. The dependency-free mode
 fails closed outside flat, tight, single-paragraph lists. Measured attachment
 safety is 0% false attachment from two independent directions (0/324 deterministic,
 95% upper bound 0.92%; 0/256 on real gpt4o rewrites, bound 1.16%) at 95.0% and
-92.2% recovery. The feature stays experimental because its benefit is unmeasured,
-not because its safety is in doubt.
+92.2% recovery. Table rows use the parser-free §5.6 line scan in both segmenter
+modes and keep list and row ordinals and sibling recovery scopes separate.
+That scan accepts only outer-pipe rows, a same-width delimiter row whose cells are
+`:`/`-` grammar, and an uninterrupted all-row body. Marker spans are opaque while
+pipe boundaries are fixed, multiline or overlapping spans refuse affected row
+candidates, and more than one accepted candidate in a selected container fails
+closed. Regardless of whether child segmentation is enabled, §16 prevents an exact
+parsed `subhash` key from identifying its containing block or receiving `hash`.
+
+Row writes are transactional. The package builds a complete in-memory document,
+moves only a legal legacy bare container suffix, places the container stay on a
+marker-only line, writes row stays flush in their final cells, and reruns the selected
+segmenter plus the complete row scan. A failed probe or revalidation returns the
+source byte-for-byte unchanged. Existing container hash drift is reported before the
+write through `StampResult.drifted`; the CLI exits nonzero and leaves the file alone.
+
+**Every refusal names itself.** `StampResult.refused` carries a short reason
+(`container-drift`, `unsafe-relocation`, `no-row-carrier`, `child-not-addressable`,
+`parent-not-addressable`, `proposal-drifts`) or `None` when the write path did not
+decline, and the CLI prints it and exits nonzero. Without it a refusal is
+byte-identical to a document that had nothing to stamp, so a pre-commit hook reading
+the exit code would pass on work the write path had declined.
 
 Public API (the spec'd portion mirrors the JS `index.js` surface; child names are
 experimental Python-only): `normalize_body`, `body_hash`,
@@ -159,7 +189,7 @@ markstay lint    FILE [FILE ...]      # well-formedness + intra-doc checks
 markstay lint    --before OLD.md NEW  # regeneration diff (dropped/duplicated/relocated ids)
 markstay lint    --json ...           # machine-readable findings
 markstay lint    --commonmark ...     # §5.2 CommonMark-tree segmentation (needs the extra)
-markstay lint    --child-blocks --commonmark ...  # experimental list-item identity
+markstay lint    --child-blocks --commonmark ...  # list-item and table-row identity
 markstay resolve --before OLD.md NEW.md  # explain each attachment or detachment
 markstay resolve --before OLD.md NEW.md --show-candidates  # show ambiguous contenders
 markstay resolve --before OLD.md NEW.md --json  # versioned structured diagnostics
@@ -205,7 +235,7 @@ and finds each document's baseline itself, which is what a hook actually wants.
 # .pre-commit-config.yaml
 repos:
   - repo: https://github.com/markstaymd/markstay-py
-    rev: v0.9.0
+    rev: v0.10.0
     hooks:
       - id: markstay                  # or markstay-collections, to include table
                                       # rows and list bullets
@@ -254,14 +284,22 @@ reported as a move rather than a loss, so reorganising documents does not block.
 ## The conformance corpus (the actual deliverable)
 
 The corpus under [`conformance/`](conformance) is shared with the JavaScript
-reference. **408 vectors** across two tiers. The `check` category supplies 13
-commit-shaped cases with paths, statuses, before/after text, expected baseline
-pairings, findings, move/deletion/tracking-departure notes, and scope behavior.
+reference. **420 core vectors** across two tiers, plus a 23-vector optional
+profile this package advertises, so its own runner reports **443**. The `check`
+category supplies 14 commit-shaped cases with paths, statuses, before/after text,
+expected baseline pairings, findings, move/deletion/tracking-departure notes, and
+scope behavior.
 
 - **`spec/`** , hand-authored from the spec prose, asserting what the *words*
   require. These are authority; a `spec/` vector the reference fails is a
   reference bug, not a corpus error.
 - **`gen/`** , emitted from the reference for breadth/regression.
+- **`rows/`** , the optional `rows` profile (SPEC.md §5.6 table-row identity).
+  §16 keeps child segmentation optional, so a conforming runner MAY decline this
+  profile; the JavaScript and Rust references do, and run the 420 core vectors
+  alone. This package implements §5.6, so it advertises `rows` and runs all 443.
+  A runner that meets a profile it has never heard of fails rather than skipping
+  it, which is what stops a new category going missing quietly.
 
 The JS reference runs the same JSON, so the two runners are a cross-impl
 regression sentinel: any later change to either implementation that breaks

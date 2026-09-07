@@ -383,6 +383,19 @@
           "score": 0.8214285714285714
         }
       }
+    },
+    {
+      "name": "marker-tier-lookup-does-not-hit-a-subhash-id",
+      "note": "SPEC.md §16 mandatory reader rule (v1.6): a tool MUST NOT report a marker carrying the exact `subhash` key as the stay of the block containing it. The key is compared exactly, without segmenting or resolving a child, so a tool that implements neither §5.5 nor §5.6 still applies it. §9.2's MARKER tier looks the stay's id up in the after-document. `m1` appears there only as a row-style child marker on a list item, which is not a block stay, so the ladder falls through to QUOTE and lands on the edited paragraph (target 0). An unfiltered lookup returns method `marker` and target 1: a confident, silent bind to the wrong block, which is the failure §16 makes this rule mandatory for.",
+      "before": "The retry budget is per partner and resets nightly.\n<!-- stay:m1 hash=sha256:0000 -->\n",
+      "after": "Retry budgets are per partner and reset nightly, with an override.\n<!-- stay:zz -->\n\n- alpha<!-- stay:m1 subhash=sha256:1122 -->\n- beta\n",
+      "resolutions": {
+        "m1": {
+          "method": "quote",
+          "target": 0,
+          "score": 0.7521367521367521
+        }
+      }
     }
   ]
 }

@@ -98,6 +98,31 @@
       "name": "a-fence-holding-an-example-is-clean-once-restamped",
       "doc": "```md\nExample.\n<!-- stay:demo -->\n```\n<!-- stay:live hash=sha256:768d2c5bf9dc -->\n",
       "findings": []
+    },
+    {
+      "name": "a-subhash-marker-is-not-its-containing-blocks-stay",
+      "note": "SPEC.md §16 mandatory reader rule (v1.6): a tool MUST NOT report a marker carrying the exact `subhash` key as the stay of the block containing it. The key is compared exactly, without segmenting or resolving a child, so a tool that implements neither §5.5 nor §5.6 still applies it. Four readings in one document. `c1` on the list item carries a deliberately wrong `hash` beside its `subhash`, and that is NOT container drift: an unfiltered reader emits a fourth HASH_DRIFT here. `x9` carries `x-subhash`, which is an ordinary extension key and stays block-level, so its wrong hash IS drift. `cb` carries `subhash=bogus`: the filter is key presence, not value validity, so it is filtered too. The DUPLICATE_ID on `c1` proves the lexical, document-global buckets survive the filter, because that duplicate spans a child marker and a block marker.",
+      "doc": "- alpha<!-- stay:c1 subhash=sha256:1122 hash=sha256:dead -->\n- beta\n\nProse with an extension key.\n<!-- stay:x9 x-subhash=sha256:1122 hash=sha256:dead -->\n\nProse with an unparseable subhash value.\n<!-- stay:cb subhash=bogus hash=sha256:dead -->\n\nProse sharing the child id.\n<!-- stay:c1 hash=sha256:dead -->\n",
+      "findings": [
+        {
+          "level": "error",
+          "code": "DUPLICATE_ID",
+          "id": "c1",
+          "line": 11
+        },
+        {
+          "level": "warn",
+          "code": "HASH_DRIFT",
+          "id": "x9",
+          "line": 5
+        },
+        {
+          "level": "warn",
+          "code": "HASH_DRIFT",
+          "id": "c1",
+          "line": 11
+        }
+      ]
     }
   ]
 }

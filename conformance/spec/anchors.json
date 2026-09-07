@@ -50,6 +50,27 @@
           "suffix": ""
         }
       ]
+    },
+    {
+      "name": "a-subhash-marker-produces-no-block-anchor",
+      "note": "SPEC.md §16 mandatory reader rule (v1.6): a tool MUST NOT report a marker carrying the exact `subhash` key as the stay of the block containing it. The key is compared exactly, without segmenting or resolving a child, so a tool that implements neither §5.5 nor §5.6 still applies it. Anchor production is a block-semantic operation, so the child marker contributes no anchor and `b1`'s prefix is the list's body with markers stripped. An unfiltered producer emits a third anchor whose quote is the whole list, which then resolves a child id onto a block.",
+      "document": "- alpha<!-- stay:c1 subhash=sha256:1122 -->\n- beta\n\nFirst plain block.\n<!-- stay:b1 -->\n\nSecond plain block.\n<!-- stay:b2 -->\n",
+      "anchors": [
+        {
+          "id": "b1",
+          "hash": "75eabbbeba48408cb10b80e05c3b8ccf6613cc975be590f19c3d596825e741e5",
+          "quote": "First plain block.",
+          "prefix": "- alpha\n- beta",
+          "suffix": "Second plain block."
+        },
+        {
+          "id": "b2",
+          "hash": "a003e36acc84fa0c3febc8f932bdcf443321dc2a7fcd4709f034469860f4c007",
+          "quote": "Second plain block.",
+          "prefix": "First plain block.",
+          "suffix": ""
+        }
+      ]
     }
   ]
 }

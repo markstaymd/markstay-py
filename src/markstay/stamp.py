@@ -17,7 +17,9 @@ import re
 from dataclasses import dataclass, field
 from typing import Callable, Iterable
 
+from . import lint as _lint
 from .id import ID_CHARSET, mint_id
+
 from .lint import (
     Marker,
     _blank_frontmatter,
@@ -29,8 +31,6 @@ from .lint import (
     rewrite_markers,
     segment_blank_line,
     segment_commonmark,
-    strip_markers,
-    strip_markers_outside_code,
 )
 
 # Default truncation for a freshly written hash (§8 permits any prefix). 12 hex =
@@ -41,24 +41,28 @@ DEFAULT_HASH_LENGTH = 12
 _KEY_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_-]*$")  # §4 attribute key grammar
 _HEX_RE = re.compile(r"^[0-9a-fA-F]+$")
 _PRINTABLE_RE = re.compile(r"^[\x21-\x7e]+$")  # printable ASCII, no space (bare-value)
-# §4 qchar: a value may only contain printable ASCII (0x20-0x7E); `"` and `\` are
-# escaped in the quoted form. Newlines, tabs, other control chars, and non-ASCII
-# are not representable and must be rejected rather than emitted into a marker.
+# §4 reader qchar also admits LF inside a quoted value. The §3.3 writer contract is
+# deliberately narrower: writers emit markers on one line, so this serializer accepts
+# printable ASCII (0x20-0x7E) only and rejects LF, tabs, other controls, and non-ASCII.
 _VALUE_RE = re.compile(r"^[\x20-\x7e]*$")
 
-# Closing delimiter per syntax: a written value must never contain it, or it would
-# terminate the marker early.
-_TERMINATOR = {"html": "-->", "mdx": "*/}"}
-
-# Content-strip: ASCII whitespace at both ends, mirroring JS asciiTrim and the
-# Python reference's parse_document content strip (SPEC.md §5/§8).
-_ASCII_TRIM = " \t\n\r\f\v"
+# Host comment closers are forbidden even inside a quoted value. HTML recognizes
+# both spellings, while JavaScript closes an MDX comment at bare ``*/``.
+_FORBIDDEN = {"html": ("-->", "--!>"), "mdx": ("*/",)}
 
 
 @dataclass
 class StampResult:
     text: str
     minted: list[dict] = field(default_factory=list)  # [{"id":.., "line":..}]
+    drifted: list[str] = field(default_factory=list)
+    # Why the write path declined to change the document, or ``None`` when it did
+    # not decline. A refusal returns the source byte for byte with nothing minted,
+    # which is byte-identical to a document that had nothing to do, so without this
+    # a caller cannot tell "I refused" from "there was nothing to stamp". The
+    # transactional row write (SPEC.md §5.6) refuses on purpose and often, so the
+    # difference is one a pre-commit hook has to be able to see.
+    refused: str | None = None
 
 
 @dataclass
@@ -79,14 +83,15 @@ def format_attr_value(value) -> str:
     whitespace or double quote and is all printable ASCII, otherwise a
     double-quoted string with ``\\`` and ``"`` escaped.
 
-    Raises ``ValueError`` if the value contains a character outside the §4 qchar
-    set (printable ASCII 0x20-0x7E) , a newline or other control character has no
-    representation and would corrupt the marker."""
+    Raises ``ValueError`` if the value falls outside the one-line writer set
+    (printable ASCII 0x20-0x7E). LF is valid reader syntax inside a §4 quoted
+    value, but §3.3 forbids a conforming writer from emitting a multiline marker.
+    """
     s = str(value)
     if not _VALUE_RE.match(s):
         raise ValueError(
-            f"format_attr_value: value {s!r} contains a character outside the §4 "
-            f"qchar set (printable ASCII 0x20-0x7E)"
+            f"format_attr_value: value {s!r} contains a character outside the "
+            f"one-line writer set (printable ASCII 0x20-0x7E)"
         )
     if s and _PRINTABLE_RE.match(s) and '"' not in s:
         return s
@@ -124,11 +129,12 @@ def format_marker(id: str, hash=None, attrs=None, syntax: str = "html") -> str:
         if not _KEY_RE.match(k):
             raise ValueError(f"format_marker: invalid attribute key {k!r}")
         body += f" {k}={format_attr_value(v)}"
-    if _TERMINATOR[syntax] in body:
-        raise ValueError(
-            f"format_marker: a value contains the {syntax} terminator "
-            f"{_TERMINATOR[syntax]!r}, which would break the marker"
-        )
+    for closer in _FORBIDDEN[syntax]:
+        if closer in body:
+            raise ValueError(
+                f"format_marker: a value contains the {syntax} terminator "
+                f"{closer!r}, which would break the marker"
+            )
     return f"{{/* {body} */}}" if syntax == "mdx" else f"<!-- {body} -->"
 
 
@@ -158,6 +164,30 @@ def _default_minter(new_id, length, alphabet, random):
     return lambda: mint_id(**kwargs)
 
 
+def _digest_attribute_span(marker: Marker, key: str):
+    """The first scanner-approved bare ``key=sha256:<hex>`` attribute."""
+    for attribute in marker._attribute_spans:
+        if attribute.key != key or attribute.quoted:
+            continue
+        if not attribute.value.startswith("sha256:"):
+            continue
+        hex_ = attribute.value[len("sha256:") :]
+        if hex_ and _HEX_RE.fullmatch(hex_):
+            return attribute
+    return None
+
+
+def _apply_marker_edits(raw: str, edits: list[tuple[int, int, str]]) -> str:
+    """Apply non-overlapping scanner-relative edits without reparsing marker text."""
+    ordered = sorted(edits)
+    if any(left[1] > right[0] for left, right in zip(ordered, ordered[1:])):
+        raise ValueError("overlapping internal marker edits")
+    out = raw
+    for start, end, replacement in reversed(ordered):
+        out = out[:start] + replacement + out[end:]
+    return out
+
+
 def _segments_for_mode(text: str, mode: str) -> list[tuple[int, str]]:
     """Segment for the write path exactly as :func:`parse_document` does, leading
     frontmatter included: it is blanked line-for-line first, so the write path
@@ -172,6 +202,771 @@ def _segments_for_mode(text: str, mode: str) -> list[tuple[int, str]]:
     if mode == "blank-line":
         return segment_blank_line(text)
     raise ValueError(f"unknown parse mode: {mode!r} (use 'blank-line' or 'commonmark')")
+
+
+def _line_records(line: str):
+    """One-line valid marker records, or ``None`` for an unsafe overlap."""
+    records = [
+        record
+        for record in _lint._scan_marker_records(line)
+        if not record.marker.malformed
+    ]
+    spans = [(record.start, record.end) for record in records]
+    return None if _lint._spans_overlap(spans) else records
+
+
+def _unescaped_delimiters(line: str, records) -> list[int]:
+    """Unescaped pipe positions with complete markers treated as opaque."""
+    positions: list[int] = []
+    backslashes = 0
+    pos = 0
+    record_index = 0
+    while pos < len(line):
+        if record_index < len(records) and pos == records[record_index].start:
+            pos = records[record_index].end
+            record_index += 1
+            backslashes = 0
+            continue
+        char = line[pos]
+        if char == "\\":
+            backslashes += 1
+            pos += 1
+            continue
+        if char == "|" and backslashes % 2 == 0:
+            positions.append(pos)
+        backslashes = 0
+        pos += 1
+    return positions
+
+
+def _remove_line_records(line: str, records) -> str:
+    return _lint._remove_spans(line, [(record.start, record.end) for record in records])
+
+
+def _container_suffix(line: str):
+    """Complete marker suffix after the final delimiter, before legality checks.
+
+    Returns the suffix records, the line they leave behind, and the offset the
+    tail they were scanned in begins at. The caller needs that offset to lift
+    each line-local record back to a full-document span, which is the only form
+    a relocation can be checked in.
+    """
+    records = _line_records(line)
+    if records is None:
+        return None
+    delimiters = _unescaped_delimiters(line, records)
+    if not delimiters:
+        return None
+    final = delimiters[-1]
+    tail = line[final + 1 :]
+    suffix = _line_records(tail)
+    if (
+        suffix is None
+        or not suffix
+        or _remove_line_records(tail, suffix).strip(" \t\f\v")
+    ):
+        return None
+    cleaned = line[: final + 1] + _remove_line_records(tail, suffix)
+    if _lint._row_cells(cleaned) is None:
+        return None
+    return suffix, cleaned, final + 1
+
+
+def _legacy_container_suffix(line: str):
+    """The exact §5.6 migration suffix, or ``None`` when the probe is illegal."""
+    suffix = _container_suffix(line)
+    if suffix is None or any(record.marker.has_subhash for record in suffix[0]):
+        return None
+    return suffix
+
+
+def _block_has_records(block, records) -> bool:
+    available = [(marker.id, marker.raw) for marker in block.markers]
+    for record in records:
+        fact = (record.marker.id, record.marker.raw)
+        if fact not in available:
+            return False
+        available.remove(fact)
+    return True
+
+
+def _line_offsets(text: str) -> list[int]:
+    """The absolute offset at which each LF-split line begins."""
+    offsets = [0]
+    for line in text.split("\n")[:-1]:
+        offsets.append(offsets[-1] + len(line) + 1)
+    return offsets
+
+
+def _dropped_line_spans(text: str, line0s) -> list[tuple[int, int]]:
+    """The spans that delete these lines, each separator claimed exactly once.
+
+    A line is not only its own bytes: dropping one has to take a newline with
+    it, and which one depends on where the line sits. Every line but the last
+    owns the separator that follows it; the last owns the one before it, because
+    there is nothing after it left to join to.
+
+    That is why a run of adjacent lines is ONE span rather than one span each.
+    Take them separately and the two rules collide at the end of a document with
+    no trailing newline: the second-to-last line claims the LF that follows it
+    and the last line claims the LF that precedes it, which is the same byte. The
+    overlapping pair then reads as an ill-formed plan and refuses a stamp that is
+    perfectly legal.
+    """
+    offsets = _line_offsets(text)
+    lines = text.split("\n")
+    spans: list[tuple[int, int]] = []
+    for run in _consecutive_runs(sorted(set(line0s))):
+        first, last = run[0], run[-1]
+        if last + 1 < len(lines):
+            spans.append((offsets[first], offsets[last] + len(lines[last]) + 1))
+        else:
+            spans.append(((offsets[first] - 1) if first else 0, len(text)))
+    return spans
+
+
+def _consecutive_runs(values):
+    """Group a sorted list of line indices into maximal adjacent runs."""
+    run: list[int] = []
+    for value in values:
+        if run and value != run[-1] + 1:
+            yield run
+            run = []
+        run.append(value)
+    if run:
+        yield run
+
+
+def _metadata_lines(text: str) -> set[int]:
+    """The 1-based line numbers of leading frontmatter (SPEC.md §5).
+
+    Derived from :func:`_blank_frontmatter` rather than recognized a second
+    time, so the write path's inventory of identities and the parser's cannot
+    disagree about where metadata ends. The blanking is line-for-line, so a line
+    it changed is a line inside the frontmatter.
+    """
+    return {
+        number
+        for number, (source, blanked) in enumerate(
+            zip(text.split("\n"), _blank_frontmatter(text).split("\n")), 1
+        )
+        if source != blanked
+    }
+
+
+def _active_records(text: str) -> list[_lint._MarkerRecord]:
+    """Every record the scanner reports as ACTIVE in ``text``, malformed ones
+    included, with its exact document span and its exact bytes.
+
+    This is what a relocation has to conserve, and identities are only part of
+    it. A splice that fuses the fragments around a moved marker into
+    `<!-- stay:hash=x -->` writes no identity, because §4 reads a key-first body
+    as a diagnostic rather than a marker. It still turns a lint-clean document
+    into one reporting MALFORMED_MARKER, and a guard that counts only identities
+    cannot see it arrive.
+
+    It reads the document the way :func:`parse_document` does and not the way
+    :func:`find_markers` does. `find_markers` is a grammar primitive and
+    deliberately code-blind: a marker-shaped string inside a fenced code block is
+    content (§3.3) and one inside frontmatter is metadata (§5). Neither is a
+    marker OR a diagnostic, so counting either here makes the guard refuse a
+    relocation whose only crime is moving bytes past one.
+    """
+    blanked = _blank_frontmatter(text)
+    code = code_lines(blanked)
+    metadata = _metadata_lines(text)
+    return [
+        record
+        for record in _lint._scan_marker_records(text)
+        if _lint.marker_outside_code(record.marker, code)
+        and record.marker.line not in metadata
+    ]
+
+
+def _identity_records(text: str) -> list[_lint._MarkerRecord]:
+    """The active records that carry identity: well-formed markers (§4).
+
+    Everything active must SURVIVE an edit; only these are things a document
+    means to address, so only these may be moved.
+    """
+    return [
+        record for record in _active_records(text) if not record.marker.malformed
+    ]
+
+
+# Host comment openers, the two the §4 grammar rides on.
+_COMMENT_OPEN_RE = re.compile(r"<!--|\{/\*")
+
+
+def _mask_metadata(text: str) -> str:
+    """``text`` with leading frontmatter replaced by spaces, offsets kept.
+
+    Comment structure is read on this rather than on the source. Frontmatter is
+    masked because it is YAML: an angle bracket there is a value, not markup, and
+    no reader treats it as a comment.
+
+    **Fenced code is deliberately NOT masked here, though §3.3 masks it for
+    markers.** The two questions are different and only one of them is safe to get
+    wrong. Whether a marker is an identity is settled by the spec's own line-based
+    fence rule, and being generous there costs a refusal. Whether a `<!--` opens a
+    comment is settled by the renderer, whose fence recognition this project does
+    not model: inside a raw HTML block a line of backticks opens nothing, so
+    blanking it hides a live opener and lets an edit re-pair a real comment. That
+    is content silently disappearing, against a document that merely shows an
+    unclosed example inside a listing being refused. Fail closed.
+
+    Spaces rather than empty lines, because every offset here indexes the real
+    document.
+    """
+    metadata = _metadata_lines(text)
+    if not metadata:
+        return text
+    return "\n".join(
+        " " * len(line) if number in metadata else line
+        for number, line in enumerate(text.split("\n"), 1)
+    )
+
+
+def _comment_spans(text: str) -> set[tuple[int, int]]:
+    """Host comment spans, read left to right the way a renderer reads them.
+
+    Each opener takes the FIRST closer after it, which is the rule the §4 scanner
+    already uses, and the next scan resumes after that closer, so the spans do not
+    overlap. An unclosed opener ends the scan: to any reader everything after it
+    is inside the comment, and there is nothing further to pair.
+
+    This is deliberately NOT the marker scanner, which considers every opener
+    independently so that a rejected one cannot swallow a later valid marker. That
+    is the right rule for discovering identities and the wrong one for asking what
+    a reader can see.
+    """
+    spans: set[tuple[int, int]] = set()
+    position = 0
+    while (opener := _COMMENT_OPEN_RE.search(text, position)) is not None:
+        if opener.group(0) == "<!--":
+            closers = [
+                (at, len(closer))
+                for closer in ("-->", "--!>")
+                if (at := text.find(closer, opener.end())) >= 0
+            ]
+            if not closers:
+                break
+            at, width = min(closers)
+            end = at + width
+        else:
+            at = text.find("*/", opener.end())
+            if at < 0:
+                break
+            end = at + (3 if text.startswith("}", at + 2) else 2)
+        spans.add((opener.start(), end))
+        position = end
+    return spans
+
+
+def _records_at(records, spans):
+    """The document records occupying exactly ``spans``, or ``None``.
+
+    A line-local scan can report a marker the document does not have. The tail
+    of a row line is a slice, and a slice beginning inside a longer marker
+    carries no opener of its own, so what is left over can parse as a marker on
+    its own terms. Demanding an exact document span is what stops a probe
+    relocating a piece of something else.
+    """
+    index = {(record.start, record.end): record for record in records}
+    resolved = [index.get(span) for span in spans]
+    return None if any(record is None for record in resolved) else resolved
+
+
+def _resolve_records(records, markers):
+    """Each marker's own document record, one to one, or ``None``.
+
+    Two byte-identical markers on one line are indistinguishable by id and raw
+    text, so a lookup matching on those alone hands both marker objects the SAME
+    record. A caller relocating both then excises one span and re-emits two, and
+    the document gains an occurrence nobody wrote. Consuming each record as it is
+    claimed is what keeps the mapping one to one.
+    """
+    available = list(records)
+    resolved: list[_lint._MarkerRecord] = []
+    for marker in markers:
+        index = next(
+            (
+                position
+                for position, record in enumerate(available)
+                if record.marker.line == marker.line
+                and record.marker.id == marker.id
+                and record.marker.raw == marker.raw
+            ),
+            None,
+        )
+        if index is None:
+            return None
+        resolved.append(available.pop(index))
+    return resolved
+
+
+@dataclass(frozen=True)
+class _Relocation:
+    """A marker relocation stated in full-document byte offsets.
+
+    ``excisions`` are the spans the edit deletes; ``moves`` are the identity
+    records it re-emits, in this order and concatenated after ``prefix``, at
+    ``insert_at``. Every offset indexes the text the plan was built from.
+
+    Stating a probe this way rather than as line surgery is the whole point: it
+    names which occurrence goes where, so :func:`_relocate` can check where each
+    surviving occurrence LANDS instead of only which raw bytes still exist
+    somewhere in the result.
+    """
+
+    excisions: tuple[tuple[int, int], ...]
+    moves: tuple[_lint._MarkerRecord, ...]
+    insert_at: int
+    prefix: str = ""
+
+
+def _relocate(text: str, plan: _Relocation) -> str | None:
+    """Apply ``plan`` if it preserves every marker occurrence, else ``None``.
+
+    The invariant, stated once so the implementation stays free to change under
+    it:
+
+    1. every record the plan moves is resolved to a full-document span, and
+       exactly those records leave their place;
+    2. every record the plan does not move survives, as the same occurrence, at
+       its edit-adjusted position;
+    3. no record appears that the plan did not write, and no record's bytes
+       change, where "record" means everything the scanner reads as active and
+       not only the identities: a fused fragment that reads as a §4 diagnostic
+       is a document the write path has damaged just as surely as an invented id;
+    4. an edit never cuts into a record, and never writes inside one, so the
+       plan describes a set of disjoint splices between records;
+    5. every record it moves is a host comment in its own right, and the
+       document's comment structure is otherwise unchanged, so the edit can
+       neither re-pair an existing comment nor write a new one.
+
+    Rules 1 and 4 are preconditions on the PLAN and are checked before anything
+    is applied. They are not a second opinion on the result: an ill-formed plan
+    is refused rather than applied and then judged, because a prediction of where
+    each record lands is only meaningful once the edits are disjoint and whole.
+
+    Rule 2 is the one a multiset of raw bytes cannot state, and it is where every
+    identity defect this write path has had was hiding. A multiset answers "which
+    markers exist"; a relocation needs "which occurrence survived, and where".
+    The two part company exactly when one marker is destroyed and a
+    byte-identical one is created elsewhere in the same edit: `subhash` marker
+    gone, `subhash` marker back, the count unmoved, §16 rule 1 broken.
+    """
+    if not plan.moves:
+        return None
+    before = _active_records(text)
+    inventory = {(record.start, record.end): record for record in before}
+    # A diagnostic is not an identity and is not the write path's to relocate:
+    # §4 leaves a malformed marker exactly where its author put it.
+    if any(record.marker.malformed for record in plan.moves):
+        return None
+    moved_spans = [(record.start, record.end) for record in plan.moves]
+    # One record named twice is one record removed and two written. The rest of
+    # this function compares SETS of spans, where the second copy is invisible.
+    if len(set(moved_spans)) != len(moved_spans):
+        return None
+    # A move must name the record that is actually at that span. Comparing spans
+    # alone is not enough: a plan carrying a same-span record with different bytes
+    # excises the real one and writes the impostor, and every later check agrees,
+    # because they all read the bytes the PLAN declares. That is the substitution
+    # this function exists to refuse, arriving through its own front door.
+    if any(
+        (source := inventory.get(span)) is None
+        or source.marker.raw != record.marker.raw
+        for span, record in zip(moved_spans, plan.moves)
+    ):
+        return None
+
+    # Rule 5, on the source: a record may only move out of a position where it is
+    # a host comment in its own right. Nested inside another one, its own closer is
+    # what terminates the outer comment, so removing it hands the outer opener a
+    # LATER closer and swallows the text in between. Every byte survives that and
+    # no record changes, which is exactly why no other rule here can see it: what
+    # changes is how much of the document a reader can still see.
+    source_comments = _comment_spans(_mask_metadata(text))
+    if any(span not in source_comments for span in moved_spans):
+        return None
+
+    # Rule 4, on both halves of the edit: an excision takes whole records or none
+    # of one, and the insertion point sits between records rather than inside one.
+    covered: set[tuple[int, int]] = set()
+    for start, end in plan.excisions:
+        if not 0 <= start <= end <= len(text):
+            return None
+        for record in before:
+            if record.end <= start or record.start >= end:
+                continue
+            if record.start < start or record.end > end:
+                return None
+            covered.add((record.start, record.end))
+    if not 0 <= plan.insert_at <= len(text):
+        return None
+    if any(record.start < plan.insert_at < record.end for record in before):
+        return None
+    # Rules 1 and 2 as one comparison: the records this edit destroys are exactly
+    # the records it promises to write back.
+    if covered != set(moved_spans):
+        return None
+
+    written = plan.prefix + "".join(record.marker.raw for record in plan.moves)
+    splices = sorted(
+        [(start, end, "", False) for start, end in plan.excisions]
+        + [(plan.insert_at, plan.insert_at, written, True)],
+        key=lambda splice: (splice[0], splice[1]),
+    )
+    # Overlapping edits have no single well-defined result, so there is nothing
+    # to predict and nothing to compare a prediction against.
+    if any(
+        later[0] < earlier[1] for earlier, later in zip(splices, splices[1:])
+    ):
+        return None
+
+    out: list[str] = []
+    landing = 0
+    source = 0
+    produced = 0
+    for start, end, replacement, is_insertion in splices:
+        out.append(text[source:start])
+        produced += start - source
+        if is_insertion:
+            landing = produced
+        out.append(replacement)
+        produced += len(replacement)
+        source = end
+    out.append(text[source:])
+    result = "".join(out)
+
+    def shift(offset: int) -> int:
+        """Where a source offset outside every splice lands in the result."""
+        return offset + sum(
+            len(replacement) - (end - start)
+            for start, end, replacement, _ in splices
+            if end <= offset
+        )
+
+    landed: list[tuple[int, int, str]] = []
+    position = landing + len(plan.prefix)
+    for record in plan.moves:
+        raw = record.marker.raw
+        landed.append((position, position + len(raw), raw))
+        position += len(raw)
+
+    # Rule 5, on the result: comment structure is conserved, not merely intact
+    # around the records that moved. Checking only the moved records asks whether
+    # THEY are still comments and never asks what the seam left behind: joining
+    # `a<` to `!--secret -->` writes a comment nobody opened, which hides text
+    # while every record stays exactly as independent as it was. The source half
+    # above is what makes this mapping definable; this is the half that checks it.
+    moved_landing = {
+        (record.start, record.end): (start, end)
+        for record, (start, end, _) in zip(plan.moves, landed)
+    }
+    expected_comments: set[tuple[int, int]] = set()
+    for span in source_comments:
+        if span in moved_landing:
+            expected_comments.add(moved_landing[span])
+            continue
+        if any(start < span[1] and span[0] < end for start, end, _, _ in splices):
+            return None  # a comment entangled with the edit: nothing to predict
+        expected_comments.add((shift(span[0]), shift(span[0]) + span[1] - span[0]))
+    if _comment_spans(_mask_metadata(result)) != expected_comments:
+        return None
+
+    expected: list[tuple[int, int, str]] = list(landed)
+    for record in before:
+        if (record.start, record.end) in covered:
+            continue
+        at = shift(record.start)
+        expected.append((at, at + (record.end - record.start), record.marker.raw))
+    expected.sort()
+
+    after = [
+        (record.start, record.end, record.marker.raw)
+        for record in _active_records(result)
+    ]
+    return result if after == expected else None
+
+
+def _probe_legacy_row_suffix(text: str, mode: str) -> str | None:
+    """Relocate legal legacy suffixes, one full-document probe at a time."""
+    work = text
+    for _ in range(len(work.split("\n")) + 1):
+        chunks = _segments_for_mode(work, mode)
+        blocks = {
+            block.line: block
+            for block in parse_document(work, mode=mode, child_blocks=True)
+            if block.index >= 0
+        }
+        lines = work.split("\n")
+        offsets = _line_offsets(work)
+        migrated = False
+        for start, chunk in chunks:
+            block = blocks.get(start)
+            if block is None or any(child.kind == "row" for child in block.children):
+                continue
+            line_number = start + len(chunk.split("\n")) - 1
+            if not 0 < line_number <= len(lines):
+                return None
+            attempted_suffix = _container_suffix(lines[line_number - 1])
+            if attempted_suffix is None:
+                continue
+            suffix = _legacy_container_suffix(lines[line_number - 1])
+            if suffix is None:
+                return None
+            records, _cleaned, tail_start = suffix
+            if not _block_has_records(block, records):
+                return None
+            line_start = offsets[line_number - 1]
+            spans = [
+                (
+                    line_start + tail_start + record.start,
+                    line_start + tail_start + record.end,
+                )
+                for record in records
+            ]
+            moves = _records_at(_identity_records(work), spans)
+            if moves is None:
+                return None
+            probe = _relocate(
+                work,
+                _Relocation(
+                    excisions=tuple(spans),
+                    moves=tuple(moves),
+                    insert_at=line_start + len(lines[line_number - 1]),
+                    prefix="\n",
+                ),
+            )
+            if probe is None:
+                return None
+            candidate = next(
+                (
+                    parsed
+                    for parsed in parse_document(probe, mode=mode, child_blocks=True)
+                    if parsed.index >= 0
+                    and any(
+                        child.kind == "row" and child.line == line_number
+                        for child in parsed.children
+                    )
+                    and _block_has_records(parsed, records)
+                ),
+                None,
+            )
+            if candidate is None or not any(
+                child.kind == "row" and not child.markers
+                for child in candidate.children
+            ):
+                # Not a migration candidate, which is different from an unsafe
+                # one. The relocation itself was checked and cleared above; what
+                # this says is that moving the suffix did not produce a table, so
+                # there was no §5.6 migration here to do. `| a text |<!-- stay:p
+                # -->` is a stamped paragraph that happens to contain pipes.
+                # Refusing the whole document for it reports work withheld when
+                # none was ever available, and a caller reading the refusal (or
+                # the CLI's exit code) is told a document it has nothing to do
+                # with was declined. The probe is discarded and the block skipped.
+                continue
+            work = probe
+            migrated = True
+            break
+        if not migrated:
+            return work
+    return None
+
+
+def _row_bodies(blocks: list) -> list[str]:
+    """Every table row's hash body in the document, in document order.
+
+    The unit a row-container relocation must not disturb. Reading it off an existing
+    parse rather than re-parsing keeps the guard off the quadratic child-attribution
+    path more than once per pass.
+    """
+    return [
+        child.content
+        for block in blocks
+        for child in block.children
+        if child.kind == "row"
+    ]
+
+
+def _prepare_row_containers(text: str, mode: str) -> tuple[str | None, list[str]]:
+    """Move row-container stays and abort on pre-existing container hash drift."""
+    work = _probe_legacy_row_suffix(text, mode)
+    if work is None:
+        return None, []
+    for _ in range(len(work.split("\n")) + 1):
+        parsed = parse_document(work, mode=mode, child_blocks=True)
+        targets = [
+            block
+            for block in parsed
+            if block.index >= 0
+            and any(
+                child.kind == "row" and not child.markers for child in block.children
+            )
+        ]
+        before_row_bodies = _row_bodies(parsed)
+        if not targets:
+            return work, []
+        lines = work.split("\n")
+        offsets = _line_offsets(work)
+        drifted = [
+            marker.id
+            for target in targets
+            for marker in target.markers
+            if marker.id
+            and not marker.malformed
+            and not marker.has_subhash
+            and marker.hash is not None
+            and body_hash(target.content, len(marker.hash)) != marker.hash
+        ]
+        if drifted:
+            return None, list(dict.fromkeys(drifted))
+        relocated = False
+        for target in targets:
+            rows = [child for child in target.children if child.kind == "row"]
+            parent_markers = [
+                marker
+                for marker in target.markers
+                if marker.id and not marker.malformed and not marker.has_subhash
+            ]
+            if not parent_markers:
+                continue
+
+            last_row_line = max(child.line for child in rows)
+            if all(
+                marker.line > last_row_line
+                and marker.line <= len(lines)
+                and _lint._marker_only_line(lines[marker.line - 1])
+                for marker in parent_markers
+            ):
+                continue
+            if not 0 < last_row_line <= len(lines):
+                return None, []
+
+            moves = _resolve_records(_identity_records(work), parent_markers)
+            if moves is None:
+                return None, []
+            grouped: dict[int, list] = {}
+            for record in moves:
+                # A marker whose raw spans lines cannot be re-emitted onto one
+                # carrier line without rewriting the document's line structure
+                # around it, which is more than a relocation is allowed to do.
+                if "\n" in record.marker.raw:
+                    return None, []
+                line0 = record.marker.line - 1
+                if not 0 <= line0 < len(lines):
+                    return None, []
+                grouped.setdefault(line0, []).append(record)
+
+            excisions: list[tuple[int, int]] = []
+            emptied: list[int] = []
+            for line0, group in grouped.items():
+                line_start = offsets[line0]
+                local = [
+                    (record.start - line_start, record.end - line_start)
+                    for record in group
+                ]
+                if any(
+                    start < 0 or end > len(lines[line0]) for start, end in local
+                ):
+                    return None, []
+                # A line the relocation empties must go with its markers. Leaving
+                # it behind as an empty string inserts a §5 block boundary, which
+                # splits the very container being prepared: the relocated stay
+                # then binds to a shorter body and the next pass reports the
+                # tool's own edit as pre-existing container drift.
+                #
+                # Emptiness is decided on what SURVIVES the removal, not on
+                # whether the source line was marker-only. The two differ
+                # whenever a movable parent marker shares its line with a marker
+                # this probe does not move: a `subhash` marker is the case that
+                # matters, and §16 rule 1 requires it to survive the write path
+                # lexically. Asking `_marker_only_line` about the ORIGINAL line
+                # answers yes there, so the line was deleted with a marker on it.
+                if _lint._remove_spans(lines[line0], local).strip(" \t\f\v") == "":
+                    emptied.append(line0)
+                else:
+                    excisions.extend((record.start, record.end) for record in group)
+            excisions.extend(_dropped_line_spans(work, emptied))
+
+            probe = _relocate(
+                work,
+                _Relocation(
+                    excisions=tuple(excisions),
+                    moves=tuple(moves),
+                    insert_at=offsets[last_row_line - 1]
+                    + len(lines[last_row_line - 1]),
+                    prefix="\n",
+                ),
+            )
+            if probe is None:
+                return None, []
+            probe_parsed = parse_document(probe, mode=mode, child_blocks=True)
+            candidate = next(
+                (
+                    block
+                    for block in probe_parsed
+                    if block.index >= 0
+                    and any(child.kind == "row" for child in block.children)
+                    and all(
+                        any(
+                            current.id == marker.id
+                            and current.raw == marker.raw
+                            and not current.has_subhash
+                            for current in block.markers
+                        )
+                        for marker in parent_markers
+                    )
+                ),
+                None,
+            )
+            if candidate is None:
+                return None, []
+            # Relocating a container stay must leave every row's hash body alone,
+            # including rows this pass has no business touching. It normally does:
+            # ``ChildBlock.content`` arrives with markers already cut, so lifting a
+            # marker out of a cell leaves the same body behind. It does not when the
+            # bytes around the marker change meaning once it goes. `a\<!-- stay:p -->|`
+            # becomes `a\|`, where the backslash now escapes the delimiter, and the two
+            # cells either side fuse into one: the row's body changes, so a `subhash`
+            # already stored on that row covers a body that no longer exists. Nothing
+            # downstream catches it. §11's diff sees the child marker still present at
+            # the same id, the container refresh only re-checks children this pass
+            # minted, and a block-level lint of the result is clean, so the document
+            # goes out with row evidence that silently no longer matches.
+            #
+            # The comparison is over the WHOLE document rather than over the candidate,
+            # because the candidate is chosen by matching the parent marker's id and
+            # raw text and a duplicate id (§7, an error, but one `stamp` does not
+            # refuse) makes that match land on the wrong table: the guard would then
+            # compare an untouched table against itself and pass the corrupting write
+            # through. Every row body in the document is the invariant, and a legitimate
+            # relocation changes none of them.
+            if _row_bodies(probe_parsed) != before_row_bodies:
+                return None, []
+            work = probe
+            relocated = True
+            break
+        if not relocated:
+            return work, []
+    return None, []
+
+
+def _row_marker_position(line: str) -> int | None:
+    working = line.rstrip(" \t\f\v")
+    records = _line_records(working)
+    if records is None:
+        return None
+    delimiters = _unescaped_delimiters(working, records)
+    if len(delimiters) < 2:
+        return None
+    start, end = delimiters[-2], delimiters[-1]
+    cell = line[start + 1 : end]
+    return start + 1 + len(cell.rstrip(" \t\f\v"))
 
 
 def stamp(
@@ -197,12 +992,25 @@ def stamp(
 
     ``new_id`` overrides the id factory; otherwise ``length``/``alphabet``/
     ``random`` are forwarded to :func:`mint_id`. Returns a :class:`StampResult`
-    with ``text`` (LF-normalized) and ``minted`` ``[{"id", "line"}]``.
+    with ``text`` and ``minted`` ``[{"id", "line"}]``. Successful output,
+    including a successful no-op, is LF-normalized. A transactional row-write
+    refusal instead returns the original input byte-for-byte, including CRLF.
     """
     if child_blocks and not hash:
         raise ValueError("stamp: child_blocks requires subhash evidence")
 
-    norm = md.replace("\r\n", "\n").replace("\r", "\n")
+    original_norm = md.replace("\r\n", "\n").replace("\r", "\n")
+    norm = original_norm
+    if child_blocks:
+        prepared, drifted = _prepare_row_containers(norm, mode)
+        if prepared is None:
+            return StampResult(
+                text=md,
+                minted=[],
+                drifted=drifted,
+                refused="container-drift" if drifted else "unsafe-relocation",
+            )
+        norm = prepared
     lines = norm.split("\n")
     # SPEC.md §3.3, computed on the blanked text so it agrees line-for-line with
     # what parse_document sees. `open_after` is the writer's half of the rule: a
@@ -221,37 +1029,31 @@ def stamp(
     # each content block's last source line so a marker can be inserted after it.
     needs_stamp: list[dict] = []
     current: dict | None = None
-    parsed_children = (
-        {
-            b.line: b.children
-            for b in parse_document(norm, mode=mode, child_blocks=child_blocks)
-            if b.index >= 0
-        }
-        if child_blocks
-        else {}
-    )
+    parsed_blocks = {
+        b.line: b
+        for b in parse_document(norm, mode=mode, child_blocks=child_blocks)
+        if b.index >= 0
+    }
     for start, chunk in _segments_for_mode(norm, mode):
-        content = strip_markers_outside_code(
-            chunk, code, line_offset=start - 1
-        ).strip(_ASCII_TRIM)
-        chunk_markers = [
-            mk
-            for mk in find_markers(chunk, line_offset=start - 1)
-            if mk.line not in code  # §3.3: an example never stamps its block
-        ]
-        # SPEC.md §16: a marker carrying `subhash` addresses a list item, so it never
-        # makes the block around it stamped. Unconditional, exactly as the write-path
-        # rule above it is: a run that did not recognise a child still has to leave the
-        # container stampable, or a child-stamped list never gets a stay of its own and
-        # every child in it resolves through §9.2 tier 4 on weaker evidence.
-        has_id = any(
-            mk.id and not mk.malformed and mk.subhash is None for mk in chunk_markers
-        )
-        if content != "":
+        parsed_block = parsed_blocks.get(start)
+        if parsed_block is not None:
+            content = parsed_block.content
+            # §16 is exact-key based. An invalid or quoted `subhash` still cannot
+            # make its containing block look stamped; `x-subhash` still can.
+            has_id = any(
+                mk.id and not mk.malformed and not mk.has_subhash
+                for mk in parsed_block.markers
+            )
             n_lines = len(chunk.split("\n"))
             children = []
+            row_lines: set[int] = set()
             if child_blocks:
-                for child in parsed_children.get(start, []):
+                row_lines = {
+                    child.marker_line - 1
+                    for child in parsed_block.children
+                    if child.kind == "row" and child.marker_line > 0
+                }
+                for child in parsed_block.children:
                     if child.marker_line <= 0:
                         continue
                     children.append(
@@ -261,6 +1063,7 @@ def stamp(
                             "has_id": any(
                                 mk.id and not mk.malformed for mk in child.markers
                             ),
+                            "kind": child.kind,
                         }
                     )
             current = {
@@ -268,6 +1071,8 @@ def stamp(
                 "content": content,
                 "has_id": has_id,
                 "children": children,
+                "row_lines": row_lines,
+                "row_last_line0": max(row_lines) if row_lines else None,
                 # §3.3 writer rule, in the two halves it actually has. A block
                 # is refused when a fence was already open *before* its first
                 # line (its span lies inside a listing), or when one is still
@@ -284,17 +1089,21 @@ def stamp(
                 or (start + n_lines - 1) in fence_open_after,
             }
             needs_stamp.append(current)
-        elif current is not None:
-            # marker-only chunk: its id (if any) identifies the preceding block
-            if has_id:
-                current["has_id"] = True
 
     insert_after: dict[int, str] = {}
     append_inline: dict[int, list[str]] = {}
+    row_inline: dict[int, str] = {}
     minted: list[dict] = []
+    expected_children: list[tuple[str, str]] = []
+    expected_parents: list[str] = []
     for blk in needs_stamp:
         for child in blk["children"]:
             if child["has_id"] or (child["marker_line0"] + 1) in code:
+                continue
+            if child["kind"] == "list" and child["marker_line0"] in blk["row_lines"]:
+                # A list paragraph and a nested row can nominate the same source
+                # line. The row carrier is inside its last cell; appending the list
+                # marker after the closing pipe would invalidate the table.
                 continue
             new = next_id()
             hex_ = body_hash(child["content"], hash_length)
@@ -303,22 +1112,35 @@ def stamp(
                 attrs=[("subhash", f"sha256:{hex_}")],
                 syntax=syntax,
             )
-            append_inline.setdefault(child["marker_line0"], []).append(marker)
+            if child["kind"] == "row":
+                row_inline[child["marker_line0"]] = marker
+            else:
+                append_inline.setdefault(child["marker_line0"], []).append(marker)
             minted.append({"id": new, "line": child["marker_line0"] + 1})
+            expected_children.append((new, child["kind"]))
         if blk["has_id"] or blk["in_fence"]:
             continue
         new = next_id()
         hex_ = body_hash(blk["content"], hash_length) if hash else None
-        insert_after[blk["last_line0"]] = format_marker(
-            id=new, hash=hex_, syntax=syntax
+        carrier_line0 = (
+            blk["row_last_line0"]
+            if blk["row_last_line0"] is not None
+            else blk["last_line0"]
         )
-        minted.append({"id": new, "line": blk["last_line0"] + 1})
+        insert_after[carrier_line0] = format_marker(id=new, hash=hex_, syntax=syntax)
+        minted.append({"id": new, "line": carrier_line0 + 1})
+        expected_parents.append(new)
 
-    if not insert_after and not append_inline:
+    if not insert_after and not append_inline and not row_inline:
         return StampResult(text=norm, minted=[])
 
     out: list[str] = []
     for i, line in enumerate(lines):
+        if i in row_inline:
+            position = _row_marker_position(line)
+            if position is None:
+                return StampResult(text=md, minted=[], refused="no-row-carrier")
+            line = line[:position] + row_inline[i] + line[position:]
         if i in append_inline:
             for marker in append_inline[i]:
                 if line and not line.endswith((" ", "\t", "\f", "\v")):
@@ -327,7 +1149,42 @@ def stamp(
         out.append(line)
         if i in insert_after:
             out.append(insert_after[i])
-    return StampResult(text="\n".join(out), minted=minted)
+    proposal = "\n".join(out)
+
+    # Row writes and any provisional container relocation commit only after the
+    # complete proposed document passes the selected segmenter and §5.6 scan.
+    if child_blocks and (row_inline or norm != original_norm):
+        proposed_blocks = [
+            block
+            for block in parse_document(proposal, mode=mode, child_blocks=True)
+            if block.index >= 0
+        ]
+        for child_id, kind in expected_children:
+            hits = [
+                child
+                for block in proposed_blocks
+                for child in block.children
+                if child.kind == kind
+                and any(marker.id == child_id for marker in child.markers)
+            ]
+            if len(hits) != 1:
+                return StampResult(text=md, minted=[], refused="child-not-addressable")
+        for parent_id in expected_parents:
+            hits = [
+                (block, marker)
+                for block in proposed_blocks
+                for marker in block.markers
+                if marker.id == parent_id and not marker.has_subhash
+            ]
+            if len(hits) != 1:
+                return StampResult(text=md, minted=[], refused="parent-not-addressable")
+            block, marker = hits[0]
+            if (
+                marker.hash is not None
+                and body_hash(block.content, len(marker.hash)) != marker.hash
+            ):
+                return StampResult(text=md, minted=[], refused="proposal-drifts")
+    return StampResult(text=proposal, minted=minted)
 
 
 def restamp(
@@ -357,7 +1214,12 @@ def restamp(
         if b.index < 0:
             continue
         for mk in b.markers:
-            if mk.id and not mk.malformed and mk.id not in content_by_id:
+            if (
+                mk.id
+                and not mk.malformed
+                and not mk.has_subhash
+                and mk.id not in content_by_id
+            ):
                 content_by_id[mk.id] = b.content
         if child_blocks:
             for child in b.children:
@@ -376,17 +1238,22 @@ def restamp(
             now = body_hash(content, length)
             if now == mk.subhash:
                 return None
+            attribute = _digest_attribute_span(mk, "subhash")
+            if attribute is None:
+                return None
             refreshed.append(mk.id)
-            # Same whitespace boundary as the read-path SUBHASH_RE. A word boundary
-            # here would rewrite the value of a §4 custom key ending in the reserved
-            # one (`x-subhash`) and leave the real `subhash` untouched, which is both
-            # halves of the defect at once.
-            return re.sub(
-                r"(?<![^\s])subhash\s*=\s*sha256:[0-9a-fA-F]+",
-                f"subhash=sha256:{now}",
+            return _apply_marker_edits(
                 mk.raw,
-                count=1,
+                [
+                    (
+                        attribute.value_start + len("sha256:"),
+                        attribute.value_end,
+                        now,
+                    )
+                ],
             )
+        if mk.has_subhash and mk.id not in child_content_by_id:
+            return None
         if mk.id not in content_by_id:
             return None
         content = content_by_id[mk.id]
@@ -395,18 +1262,22 @@ def restamp(
             now = body_hash(content, length)
             if now == mk.hash:
                 return None  # unchanged at this precision
+            attribute = _digest_attribute_span(mk, "hash")
+            if attribute is None:
+                return None
             refreshed.append(mk.id)
-            # The whitespace boundary mirrors the read-path HASH_RE: without it the
-            # sub false-matches the `hash` inside a custom key (`rehash`, `x-hash`) and
-            # corrupts a §4-preserved key.
-            return re.sub(
-                r"(?<![^\s])hash\s*=\s*sha256:[0-9a-fA-F]+",
-                f"hash=sha256:{now}",
+            return _apply_marker_edits(
                 mk.raw,
-                count=1,
+                [
+                    (
+                        attribute.value_start + len("sha256:"),
+                        attribute.value_end,
+                        now,
+                    )
+                ],
             )
         if add_missing:
-            if mk.subhash is not None:
+            if mk.has_subhash:
                 # SPEC.md §5.5: a marker carrying `subhash` addresses a child
                 # block and never the container, so the container's digest must
                 # not be added beside it. The guard is unconditional rather than
@@ -418,9 +1289,12 @@ def restamp(
             now = body_hash(
                 content, hash_length if hash_length is not None else DEFAULT_HASH_LENGTH
             )
+            if mk._id_span is None:
+                return None
             refreshed.append(mk.id)
-            return re.sub(
-                r"(stay:\s*[A-Za-z0-9_-]+)", rf"\1 hash=sha256:{now}", mk.raw, count=1
+            return _apply_marker_edits(
+                mk.raw,
+                [(mk._id_span[1], mk._id_span[1], f" hash=sha256:{now}")],
             )
         return None
 
@@ -498,20 +1372,21 @@ def repair_duplicates(
         if not mk.id:
             return None
         raw = mk.raw
-        changed = False
+        edits: list[tuple[int, int, str]] = []
         if mk.id in dup:
             c = seen.get(mk.id, 0) + 1
             seen[mk.id] = c
             if c > 1:
                 fresh = next_id()
                 renamed.append({"from": mk.id, "to": fresh})
-                raw = re.sub(r"stay:\s*[A-Za-z0-9_-]+", f"stay:{fresh}", raw, count=1)
-                changed = True
-        if child_blocks and mk.subhash is not None and mk.id in injected and mk.hash:
-            raw = re.sub(r"\s+hash\s*=\s*sha256:[0-9a-fA-F]+", "", raw, count=1)
-            cleaned.append(mk.id)
-            changed = True
-        return raw if changed else None
+                if mk._id_span is not None:
+                    edits.append((mk._id_span[0], mk._id_span[1], fresh))
+        if child_blocks and mk.has_subhash and mk.id in injected and mk.hash:
+            attribute = _digest_attribute_span(mk, "hash")
+            if attribute is not None:
+                edits.append((attribute.start, attribute.end, ""))
+                cleaned.append(mk.id)
+        return _apply_marker_edits(raw, edits) if edits else None
 
     return RepairResult(
         text=rewrite_markers(norm, transform, code_lines(_blank_frontmatter(norm))),

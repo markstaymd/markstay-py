@@ -93,11 +93,13 @@ def test_format_marker_rejects_bad_id_nonhex_hash_and_terminators():
     with pytest.raises(ValueError):
         M.format_marker("ok", attrs={"x-k": "a-->b"})
     with pytest.raises(ValueError):
-        M.format_marker("ok", attrs={"x-k": "a*/}b"}, syntax="mdx")
+        M.format_marker("ok", attrs={"x-k": "a--!>b"})
+    with pytest.raises(ValueError):
+        M.format_marker("ok", attrs={"x-k": "a*/b"}, syntax="mdx")
 
 
-def test_format_attr_value_rejects_chars_outside_qchar_set():
-    # §4 qchar is printable ASCII only; newline/tab/control/non-ASCII have no form
+def test_format_attr_value_rejects_chars_outside_one_line_writer_set():
+    # §4 readers accept LF in quoted values, but §3.3 writers emit one-line markers.
     with pytest.raises(ValueError):
         M.format_marker("x", attrs={"x-v": "line\nbreak"})
     with pytest.raises(ValueError):
@@ -280,6 +282,32 @@ def test_restamp_add_missing_gives_hashless_marker_a_hash():
     assert mk.hash == M.body_hash("Body text.", 12)
 
 
+def test_restamp_rewrites_real_hash_not_hash_text_in_quoted_extension():
+    md = (
+        'Edited body.\n<!-- stay:block x-note=" hash=sha256:beef" '
+        "hash=sha256:dead -->"
+    )
+    result = M.restamp(md)
+    marker = M.find_markers(result.text)[0]
+    assert result.refreshed == ["block"]
+    assert 'x-note=" hash=sha256:beef"' in result.text
+    assert marker.hash == M.body_hash("Edited body.", 4)
+
+
+def test_restamp_rewrites_real_subhash_not_subhash_text_in_quoted_extension():
+    md = (
+        '- Edited item <!-- stay:child x-note=" subhash=sha256:beef" '
+        "subhash=sha256:dead -->\n<!-- stay:parent -->\n"
+    )
+    result = M.restamp(md, child_blocks=True)
+    block = M.parse_document(result.text, child_blocks=True)[0]
+    child = block.children[0]
+    marker = child.markers[0]
+    assert result.refreshed == ["child"]
+    assert 'x-note=" subhash=sha256:beef"' in result.text
+    assert marker.subhash == M.body_hash(child.content, 4)
+
+
 # --- repair_duplicates (§7) -----------------------------------------------
 
 
@@ -317,3 +345,30 @@ def test_repair_duplicates_reminted_id_never_collides():
     proposals = iter(["taken", "ok1"])  # first proposal clashes, must be skipped
     res = M.repair_duplicates(md, new_id=lambda: next(proposals))
     assert res.renamed == [{"from": "dup", "to": "ok1"}]
+
+
+def test_repair_duplicate_rewrites_real_id_not_stay_text_in_quoted_extension():
+    md = "One.\n<!-- stay:dup -->\n\n" 'Two.\n<!-- stay:dup x-note="stay:dup" -->\n'
+    result = M.repair_duplicates(md, new_id=lambda: "fresh")
+    assert result.renamed == [{"from": "dup", "to": "fresh"}]
+    assert [marker.id for marker in M.find_markers(result.text)] == ["dup", "fresh"]
+    assert 'x-note="stay:dup"' in result.text
+
+
+def test_repair_cleanup_removes_real_hash_not_hash_text_in_quoted_extension():
+    template = (
+        '- Alpha <!-- stay:child x-note=" hash=sha256:beef" {hash_attr}'
+        "subhash=bogus -->\n<!-- stay:parent -->\n"
+    )
+    base = template.format(hash_attr="")
+    container = M.parse_document(base, child_blocks=True)[0]
+    contaminated = template.format(
+        hash_attr=f"hash=sha256:{M.body_hash(container.content)} "
+    )
+    result = M.repair_duplicates(contaminated, child_blocks=True)
+    child_marker = next(
+        marker for marker in M.find_markers(result.text) if marker.id == "child"
+    )
+    assert result.cleaned == ["child"]
+    assert child_marker.hash is None
+    assert 'x-note=" hash=sha256:beef"' in result.text

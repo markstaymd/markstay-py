@@ -151,12 +151,12 @@
       "name": "markers-009"
     },
     {
-      "text": "<!-- stay:multi\nhash=sha256:cafe -->",
+      "text": "<!-- stay:multi x-note=\"line one\nline two\" hash=sha256:cafe -->",
       "markers": [
         {
           "id": "multi",
           "hash": "cafe",
-          "raw": "<!-- stay:multi\nhash=sha256:cafe -->",
+          "raw": "<!-- stay:multi x-note=\"line one\nline two\" hash=sha256:cafe -->",
           "syntax": "html",
           "line": 1,
           "malformed": false

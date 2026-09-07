@@ -1,5 +1,6 @@
 """Cross-implementation conformance: run the shared language-neutral corpus
-(conformance/spec/ + conformance/gen/) against this package.
+(conformance/spec/ + conformance/gen/, plus the optional conformance/rows/
+profile this package advertises) against this package.
 
 The corpus is shared with the JavaScript reference (`markstay` on npm), whose
 runner asserts the same vectors against the JS implementation. Together they are
@@ -24,6 +25,7 @@ from pathlib import Path
 import pytest
 
 import markstay as M
+from markstay import lint as _lint
 from markstay import quote as Q
 
 CORPUS = Path(__file__).resolve().parent.parent / "conformance"
@@ -271,34 +273,136 @@ def v_check(v):
     return approx(got, v["expected"]), f"got={got}"
 
 
+def v_rows(v) -> tuple[bool, str]:
+    """SPEC.md §5.6 table-row identity: the optional `rows` profile.
+
+    One category with three operation shapes, because row identity is not one
+    function: recognition and attachment (`children`), the transactional write
+    path with its migration probe (`stamp`), and §9.2 child recovery
+    (`resolve`). Splitting them would let a runner advertise the profile while
+    implementing only the half it found easy.
+    """
+    op = v["op"]
+    if op == "children":
+        mode = v.get("mode", "blank-line")
+        blocks = [
+            b for b in M.parse_document(v["doc"], mode=mode, child_blocks=True)
+            if b.index >= 0
+        ]
+        got = {
+            "blockIds": sorted(_lint._id_index(blocks)),
+            "childIds": sorted(_lint._child_id_index(blocks)),
+            "rows": [
+                {"container": b.index, "ordinal": c.ordinal, "body": c.content,
+                 "ids": [mk.id for mk in c.markers]}
+                for b in blocks for c in b.children if c.kind == "row"
+            ],
+        }
+    elif op == "stamp":
+        ids = iter(v["ids"])
+        r = M.stamp(v["doc"], child_blocks=True, new_id=lambda: next(ids))
+        got = {"text": r.text, "minted": r.minted, "drifted": list(r.drifted)}
+    elif op == "resolve":
+        mode = v.get("mode", "blank-line")
+        resolved = M.resolve_children(
+            M.build_child_anchors(v["before"], mode=mode), v["after"], mode=mode
+        )
+        got = {k: {"method": r.method, "target": r.target}
+               for k, r in sorted(resolved.items())}
+    else:
+        return False, f"unknown rows op: {op!r}"
+    return approx(got, v["expected"]), f"got={got}"
+
+
 VERIFIERS = {
     "hash": v_hash, "markers": v_markers, "parse": v_parse, "lint": v_lint,
     "diff": v_diff, "seqmatch": v_seqmatch, "score": v_score, "resolve": v_resolve,
     "stamp": v_stamp, "mint": v_mint, "preserve": v_preserve, "check": v_check,
-    "anchors": v_anchors,
+    "anchors": v_anchors, "rows": v_rows,
 }
+
+# Optional profiles a corpus file may declare with a top-level `profile` key.
+# Every full runner knows the whole set; each advertises only what it
+# implements. A profile this runner has never HEARD of is a failure rather than
+# a skip, so a category added to the corpus without touching the runners cannot
+# pass as silence. This package implements SPEC.md §5.6, so it advertises
+# `rows`; the JavaScript and Rust references decline it and run the core alone.
+KNOWN_PROFILES = {"rows"}
+ADVERTISED_PROFILES = {"rows"}
+PROFILE_CATEGORIES = {"rows": "rows"}
+CORE_VECTORS = 420
+# Advertised profiles are pinned too. A count that is only reported cannot
+# catch a vector going missing, because the denominator shrinks with it.
+PROFILE_VECTORS = {"rows": 23}
 
 
 # --- discover every vector at collection time -----------------------------
 
 def _load_vectors():
-    files = sorted((CORPUS / "spec").glob("*.json")) + sorted((CORPUS / "gen").glob("*.json"))
+    files = (
+        sorted((CORPUS / "spec").glob("*.json"))
+        + sorted((CORPUS / "gen").glob("*.json"))
+        + sorted((CORPUS / "rows").glob("*.json"))
+    )
     cases = []
+    unknown: list[str] = []
+    core = 0
+    profiles: dict[str, int] = {}
     for path in files:
         data = json.loads(path.read_text())
         category = data["category"]
         tier = path.parent.name
+        profile = data.get("profile")
+        if profile is not None and profile not in KNOWN_PROFILES:
+            unknown.append(f"{tier}/{path.name}:{profile}")
+            continue
+        if profile is not None and profile not in ADVERTISED_PROFILES:
+            continue
+        if profile is None:
+            core += len(data["vectors"])
+        else:
+            profiles[profile] = profiles.get(profile, 0) + len(data["vectors"])
         for i, vec in enumerate(data["vectors"]):
             name = vec.get("name", str(i))
             cases.append(pytest.param(category, vec, id=f"{tier}/{category}:{name}"))
-    return cases
+    return cases, unknown, core, profiles
 
 
-VECTORS = _load_vectors()
+VECTORS, UNKNOWN_PROFILES, CORE_COUNT, PROFILE_COUNTS = _load_vectors()
 
 
 def test_corpus_present():
     assert VECTORS, f"no corpus files found under {CORPUS}/spec or {CORPUS}/gen"
+
+
+def test_no_unknown_profile():
+    """A new optional profile must be added to KNOWN_PROFILES, then advertised or
+    deliberately declined. Silently skipping one is the failure this asserts."""
+    assert not UNKNOWN_PROFILES, (
+        f"corpus files declare profiles this runner has never heard of: "
+        f"{UNKNOWN_PROFILES}"
+    )
+
+
+def test_core_vector_count():
+    """Declining an optional profile is conforming (§16 keeps child segmentation
+    optional). Running fewer than every core vector is not, and a count is the
+    only thing that notices a whole file dropping out of collection."""
+    assert CORE_COUNT == CORE_VECTORS
+
+
+def test_advertised_profile_vector_count():
+    """An advertised profile is run, so its inventory is pinned like the core's.
+    Declining a profile stays conforming; quietly running 22 of its 23 vectors and
+    reporting success is the failure this notices."""
+    assert set(PROFILE_VECTORS) == ADVERTISED_PROFILES, (
+        "every advertised profile must declare a count; reading the declaration "
+        "with .get() and skipping a missing one reinstates the hole this closes"
+    )
+    for profile in sorted(ADVERTISED_PROFILES):
+        assert PROFILE_COUNTS.get(profile, 0) == PROFILE_VECTORS[profile], (
+            f"{profile} profile vector count"
+        )
 
 
 def test_every_verifier_has_vectors():
@@ -307,7 +411,11 @@ def test_every_verifier_has_vectors():
     is the failure class this project exists to catch, so a category missing from
     the vendored corpus fails here rather than passing quietly."""
     seen = {case.values[0] for case in VECTORS}
-    missing = sorted(set(VERIFIERS) - seen)
+    expected = {
+        c for c in VERIFIERS
+        if PROFILE_CATEGORIES.get(c) in (None, *ADVERTISED_PROFILES)
+    }
+    missing = sorted(expected - seen)
     assert not missing, f"verifiers with no vectors in {CORPUS}: {missing}"
 
 

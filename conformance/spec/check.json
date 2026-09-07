@@ -14,7 +14,12 @@
         }
       ],
       "expected": {
-        "pairings": [{ "path": "a.md", "baseline": "a.md" }],
+        "pairings": [
+          {
+            "path": "a.md",
+            "baseline": "a.md"
+          }
+        ],
         "reports": [],
         "notes": [],
         "hasErrors": false
@@ -32,7 +37,12 @@
         }
       ],
       "expected": {
-        "pairings": [{ "path": "new.md", "baseline": "old.md" }],
+        "pairings": [
+          {
+            "path": "new.md",
+            "baseline": "old.md"
+          }
+        ],
         "reports": [],
         "notes": [],
         "hasErrors": false
@@ -57,13 +67,28 @@
         }
       ],
       "expected": {
-        "pairings": [{ "path": "new.md", "baseline": "old.md" }],
+        "pairings": [
+          {
+            "path": "new.md",
+            "baseline": "old.md"
+          }
+        ],
         "reports": [
           {
             "label": "new.md (baseline old.md)",
             "findings": [
-              { "level": "error", "code": "DROPPED_ID", "id": "b", "line": null },
-              { "level": "warn", "code": "HASH_DRIFT", "id": "a", "line": null }
+              {
+                "level": "error",
+                "code": "DROPPED_ID",
+                "id": "b",
+                "line": null
+              },
+              {
+                "level": "warn",
+                "code": "HASH_DRIFT",
+                "id": "a",
+                "line": null
+              }
             ]
           }
         ],
@@ -97,7 +122,12 @@
         }
       ],
       "expected": {
-        "pairings": [{ "path": "merged.md", "baseline": "two.md" }],
+        "pairings": [
+          {
+            "path": "merged.md",
+            "baseline": "two.md"
+          }
+        ],
         "reports": [],
         "notes": [
           "one.md: deleted with 1 stay(s) that no staged file carries (a)"
@@ -132,8 +162,14 @@
       ],
       "expected": {
         "pairings": [
-          { "path": "first.md", "baseline": "old.md" },
-          { "path": "second.md", "baseline": null }
+          {
+            "path": "first.md",
+            "baseline": "old.md"
+          },
+          {
+            "path": "second.md",
+            "baseline": null
+          }
         ],
         "reports": [],
         "notes": [
@@ -162,14 +198,25 @@
       ],
       "expected": {
         "pairings": [
-          { "path": "a.md", "baseline": "a.md" },
-          { "path": "b.md", "baseline": "b.md" }
+          {
+            "path": "a.md",
+            "baseline": "a.md"
+          },
+          {
+            "path": "b.md",
+            "baseline": "b.md"
+          }
         ],
         "reports": [
           {
             "label": "b.md",
             "findings": [
-              { "level": "info", "code": "NEW_ID", "id": "b", "line": null }
+              {
+                "level": "info",
+                "code": "NEW_ID",
+                "id": "b",
+                "line": null
+              }
             ]
           }
         ],
@@ -211,12 +258,22 @@
         }
       ],
       "expected": {
-        "pairings": [{ "path": "new.md", "baseline": null }],
+        "pairings": [
+          {
+            "path": "new.md",
+            "baseline": null
+          }
+        ],
         "reports": [
           {
             "label": "new.md",
             "findings": [
-              { "level": "error", "code": "MALFORMED_MARKER", "id": null, "line": 2 }
+              {
+                "level": "error",
+                "code": "MALFORMED_MARKER",
+                "id": null,
+                "line": 2
+              }
             ]
           }
         ],
@@ -236,7 +293,12 @@
         }
       ],
       "expected": {
-        "pairings": [{ "path": "copy.md", "baseline": null }],
+        "pairings": [
+          {
+            "path": "copy.md",
+            "baseline": null
+          }
+        ],
         "reports": [],
         "notes": [],
         "hasErrors": false
@@ -274,7 +336,12 @@
         }
       ],
       "expected": {
-        "pairings": [{ "path": "notes.md", "baseline": null }],
+        "pairings": [
+          {
+            "path": "notes.md",
+            "baseline": null
+          }
+        ],
         "reports": [],
         "notes": [],
         "hasErrors": false
@@ -307,7 +374,9 @@
     },
     {
       "name": "scope-narrows-reports-but-not-whole-commit-pairing",
-      "scope": ["other.md"],
+      "scope": [
+        "other.md"
+      ],
       "entries": [
         {
           "status": "M",
@@ -326,14 +395,66 @@
       ],
       "expected": {
         "pairings": [
-          { "path": "a.md", "baseline": "a.md" },
-          { "path": "other.md", "baseline": "other.md" }
+          {
+            "path": "a.md",
+            "baseline": "a.md"
+          },
+          {
+            "path": "other.md",
+            "baseline": "other.md"
+          }
         ],
         "reports": [
           {
             "label": "other.md",
             "findings": [
-              { "level": "warn", "code": "HASH_DRIFT", "id": "c", "line": null }
+              {
+                "level": "warn",
+                "code": "HASH_DRIFT",
+                "id": "c",
+                "line": null
+              }
+            ]
+          }
+        ],
+        "notes": [],
+        "hasErrors": false
+      }
+    },
+    {
+      "name": "a-subhash-id-neither-pairs-a-baseline-nor-goes-missing",
+      "note": "SPEC.md §16 mandatory reader rule (v1.6): a tool MUST NOT report a marker carrying the exact `subhash` key as the stay of the block containing it. The key is compared exactly, without segmenting or resolving a child, so a tool that implements neither §5.5 nor §5.6 still applies it. Staged pairing and loss reporting both run off the block id index. `old.md` is deleted and `new.md` added; the pairing is carried by `keep`. `c1` leaves the tree with the list, and an unfiltered index reports it lost, which fails a commit over a block stay that never existed.",
+      "entries": [
+        {
+          "status": "D",
+          "src": "old.md",
+          "dst": "old.md",
+          "before": "Body text.\n<!-- stay:keep hash=sha256:0000 -->\n\n- alpha<!-- stay:c1 subhash=sha256:1122 -->\n- beta\n"
+        },
+        {
+          "status": "A",
+          "src": "new.md",
+          "dst": "new.md",
+          "after": "Body text.\n<!-- stay:keep hash=sha256:0000 -->\n"
+        }
+      ],
+      "expected": {
+        "pairings": [
+          {
+            "path": "new.md",
+            "baseline": "old.md"
+          }
+        ],
+        "reports": [
+          {
+            "label": "new.md (baseline old.md)",
+            "findings": [
+              {
+                "level": "warn",
+                "code": "HASH_DRIFT",
+                "id": "keep",
+                "line": 2
+              }
             ]
           }
         ],

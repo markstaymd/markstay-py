@@ -831,7 +831,7 @@
     },
     {
       "name": "marker-opening-outside-a-fence-and-closing-inside-it",
-      "doc": "Intro. <!-- stay:live\n```txt\nlisting -->\nmore\n```\n",
+      "doc": "Intro. <!-- stay:live x-note=\"start\n```txt\nlisting\" -->\nmore\n```\n",
       "relation": "diverges",
       "note": "Two causes stacked, and the segmentation one comes first: a fence touching a paragraph with no blank line between them is already outside §5.4's agreement subset, so the tree splits where blank-line segmentation joins. On top of that §3.3 judges the crossing marker by the line it OPENS on, which is outside the fence, so the string core reads it as a marker and removing it takes the listing bytes its span covers.",
       "blocks": [
@@ -848,12 +848,12 @@
     },
     {
       "name": "marker-opening-inside-a-fence-and-closing-outside-it",
-      "doc": "```txt\n<!-- stay:demo\nlisting\n```\nstill the body -->\nAfter.\n",
+      "doc": "```txt\n<!-- stay:demo x-note=\"start\nlisting\n```\nstill the body\" -->\nAfter.\n",
       "relation": "diverges",
       "note": "The mirror of the case above, crossing the other way: the marker opens inside the fence, so §3.3 makes it content and the whole span stays in the body. The tree splits at the closing fence for the same no-blank-line reason.",
       "blocks": [
         {
-          "content": "```txt\n<!-- stay:demo\nlisting\n```\nstill the body -->\nAfter.",
+          "content": "```txt\n<!-- stay:demo x-note=\"start\nlisting\n```\nstill the body\" -->\nAfter.",
           "index": 0,
           "ids": [],
           "line": 1,

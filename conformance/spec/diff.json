@@ -7,7 +7,11 @@
       "before": "A.\n<!-- stay:a -->\n\nB.\n<!-- stay:b -->\n",
       "after": "A.\n<!-- stay:a -->\n\nB rewritten without its marker.\n",
       "findings": [
-        { "level": "error", "code": "DROPPED_ID", "id": "b" }
+        {
+          "level": "error",
+          "code": "DROPPED_ID",
+          "id": "b"
+        }
       ]
     },
     {
@@ -15,7 +19,11 @@
       "before": "A.\n<!-- stay:a -->\n",
       "after": "A.\n<!-- stay:a -->\n\nCopy of A.\n<!-- stay:a -->\n",
       "findings": [
-        { "level": "error", "code": "DUPLICATED_ID", "id": "a" }
+        {
+          "level": "error",
+          "code": "DUPLICATED_ID",
+          "id": "a"
+        }
       ]
     },
     {
@@ -23,7 +31,11 @@
       "before": "A.\n<!-- stay:a -->\n",
       "after": "A.\n<!-- stay:a -->\n\nBrand new block.\n<!-- stay:c -->\n",
       "findings": [
-        { "level": "info", "code": "NEW_ID", "id": "c" }
+        {
+          "level": "info",
+          "code": "NEW_ID",
+          "id": "c"
+        }
       ]
     },
     {
@@ -31,8 +43,16 @@
       "before": "Alpha content.\n<!-- stay:aaa -->\n\nBeta content.\n<!-- stay:bbb -->\n",
       "after": "Beta content.\n<!-- stay:aaa -->\n\nAlpha content.\n<!-- stay:bbb -->\n",
       "findings": [
-        { "level": "error", "code": "RELOCATED_ID", "id": "aaa" },
-        { "level": "error", "code": "RELOCATED_ID", "id": "bbb" }
+        {
+          "level": "error",
+          "code": "RELOCATED_ID",
+          "id": "aaa"
+        },
+        {
+          "level": "error",
+          "code": "RELOCATED_ID",
+          "id": "bbb"
+        }
       ]
     },
     {
@@ -40,7 +60,11 @@
       "before": "Alpha content.\n<!-- stay:aaa -->\n",
       "after": "Alpha content, now revised.\n<!-- stay:aaa -->\n",
       "findings": [
-        { "level": "warn", "code": "HASH_DRIFT", "id": "aaa" }
+        {
+          "level": "warn",
+          "code": "HASH_DRIFT",
+          "id": "aaa"
+        }
       ]
     },
     {
@@ -48,6 +72,19 @@
       "before": "Keep me.\n<!-- stay:k -->\n",
       "after": "Keep me.\n<!-- stay:k -->\n",
       "findings": []
+    },
+    {
+      "name": "a-vanished-subhash-id-is-not-a-dropped-block-stay",
+      "note": "SPEC.md §16 mandatory reader rule (v1.6): a tool MUST NOT report a marker carrying the exact `subhash` key as the stay of the block containing it. The key is compared exactly, without segmenting or resolving a child, so a tool that implements neither §5.5 nor §5.6 still applies it. The list and the doomed paragraph both vanish. Only `b2` is a dropped block stay; `c1` never was one, so an implementation whose block id index still admits `subhash` markers reports two DROPPED_IDs here and sends a caller looking for a block that never existed.",
+      "before": "- alpha<!-- stay:c1 subhash=sha256:1122 -->\n- beta\n\nA settled paragraph.\n<!-- stay:b1 hash=sha256:0000 -->\n\nA doomed paragraph.\n<!-- stay:b2 hash=sha256:0000 -->\n",
+      "after": "A settled paragraph.\n<!-- stay:b1 hash=sha256:0000 -->\n",
+      "findings": [
+        {
+          "level": "error",
+          "code": "DROPPED_ID",
+          "id": "b2"
+        }
+      ]
     }
   ]
 }

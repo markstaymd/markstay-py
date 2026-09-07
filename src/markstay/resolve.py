@@ -67,7 +67,7 @@ class Resolution:
 
 @dataclass
 class ChildAnchor:
-    """Stored evidence for an experimental direct list-item stay."""
+    """Stored evidence for a direct list-item or table-row stay."""
 
     id: str
     hash: str
@@ -77,6 +77,7 @@ class ChildAnchor:
     parent_hash: str
     sibling_hash_count: int = 1
     document_hash_count: int = 1
+    kind: str = "list"
 
 
 @dataclass
@@ -95,9 +96,7 @@ class ChildResolution:
     proposal_provenance: str | None = None
 
 
-def _ambiguous_candidates(
-    ranked: list[Candidate], margin: float
-) -> list[Candidate]:
+def _ambiguous_candidates(ranked: list[Candidate], margin: float) -> list[Candidate]:
     """Keep the contenders that explain a failed margin, not lower-ranked noise."""
     if not ranked:
         return []
@@ -121,11 +120,13 @@ def build_anchors(before_md: str, mode: str = "blank-line") -> list[Anchor]:
         # SPEC.md §9: the stored prefix/suffix carry up to 48 characters of the
         # neighbour on each side. Storing whole blocks caps the achievable ratio
         # near 2*48/(len+48), because the candidate side is windowed at match time.
-        sel = Selector(quote=b.content,
-                       prefix=window_prefix(prev_text),
-                       suffix=window_suffix(next_text))
+        sel = Selector(
+            quote=b.content,
+            prefix=window_prefix(prev_text),
+            suffix=window_suffix(next_text),
+        )
         for mk in b.markers:
-            if mk.id and not mk.malformed:
+            if mk.id and not mk.malformed and not mk.has_subhash:
                 anchors.append(
                     Anchor(
                         id=mk.id,
@@ -153,7 +154,7 @@ def resolve(
     surviving: dict[str, int] = {}
     for idx, b in enumerate(after_blocks):
         for mk in b.markers:
-            if mk.id and not mk.malformed:
+            if mk.id and not mk.malformed and not mk.has_subhash:
                 surviving.setdefault(mk.id, idx)
 
     # Tier 2 lookup: full-body hash -> block indices (list, to detect ambiguity).
@@ -178,9 +179,7 @@ def resolve(
         score = ranked[0].score if ranked else 0.0
         runner = ranked[1].score if len(ranked) > 1 else 0.0
         if idx >= 0 and score >= threshold and (score - runner) >= margin:
-            out[a.id] = Resolution(
-                a.id, "quote", idx, score, runner_up_score=runner
-            )
+            out[a.id] = Resolution(a.id, "quote", idx, score, runner_up_score=runner)
         elif idx >= 0 and score >= threshold:
             out[a.id] = Resolution(
                 a.id,
@@ -204,7 +203,7 @@ def resolve(
 
 
 def build_child_anchors(before_md: str, mode: str = "blank-line") -> list[ChildAnchor]:
-    """Extract anchors for opt-in direct list-item identity.
+    """Extract anchors for direct list-item and table-row identity (§5.5/§5.6).
 
     Child context is sibling-scoped. A parent anchor is recorded when the
     container carries a block-level stay; otherwise recovery is intentionally
@@ -227,7 +226,7 @@ def build_child_anchors(before_md: str, mode: str = "blank-line") -> list[ChildA
             (
                 mk
                 for mk in block.markers
-                if mk.id and not mk.malformed and mk.subhash is None
+                if mk.id and not mk.malformed and not mk.has_subhash
             ),
             None,
         )
@@ -246,16 +245,20 @@ def build_child_anchors(before_md: str, mode: str = "blank-line") -> list[ChildA
                     ),
                 ),
             )
-        for ci, child in enumerate(block.children):
+        for child in block.children:
+            siblings = [
+                candidate
+                for candidate in block.children
+                if candidate.kind == child.kind
+            ]
+            ci = siblings.index(child)
             child_hash = L.body_hash(child.content)
             selector = Selector(
                 quote=child.content,
-                prefix=(
-                    window_prefix(block.children[ci - 1].content) if ci > 0 else ""
-                ),
+                prefix=(window_prefix(siblings[ci - 1].content) if ci > 0 else ""),
                 suffix=(
-                    window_suffix(block.children[ci + 1].content)
-                    if ci + 1 < len(block.children)
+                    window_suffix(siblings[ci + 1].content)
+                    if ci + 1 < len(siblings)
                     else ""
                 ),
             )
@@ -271,10 +274,11 @@ def build_child_anchors(before_md: str, mode: str = "blank-line") -> list[ChildA
                             parent_hash=L.body_hash(block.content),
                             sibling_hash_count=sum(
                                 1
-                                for candidate in block.children
+                                for candidate in siblings
                                 if L.body_hash(candidate.content) == child_hash
                             ),
                             document_hash_count=document_hash_counts[child_hash],
+                            kind=child.kind,
                         )
                     )
     return anchors
@@ -308,7 +312,10 @@ def _resolve_parents(
 
     for pid in reps:
         for idx, block in enumerate(blocks):
-            if any(mk.id == pid and not mk.malformed for mk in block.markers):
+            if any(
+                mk.id == pid and not mk.malformed and not mk.has_subhash
+                for mk in block.markers
+            ):
                 out[pid] = Resolution(pid, "marker", idx, 1.0)
                 claimed.add(idx)
                 break
@@ -488,7 +495,7 @@ def resolve_children(
         mk.id
         for block in blocks
         for mk in block.markers
-        if mk.subhash is not None and mk.id and not mk.malformed
+        if mk.has_subhash and mk.id and not mk.malformed
     } - set(by_marker)
 
     parents = _resolve_parents(
@@ -533,26 +540,20 @@ def resolve_children(
     def _gated(anchor: ChildAnchor) -> bool:
         """A child whose parent stay exists but could not be found has no
         sibling scope, so every structural tier below is unavailable to it."""
-        return (
-            anchor.parent is not None
-            and (
-                anchor.parent.id not in parents
-                or parents[anchor.parent.id].target is None
-            )
+        return anchor.parent is not None and (
+            anchor.parent.id not in parents or parents[anchor.parent.id].target is None
         )
 
     def _parent_block_of(anchor: ChildAnchor) -> tuple[int | None, L.Block | None]:
         target = _parent_target(anchor)
         block = (
-            blocks[target]
-            if target is not None and 0 <= target < len(blocks)
-            else None
+            blocks[target] if target is not None and 0 <= target < len(blocks) else None
         )
         return target, block
 
-    contest_history: dict[
-        str, tuple[int, int | None, float, float, list[str], str]
-    ] = {}
+    contest_history: dict[str, tuple[int, int | None, float, float, list[str], str]] = (
+        {}
+    )
 
     def _commit(
         tier: str,
@@ -580,11 +581,7 @@ def resolve_children(
                         parent_target,
                         score,
                         runners.get(anchor_id, 0.0) if runners else 0.0,
-                        [
-                            other
-                            for other in claimants[candidate]
-                            if other != anchor_id
-                        ],
+                        [other for other in claimants[candidate] if other != anchor_id],
                         provenance,
                     ),
                 )
@@ -595,9 +592,7 @@ def resolve_children(
                 candidate,
                 score,
                 parent_target,
-                runner_up_score=(
-                    runners.get(anchor_id, 0.0) if runners else 0.0
-                ),
+                runner_up_score=(runners.get(anchor_id, 0.0) if runners else 0.0),
             )
             claimed.add(candidate)
 
@@ -611,10 +606,13 @@ def resolve_children(
             continue
         if L.body_hash(parent_block.content) != anchor.parent_hash:
             continue
+        siblings = [
+            child for child in parent_block.children if child.kind == anchor.kind
+        ]
         ordinal = anchor.ordinal - 1
-        if not 0 <= ordinal < len(parent_block.children):
+        if not 0 <= ordinal < len(siblings):
             continue
-        candidate = parent_block.children[ordinal]
+        candidate = siblings[ordinal]
         if candidate.markers or candidate.index in claimed:
             continue
         ordinal_proposals[anchor.id] = (candidate.index, parent_target, 1.0)
@@ -635,7 +633,8 @@ def resolve_children(
         sibling_hits = [
             child
             for child in parent_block.children
-            if L.body_hash(child.content) == anchor.hash
+            if child.kind == anchor.kind
+            and L.body_hash(child.content) == anchor.hash
             and child.index not in claimed
         ]
         if len(sibling_hits) == 1:
@@ -684,7 +683,9 @@ def resolve_children(
             )
             continue
         candidates = [
-            child for child in parent_block.children if child.index not in claimed
+            child
+            for child in parent_block.children
+            if child.kind == anchor.kind and child.index not in claimed
         ]
         ranked = rank_candidates(
             anchor.selector,
@@ -758,7 +759,9 @@ def resolve_children(
     for anchor in anchors:
         if anchor.id in out:
             continue
-        blocked_by = parents.get(anchor.parent.id) if anchor.parent is not None else None
+        blocked_by = (
+            parents.get(anchor.parent.id) if anchor.parent is not None else None
+        )
         out[anchor.id] = ChildResolution(
             anchor.id,
             "detached",

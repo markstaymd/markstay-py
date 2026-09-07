@@ -19,25 +19,36 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from markstay.cli import build_parser, main  # noqa: E402
-from markstay.staged import check_staged, is_markdown  # noqa: E402
+from markstay.staged import (  # noqa: E402
+    CommitEntry,
+    check_entries,
+    check_staged,
+    is_markdown,
+)
 
 
 def git(repo, *args):
     env = dict(
         os.environ,
-        GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@e",
-        GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@e",
-        GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_SYSTEM="/dev/null",
+        GIT_AUTHOR_NAME="t",
+        GIT_AUTHOR_EMAIL="t@e",
+        GIT_COMMITTER_NAME="t",
+        GIT_COMMITTER_EMAIL="t@e",
+        GIT_CONFIG_GLOBAL="/dev/null",
+        GIT_CONFIG_SYSTEM="/dev/null",
     )
-    return subprocess.run(["git", "-C", str(repo), *args],
-                          capture_output=True, text=True, env=env)
+    return subprocess.run(
+        ["git", "-C", str(repo), *args], capture_output=True, text=True, env=env
+    )
 
 
 def doc(n: int, prefix: str = "s") -> str:
     """A stamped document with n sections, ids <prefix>0..<prefix>n-1."""
     return "# Doc\n\n" + "\n".join(
         f"## Section {i}\n\nBody text for section {i}, long enough to hash.\n"
-        f"<!-- stay:{prefix}{i} -->\n" for i in range(n))
+        f"<!-- stay:{prefix}{i} -->\n"
+        for i in range(n)
+    )
 
 
 @pytest.fixture()
@@ -66,8 +77,11 @@ def test_catches_a_drop_a_rename_hid(repo):
     git(repo, "commit", "-qm", "init")
 
     git(repo, "mv", "STATUS.md", "PHASE1.md")
-    write(repo, "PHASE1.md",
-          "# Doc\n\n## Phase 1 (complete)\n\nAll nine done.\n<!-- stay:s0 -->\n")
+    write(
+        repo,
+        "PHASE1.md",
+        "# Doc\n\n## Phase 1 (complete)\n\nAll nine done.\n<!-- stay:s0 -->\n",
+    )
     git(repo, "add", "-A")
     # git itself sees no rename here; that is the premise
     assert git(repo, "diff", "--cached", "--name-status").stdout.startswith("A")
@@ -97,13 +111,17 @@ def test_rename_out_of_markdown_is_not_silent(repo):
 
     result = check_staged(repo=str(repo))
     assert not result.has_errors
-    assert any("renamed to notes.txt, leaving Markdown tracking" in note
-               for note in result.notes)
+    assert any(
+        "renamed to notes.txt, leaving Markdown tracking" in note
+        for note in result.notes
+    )
 
 
 def test_cross_document_move_is_a_note_not_a_block(repo):
-    moved = ("## Section 2\n\nBody text for section 2, long enough to hash.\n"
-             "<!-- stay:s2 -->\n")
+    moved = (
+        "## Section 2\n\nBody text for section 2, long enough to hash.\n"
+        "<!-- stay:s2 -->\n"
+    )
     write(repo, "a.md", doc(3))
     write(repo, "b.md", doc(2, "t"))
     git(repo, "add", "-A")
@@ -136,8 +154,11 @@ def test_scope_narrows_the_report_not_the_baseline_search(repo):
     git(repo, "commit", "-qm", "init")
 
     git(repo, "mv", "STATUS.md", "PHASE1.md")
-    write(repo, "PHASE1.md",
-          "# Doc\n\n## Phase 1 (complete)\n\nAll nine done.\n<!-- stay:s0 -->\n")
+    write(
+        repo,
+        "PHASE1.md",
+        "# Doc\n\n## Phase 1 (complete)\n\nAll nine done.\n<!-- stay:s0 -->\n",
+    )
     write(repo, "other.md", doc(2, "o").replace("Body text for section 0", "Reworded"))
     git(repo, "add", "-A")
 
@@ -175,7 +196,7 @@ def test_worktree_check_sees_a_loss_before_it_is_staged(repo):
     # an agent rewrites the file wholesale, nothing staged
     write(repo, "a.md", "# Doc\n\n## All of it\n\nCollapsed.\n<!-- stay:s0 -->\n")
     assert git(repo, "diff", "--cached", "--name-only").stdout.strip() == ""
-    assert check_staged(repo=str(repo)).reports == []      # nothing staged to see
+    assert check_staged(repo=str(repo)).reports == []  # nothing staged to see
 
     result = check_worktree(repo=str(repo))
     assert result.has_errors
@@ -192,8 +213,11 @@ def test_worktree_check_pairs_an_untracked_rename(repo):
     git(repo, "commit", "-qm", "init")
 
     (repo / "STATUS.md").unlink()
-    write(repo, "PHASE1.md",
-          "# Doc\n\n## Phase 1 (complete)\n\nAll nine done.\n<!-- stay:s0 -->\n")
+    write(
+        repo,
+        "PHASE1.md",
+        "# Doc\n\n## Phase 1 (complete)\n\nAll nine done.\n<!-- stay:s0 -->\n",
+    )
     result = check_worktree(repo=str(repo))
     assert result.has_errors
     assert codes(result).count("DROPPED_ID") == 8
@@ -203,12 +227,33 @@ def test_worktree_check_pairs_an_untracked_rename(repo):
 def test_worktree_check_sees_indexed_files_before_the_first_commit(repo):
     from markstay.staged import check_worktree
 
-    write(repo, "broken.md", "Body.\n<!-- stay: -->\n")
+    write(repo, "broken.md", "Body.\n<!-- stay:note=hello -->\n")
     git(repo, "add", "broken.md")
 
     result = check_worktree(repo=str(repo))
     assert result.has_errors
     assert "MALFORMED_MARKER" in codes(result)
+
+
+def test_staged_pairing_ignores_subhash_ids_but_keeps_x_subhash_ids():
+    deleted = CommitEntry("D", "old.md", "old.md", "Old.\n<!-- stay:shared -->\n", None)
+    child = CommitEntry(
+        "A",
+        "new.md",
+        "new.md",
+        None,
+        "New.\n<!-- stay:shared subhash=bogus -->\n",
+    )
+    assert check_entries([deleted, child]).pairings == [("new.md", None)]
+
+    extension = CommitEntry(
+        "A",
+        "new.md",
+        "new.md",
+        None,
+        "New.\n<!-- stay:shared x-subhash=bogus -->\n",
+    )
+    assert check_entries([deleted, extension]).pairings == [("new.md", "old.md")]
 
 
 def test_pre_commit_hook_definition_matches_the_cli():
@@ -250,7 +295,9 @@ def test_cli_exit_codes_and_quiet_channel(repo, capsys, monkeypatch):
     assert capsys.readouterr().err.strip() == ""
 
     # dropping one blocks, and names the id
-    write(repo, "a.md", "# Doc\n\n## Section 0\n\nOnly this remains.\n<!-- stay:s0 -->\n")
+    write(
+        repo, "a.md", "# Doc\n\n## Section 0\n\nOnly this remains.\n<!-- stay:s0 -->\n"
+    )
     git(repo, "add", "-A")
     assert main(["check-staged"]) == 1
     assert "DROPPED_ID" in capsys.readouterr().err

@@ -44,7 +44,6 @@ from .resolve import (
 )
 from .stamp import DEFAULT_HASH_LENGTH, repair_duplicates, restamp, stamp
 
-
 RESOLVE_SCHEMA = "markstay.resolve/v1"
 RESOLVE_DIAGNOSTICS_SCHEMA = "markstay.resolve-diagnostics/v1"
 
@@ -222,7 +221,9 @@ def _candidate_dict(candidate, targets: dict[int, object]) -> dict:
     }
 
 
-def _resolution_dict(result, targets: dict[int, object], threshold: float, margin: float):
+def _resolution_dict(
+    result, targets: dict[int, object], threshold: float, margin: float
+):
     observed_margin = result.score - result.runner_up_score
     payload = {
         "id": result.id,
@@ -230,7 +231,9 @@ def _resolution_dict(result, targets: dict[int, object], threshold: float, margi
         "reason": result.reason,
         "committed": result.target is not None,
         "target": (
-            _target_detail(result.target, targets) if result.target is not None else None
+            _target_detail(result.target, targets)
+            if result.target is not None
+            else None
         ),
         "score": result.score,
         "runner_up_score": result.runner_up_score,
@@ -271,7 +274,9 @@ def _resolution_dict(result, targets: dict[int, object], threshold: float, margi
     return payload
 
 
-def _render_resolution(result, targets: dict[int, object], threshold: float, margin: float):
+def _render_resolution(
+    result, targets: dict[int, object], threshold: float, margin: float
+):
     if result.target is not None:
         target = _target_detail(result.target, targets)
         return [
@@ -324,9 +329,7 @@ def _cmd_resolve(args, ap) -> int:
             for block in L.parse_document(after_md, mode=mode, child_blocks=True)
             if block.index >= 0
         ]
-        targets = {
-            child.index: child for block in blocks for child in block.children
-        }
+        targets = {child.index: child for block in blocks for child in block.children}
         granularity = "child"
     else:
         anchors = build_anchors(before_md, mode=mode)
@@ -400,8 +403,18 @@ def _cmd_stamp(args, ap) -> int:
     mode = "commonmark" if args.commonmark else "blank-line"
     if args.child_blocks and args.no_hash:
         ap.error("--child-blocks requires child subhash evidence; remove --no-hash")
+    if len(args.files) > 1 and not args.write:
+        ap.error("stamp on multiple files requires -w/--write")
 
-    def op(md: str):
+    status = 0
+    for f in args.files:
+        path = Path(f)
+        # Keep the caller's line endings until stamp has decided whether its
+        # provisional row migration can commit. ``Path.read_text`` uses universal
+        # newlines, which turns a refused CRLF document into LF before stamp can
+        # return the byte-identical source required by SPEC.md §5.6.
+        with path.open(newline="") as source:
+            md = source.read()
         res = stamp(
             md,
             syntax="mdx" if args.mdx else "html",
@@ -414,9 +427,34 @@ def _cmd_stamp(args, ap) -> int:
             mode=mode,
             child_blocks=args.child_blocks,
         )
-        return res.text, f"{len(res.minted)} id(s) minted"
-
-    return _run_write("stamp", args, ap, op)
+        if res.drifted:
+            status = 1
+            sys.stderr.write(
+                f"{f}: pre-existing container hash drift for "
+                f"{', '.join(res.drifted)}; source unchanged\n"
+            )
+            continue
+        if res.refused is not None:
+            # A refusal returns the source byte for byte with nothing minted,
+            # which is exactly what a document with nothing to do returns. Saying
+            # so and exiting non-zero is the difference between a hook that
+            # reports "no work" and one that silently passes work it declined.
+            status = 1
+            sys.stderr.write(
+                f"{f}: refused ({res.refused}); source unchanged\n"
+            )
+            continue
+        if args.write:
+            # A successful result is LF-normalized, including a successful no-op
+            # on CRLF input, so writing only on a change keeps the caller's line
+            # endings when there was nothing to do.
+            if res.text != md:
+                with path.open("w", newline="") as destination:
+                    destination.write(res.text)
+        else:
+            sys.stdout.write(res.text)
+        sys.stderr.write(f"{f}: {len(res.minted)} id(s) minted\n")
+    return status
 
 
 def _cmd_restamp(args, ap) -> int:
@@ -502,9 +540,10 @@ def build_parser() -> argparse.ArgumentParser:
         "(markdown-it-py)"
     )
     child_help = (
-        "enable experimental direct list-item identity; CommonMark mode handles "
-        "general list items, while the dependency-free mode accepts only flat "
-        "tight single-paragraph lists and otherwise emits no child blocks"
+        "enable direct identity for list items (§5.5) and table rows (§5.6); both "
+        "modes use the same parser-free table-row scan, while CommonMark mode "
+        "handles general list items and dependency-free mode accepts only flat "
+        "tight single-paragraph lists, failing closed elsewhere"
     )
 
     # First, because measurement puts it first: the instruction prevents loss,
