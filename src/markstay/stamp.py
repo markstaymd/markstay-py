@@ -14,6 +14,7 @@ document with no duplicates is a no-op.
 from __future__ import annotations
 
 import re
+from bisect import bisect_right
 from dataclasses import dataclass, field
 from typing import Callable, Iterable
 
@@ -63,6 +64,14 @@ class StampResult:
     # transactional row write (SPEC.md §5.6) refuses on purpose and often, so the
     # difference is one a pre-commit hook has to be able to see.
     refused: str | None = None
+    # SPEC.md §3.4: the child carriers this pass declined, as
+    # ``[{"kind": "row"|"list", "line": ..}]``. Skipping one child is not a
+    # whole-operation refusal (``refused`` stays ``None``, the container keeps
+    # its own stay and every other child is stamped), so it needs a field of its
+    # own. A refusal that nothing reports is indistinguishable from a document
+    # with nothing to address, and the whole error direction of §3.4 rests on a
+    # refusal being visible and countable.
+    refused_carriers: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -525,7 +534,7 @@ class _Relocation:
     prefix: str = ""
 
 
-def _relocate(text: str, plan: _Relocation) -> str | None:
+def _relocate(text: str, plan: _Relocation, origins: list[int] | None = None) -> str | None:
     """Apply ``plan`` if it preserves every marker occurrence, else ``None``.
 
     The invariant, stated once so the implementation stays free to change under
@@ -689,12 +698,93 @@ def _relocate(text: str, plan: _Relocation) -> str | None:
         (record.start, record.end, record.marker.raw)
         for record in _active_records(result)
     ]
-    return result if after == expected else None
+    if after != expected:
+        return None
+    if origins is not None:
+        mapped: list[int] = []
+        source = 0
+        for start, end, replacement, is_insertion in splices:
+            mapped.extend(origins[source:start])
+            if is_insertion:
+                mapped.extend([origins[plan.insert_at]] * len(plan.prefix))
+                for record in plan.moves:
+                    mapped.extend(origins[record.start:record.end])
+            source = end
+        mapped.extend(origins[source:])  # includes the EOF boundary
+        origins[:] = mapped
+    return result
 
 
-def _probe_legacy_row_suffix(text: str, mode: str) -> str | None:
-    """Relocate legal legacy suffixes, one full-document probe at a time."""
+class _WriteSnapshot:
+    """Source positions survive each provisional relocation without content matching."""
+
+    def __init__(self, text: str, mode: str):
+        self.text = text
+        self.origins = list(range(len(text) + 1))
+        offsets = _line_offsets(text)
+        self.starts = [
+            offsets[block.line - 1]
+            for block in parse_document(text, mode=mode, child_blocks=True)
+            if block.index >= 0
+        ]
+        self.refused_rows: set[int] = set()
+
+    def fork(self):
+        other = object.__new__(type(self))
+        other.text, other.starts = self.text, self.starts
+        other.origins = self.origins.copy()
+        other.refused_rows = self.refused_rows.copy()
+        return other
+
+    def prefix(self, text: str, first: int, line: int, kind: str) -> str | None:
+        lines = text.split("\n")
+        carrier = _carrier_prefix(lines, first, line, kind)
+        if carrier is None:
+            return None
+        offsets = _line_offsets(text)
+        row_origin = self.origins[offsets[line]]
+        owner = bisect_right(self.starts, row_origin) - 1
+        if owner < 0:
+            return None
+        end = self.origins[offsets[first] + len(carrier)]
+        return self.text[self.starts[owner]:end]
+
+    def decline(self, probe: str, block):
+        offsets = _line_offsets(probe)
+        self.refused_rows.update(
+            self.origins[offsets[child.marker_line - 1]]
+            for child in block.children
+            if child.kind == "row" and not child.markers and child.marker_line > 0
+        )
+
+    def refusals(self, text: str) -> list[dict]:
+        wanted = self.refused_rows
+        return [
+            {"kind": "row", "line": line}
+            for line, offset in enumerate(_line_offsets(text), 1)
+            if self.origins[offset] in wanted
+        ]
+
+
+def _probe_legacy_row_suffix(
+    text: str, mode: str, syntax: str, snapshot: _WriteSnapshot
+) -> tuple[str | None, set[str]]:
+    """Relocate legal legacy suffixes, one full-document probe at a time.
+
+    Also reports the **content** of the containers whose move was declined,
+    because §3.4 refuses every row it would have made addressable or refuses the
+    position it would move the marker out of. Their rows must not be stamped
+    either: §5.6 requires the container's own stay to end up on a marker-only line
+    after the body, so a row stay written without the move would leave the
+    container's stay inside a cell.
+
+    The returned content set is diagnostic only. Snapshot source positions
+    decide which rows are refused: neither an id nor identical content identifies
+    a container occurrence, and coupling refusals can leave another container's
+    provisional relocation committed without the row write it was for.
+    """
     work = text
+    declined: set[str] = set()
     for _ in range(len(work.split("\n")) + 1):
         chunks = _segments_for_mode(work, mode)
         blocks = {
@@ -711,16 +801,16 @@ def _probe_legacy_row_suffix(text: str, mode: str) -> str | None:
                 continue
             line_number = start + len(chunk.split("\n")) - 1
             if not 0 < line_number <= len(lines):
-                return None
+                return None, declined
             attempted_suffix = _container_suffix(lines[line_number - 1])
             if attempted_suffix is None:
                 continue
             suffix = _legacy_container_suffix(lines[line_number - 1])
             if suffix is None:
-                return None
+                return None, declined
             records, _cleaned, tail_start = suffix
             if not _block_has_records(block, records):
-                return None
+                return None, declined
             line_start = offsets[line_number - 1]
             spans = [
                 (
@@ -731,7 +821,8 @@ def _probe_legacy_row_suffix(text: str, mode: str) -> str | None:
             ]
             moves = _records_at(_identity_records(work), spans)
             if moves is None:
-                return None
+                return None, declined
+            probe_snapshot = snapshot.fork()
             probe = _relocate(
                 work,
                 _Relocation(
@@ -740,13 +831,16 @@ def _probe_legacy_row_suffix(text: str, mode: str) -> str | None:
                     insert_at=line_start + len(lines[line_number - 1]),
                     prefix="\n",
                 ),
+                origins=probe_snapshot.origins,
             )
             if probe is None:
-                return None
+                return None, declined
+            probe_parsed = parse_document(probe, mode=mode, child_blocks=True)
+            probe_offsets = _line_offsets(probe)
             candidate = next(
                 (
                     parsed
-                    for parsed in parse_document(probe, mode=mode, child_blocks=True)
+                    for parsed in probe_parsed
                     if parsed.index >= 0
                     and any(
                         child.kind == "row" and child.line == line_number
@@ -756,10 +850,15 @@ def _probe_legacy_row_suffix(text: str, mode: str) -> str | None:
                 ),
                 None,
             )
-            if candidate is None or not any(
-                child.kind == "row" and not child.markers
-                for child in candidate.children
+            if candidate is not None and not (
+                _relocation_safe(work, block, moves, syntax)
+                and _row_carrier_available(probe, candidate, syntax, probe_snapshot)
             ):
+                declined.add(block.content)
+                probe_snapshot.decline(probe, candidate)
+                snapshot.refused_rows.update(probe_snapshot.refused_rows)
+                continue
+            if candidate is None:
                 # Not a migration candidate, which is different from an unsafe
                 # one. The relocation itself was checked and cleared above; what
                 # this says is that moving the suffix did not produce a table, so
@@ -770,12 +869,13 @@ def _probe_legacy_row_suffix(text: str, mode: str) -> str | None:
                 # the CLI's exit code) is told a document it has nothing to do
                 # with was declined. The probe is discarded and the block skipped.
                 continue
+            snapshot.origins = probe_snapshot.origins
             work = probe
             migrated = True
             break
         if not migrated:
-            return work
-    return None
+            return work, declined
+    return None, declined
 
 
 def _row_bodies(blocks: list) -> list[str]:
@@ -793,11 +893,21 @@ def _row_bodies(blocks: list) -> list[str]:
     ]
 
 
-def _prepare_row_containers(text: str, mode: str) -> tuple[str | None, list[str]]:
-    """Move row-container stays and abort on pre-existing container hash drift."""
-    work = _probe_legacy_row_suffix(text, mode)
+def _prepare_row_containers(
+    text: str, mode: str, syntax: str, snapshot: _WriteSnapshot | None = None
+) -> tuple[str | None, list[str], set[str]]:
+    """Move row-container stays and abort on pre-existing container hash drift.
+
+    The third value is the content of the containers whose move was declined,
+    because §3.4 refuses every row the move was for or the position it would take
+    the marker out of. See :func:`_probe_legacy_row_suffix` for why their rows are
+    refused with it. The snapshot tracks those refusals by source occurrence;
+    the returned content set is diagnostic only.
+    """
+    snapshot = snapshot or _WriteSnapshot(text, mode)
+    work, declined = _probe_legacy_row_suffix(text, mode, syntax, snapshot)
     if work is None:
-        return None, []
+        return None, [], declined
     for _ in range(len(work.split("\n")) + 1):
         parsed = parse_document(work, mode=mode, child_blocks=True)
         targets = [
@@ -810,7 +920,7 @@ def _prepare_row_containers(text: str, mode: str) -> tuple[str | None, list[str]
         ]
         before_row_bodies = _row_bodies(parsed)
         if not targets:
-            return work, []
+            return work, [], declined
         lines = work.split("\n")
         offsets = _line_offsets(work)
         drifted = [
@@ -824,7 +934,7 @@ def _prepare_row_containers(text: str, mode: str) -> tuple[str | None, list[str]
             and body_hash(target.content, len(marker.hash)) != marker.hash
         ]
         if drifted:
-            return None, list(dict.fromkeys(drifted))
+            return None, list(dict.fromkeys(drifted)), declined
         relocated = False
         for target in targets:
             rows = [child for child in target.children if child.kind == "row"]
@@ -845,21 +955,21 @@ def _prepare_row_containers(text: str, mode: str) -> tuple[str | None, list[str]
             ):
                 continue
             if not 0 < last_row_line <= len(lines):
-                return None, []
+                return None, [], declined
 
             moves = _resolve_records(_identity_records(work), parent_markers)
             if moves is None:
-                return None, []
+                return None, [], declined
             grouped: dict[int, list] = {}
             for record in moves:
                 # A marker whose raw spans lines cannot be re-emitted onto one
                 # carrier line without rewriting the document's line structure
                 # around it, which is more than a relocation is allowed to do.
                 if "\n" in record.marker.raw:
-                    return None, []
+                    return None, [], declined
                 line0 = record.marker.line - 1
                 if not 0 <= line0 < len(lines):
-                    return None, []
+                    return None, [], declined
                 grouped.setdefault(line0, []).append(record)
 
             excisions: list[tuple[int, int]] = []
@@ -873,7 +983,7 @@ def _prepare_row_containers(text: str, mode: str) -> tuple[str | None, list[str]
                 if any(
                     start < 0 or end > len(lines[line0]) for start, end in local
                 ):
-                    return None, []
+                    return None, [], declined
                 # A line the relocation empties must go with its markers. Leaving
                 # it behind as an empty string inserts a §5 block boundary, which
                 # splits the very container being prepared: the relocated stay
@@ -893,6 +1003,7 @@ def _prepare_row_containers(text: str, mode: str) -> tuple[str | None, list[str]
                     excisions.extend((record.start, record.end) for record in group)
             excisions.extend(_dropped_line_spans(work, emptied))
 
+            probe_snapshot = snapshot.fork()
             probe = _relocate(
                 work,
                 _Relocation(
@@ -902,10 +1013,15 @@ def _prepare_row_containers(text: str, mode: str) -> tuple[str | None, list[str]
                     + len(lines[last_row_line - 1]),
                     prefix="\n",
                 ),
+                origins=probe_snapshot.origins,
             )
             if probe is None:
-                return None, []
+                return None, [], declined
             probe_parsed = parse_document(probe, mode=mode, child_blocks=True)
+            probe_offsets = _line_offsets(probe)
+            target_rows = [
+                child.content for child in target.children if child.kind == "row"
+            ]
             candidate = next(
                 (
                     block
@@ -917,15 +1033,26 @@ def _prepare_row_containers(text: str, mode: str) -> tuple[str | None, list[str]
                             current.id == marker.id
                             and current.raw == marker.raw
                             and not current.has_subhash
+                            and probe_snapshot.origins[
+                                probe_offsets[current.line - 1]
+                            ] == snapshot.origins[moves[0].start]
                             for current in block.markers
                         )
                         for marker in parent_markers
                     )
+                    # The origin check above identifies the moved occurrence,
+                    # even when another table has identical markers AND rows.
+                    # Row bodies still verify that its contents survived.
+                    and [
+                        child.content
+                        for child in block.children
+                        if child.kind == "row"
+                    ] == target_rows
                 ),
                 None,
             )
             if candidate is None:
-                return None, []
+                return None, [], declined
             # Relocating a container stay must leave every row's hash body alone,
             # including rows this pass has no business touching. It normally does:
             # ``ChildBlock.content`` arrives with markers already cut, so lifting a
@@ -947,13 +1074,28 @@ def _prepare_row_containers(text: str, mode: str) -> tuple[str | None, list[str]
             # through. Every row body in the document is the invariant, and a legitimate
             # relocation changes none of them.
             if _row_bodies(probe_parsed) != before_row_bodies:
-                return None, []
+                return None, [], declined
+            if not (
+                _relocation_safe(work, target, moves, syntax)
+                and _row_carrier_available(probe, candidate, syntax, probe_snapshot)
+            ):
+                # §3.4 refuses every row this relocation was for, so the
+                # relocation buys nothing and §5.6 does not permit keeping it:
+                # moving a stay out of a cell is itself an edit, and the document
+                # that motivated this gate is one the move re-renders. The
+                # container's rows go with it, since a row stay written without
+                # the move would leave the container's stay inside a cell.
+                declined.add(target.content)
+                probe_snapshot.decline(probe, candidate)
+                snapshot.refused_rows.update(probe_snapshot.refused_rows)
+                continue
+            snapshot.origins = probe_snapshot.origins
             work = probe
             relocated = True
             break
         if not relocated:
-            return work, []
-    return None, []
+            return work, [], declined
+    return None, [], declined
 
 
 def _row_marker_position(line: str) -> int | None:
@@ -967,6 +1109,250 @@ def _row_marker_position(line: str) -> int | None:
     start, end = delimiters[-2], delimiters[-1]
     cell = line[start + 1 : end]
     return start + 1 + len(cell.rstrip(" \t\f\v"))
+
+
+# --- SPEC.md §3.4: plain-text state at a carrier position -------------------
+#
+# Two rules in the specification make a writer put a marker on a line that
+# already carries content: §5.5's child carrier at the end of a list item's last
+# paragraph, and §5.6's row carrier inside a row's last cell. In those positions
+# the text already in the container, and the marker's own bytes, can capture the
+# marker, and the document then shows something it did not show before.
+#
+# The rule refuses on the PRESENCE of a character, never on what that character
+# means. A `<` inside a code span opens nothing and is refused anyway. The
+# predicate that decided which `<` was live was written and withdrawn: fifteen
+# documents across four review rounds broke it, and deciding them correctly needs
+# tag and attribute state, per-element raw-text termination, processing
+# instruction and CDATA closers, inline precedence by first opener, backslash
+# escapes and GFM cell splitting, which is an HTML tokenizer that §14 declines and
+# that three parser-free implementations cannot agree on byte for byte.
+
+# `<` begins every HTML construct a marker can complete (a comment whose closer
+# the marker supplies, a tag or declaration whose `>` it supplies, a processing
+# instruction or CDATA section a marker's bytes can close, and a raw-text element
+# that displays the marker instead of hiding it); a backslash can escape the
+# marker's opening bracket; `{` begins an MDX expression. A backtick is
+# deliberately absent, because refusing every carrier text containing one costs
+# 52% of real carrier positions: the marker clause below carries that case, since
+# only the marker's own bytes can close a span the carrier text left open.
+CARRIER_CAPTURING = {"html": "<\\", "mdx": "<\\{"}
+
+# A marker carrying nothing beyond its id and its digest, in §4's grammar rather
+# than in `\s`: §4 admits space and tab between attributes and admits neither LF
+# nor U+00A0, and three implementations reading `\s` would disagree about both.
+# The delimiters are paired rather than alternated, so `<!-- stay:x */}` is not a
+# marker in either host syntax.
+_CARRIER_BODY = (
+    r"[ \t]*stay:[A-Za-z0-9_-]+"
+    r"(?:[ \t]+(?:hash|subhash)=sha256:[0-9a-fA-F]+)*"
+    r"[ \t]*"
+)
+_PLAIN_MARKER = re.compile(
+    rf"<!--{_CARRIER_BODY}-->\Z|\{{/\*{_CARRIER_BODY}\*/\}}\Z"
+)
+
+# A delimiter run whose meaning depends on the character after it. A flush
+# insertion changes that character from whitespace to `<`, which makes a run that
+# was closing alone both opening and closing, and CommonMark's multiple-of-three
+# rule then refuses the match it used to make: `| *Hello!** |` stops rendering
+# its emphasis. Nothing is captured and no refused character appears anywhere in
+# the document, so no prefix of any length can see this. It is the insertion
+# itself, which is why §5.5's separated child carrier is unaffected by the same
+# text.
+_TRAILING_DELIMITER = re.compile(r"[*_~]\Z")
+
+
+def plain_marker(marker: str) -> bool:
+    """Does this marker carry only its id and its digest (SPEC.md §3.4)?
+
+    An unwritten marker counts: a caller asking about a carrier text alone passes
+    the empty string.
+    """
+    return not marker or bool(_PLAIN_MARKER.fullmatch(marker.strip()))
+
+
+def _outside_markers(text: str, syntax: str = "html") -> str:
+    """``text`` with plain §4 markers masked, byte offsets preserved.
+
+    A marker carrying only an id and a digest is not text that can capture the
+    next one: it is a closed host comment, its own bytes hold no character any
+    construct is built from, and §4 forbids the host closer inside it. Masking it
+    is the lexical step §5.6's row scan already requires of every implementation
+    (treat a marker as an opaque token) rather than a judgement about what a
+    character means, and what counts as one is §4's own grammar.
+
+    **Plain, not merely complete.** A marker's evidence can be reached from
+    outside it: `` - `<!-- stay:x quote="`<textarea>" --> `` has an earlier
+    backtick that pairs with the one inside the quoted value, which ends the code
+    span inside the marker and makes the `<textarea>` after it live HTML, and a
+    `|` in such a value splits its GFM cell before any inline parsing happens. So
+    the same clause that keeps a writer from putting evidence at a carrier decides
+    what may be masked in front of one, and a marker carrying evidence is text
+    here like any other.
+
+    Either host form counts. A plain MDX-form marker holds nothing that captures
+    in the HTML profile and the reverse holds too, and refusing the other form
+    would make the answer depend on which profile a pass happens to be writing,
+    which a §5.6 preparation can then change by relocating one.
+
+    §3.3 decides what a marker is before this does: a marker-shaped string inside
+    a fenced code block is content, so it is not masked, exactly as the linter's
+    §5.4 exclusion has it. Its bytes cannot capture either, being rendered
+    literally, but the two paths answering the same question differently is how a
+    later reader ends up with two rules.
+
+    Spaces rather than deletion, so the bytes each side keep their positions: a
+    backslash in front of a masked marker is still the last byte of what precedes
+    it.
+    """
+    code = code_lines(_blank_frontmatter(text))
+    out = list(text)
+    for record in _lint._scan_marker_records(text):
+        if not _lint.marker_outside_code(record.marker, code):
+            continue
+        if not plain_marker(record.marker.raw):
+            continue
+        for at in range(record.start, min(record.end, len(out))):
+            # Line endings stay: a marker may span lines (§4 admits normalized LF
+            # inside a quoted value) and masking its LF away would merge the
+            # lines around it, which the flush clause reads the last byte of.
+            if out[at] != "\n":
+                out[at] = " "
+    return "".join(out)
+
+
+def plain_text_state(
+    carrier_text: str,
+    marker: str = "",
+    syntax: str = "html",
+    flush: bool = False,
+) -> bool:
+    """SPEC.md §3.4: may this marker be inserted after this carrier text?
+
+    ``carrier_text`` is the container block's raw source from its first byte up
+    to the position the marker will occupy, read from the document as the
+    operation found it. Not the child's own span: a raw-text element opened in a
+    table's header row captures a carrier written in a later body row, and an
+    unclosed construct in one list item captures a carrier in the next one.
+
+    ``flush`` marks a carrier written hard against the text rather than after a
+    separator, which today is §5.6's row carrier and nothing else.
+    """
+    scanned = _outside_markers(carrier_text, syntax)
+    if any(character in scanned for character in CARRIER_CAPTURING[syntax]):
+        return False
+    if flush and _TRAILING_DELIMITER.search(scanned):
+        return False
+    return plain_marker(marker)
+
+
+def _carrier_prefix(
+    lines: list[str], first_line0: int, marker_line0: int, kind: str
+) -> str | None:
+    """§3.4's carrier text for one child, or ``None`` when there is no position.
+
+    The prefix ends where the marker goes rather than at the end of the line,
+    which is what lets the flush clause see a row's last cell content instead of
+    its closing pipe.
+    """
+    if not 0 <= first_line0 <= marker_line0 < len(lines):
+        return None
+    tail = lines[marker_line0]
+    if kind == "row":
+        position = _row_marker_position(tail)
+        if position is None:
+            return None
+        tail = tail[:position]
+    else:
+        tail = tail.rstrip()
+    return "\n".join(lines[first_line0:marker_line0] + [tail])
+
+
+def _trailing_blank_lines(chunk: str) -> int:
+    """§5 ASCII-only blank lines at the end of a segmenter chunk."""
+    lines = chunk.split("\n")
+    count = 0
+    for line in reversed(lines[1:]):
+        if line.strip(" \t\f\v"):
+            break
+        count += 1
+    return count
+
+
+def _relocation_safe(text: str, block, records, syntax: str) -> bool:
+    """May this relocation take these markers OUT of where they sit?
+
+    §3.4 asks whether inserting a marker changes what a reader sees; removing one
+    is the same question from the other side, and a §5.6 preparation removes
+    before it inserts. Two conditions, and each has a document:
+
+    * **the marker's own bytes must hold no backtick and no `|`.** Those are the
+      two characters a host reads as structure through a comment: a backtick pairs
+      with one outside the marker and puts part of it in a code span, and a `|`
+      splits the GFM cell the marker sits in, so removing the marker changes the
+      cells the row has. Both are the mechanisms §3.4's marker clause already
+      names, read backwards, and everything else inside a marker is inert unless
+      something in front of it is not, which the next condition covers. The rest
+      of a §4 body may move: a pre-v1.6 container stay carrying `x-note=legacy`
+      relocates as it always did.
+    * **the text in front of it, inside its container, must be in plain-text state
+      and free of backticks.** `| *Hello!**<!-- stay:p --> |` renders literally
+      because the delimiter run is followed by `<`; take the marker away and the
+      emphasis appears. A backtick before the marker can be an open code span
+      displaying it, and deciding which is the parse question §3.4 declines, so it
+      is refused on presence like everything else here. Backticks cost nothing at
+      this position: a relocation happens only where a container stay is not
+      already on a marker-only line after its rows.
+    """
+    lines = text.split("\n")
+    if not 0 < block.line <= len(lines):
+        return False
+    start = _line_offsets(text)[block.line - 1]
+    for record in records:
+        if "`" in record.marker.raw or "|" in record.marker.raw:
+            return False
+        if record.start < start:
+            return False
+        prefix = text[start:record.start]
+        if "`" in prefix:
+            return False
+        flush = bool(prefix) and prefix[-1] not in " \t\f\v"
+        if not plain_text_state(prefix, syntax=syntax, flush=flush):
+            return False
+    return True
+
+
+def _row_carrier_available(
+    probe: str, block, syntax: str, snapshot: _WriteSnapshot | None = None
+) -> bool:
+    """Would any unmarked row of this prepared container actually take a stay?
+
+    A §5.6 preparation is provisional and §5.6 requires it to commit with the row
+    write or not at all, so a container whose every row §3.4 refuses must not keep
+    the relocation. Deciding it here rather than by rolling the document back
+    afterwards is what keeps the answer independent of unrelated work elsewhere:
+    a rollback conditioned on "nothing was minted anywhere" commits this
+    relocation as soon as some other block in the document takes a stay.
+    """
+    lines = probe.split("\n")
+    code = code_lines(_blank_frontmatter(probe))
+    for child in block.children:
+        if child.kind != "row" or child.markers:
+            continue
+        if child.marker_line <= 0 or child.marker_line in code:
+            continue
+        carrier = _carrier_prefix(lines, block.line - 1, child.marker_line - 1, "row")
+        original = (
+            snapshot.prefix(probe, block.line - 1, child.marker_line - 1, "row")
+            if snapshot is not None else carrier
+        )
+        if carrier is not None and original is not None and all(
+            plain_text_state(prefix, syntax=syntax, flush=True)
+            for prefix in (carrier, original)
+        ):
+            return True
+    return False
 
 
 def stamp(
@@ -1001,8 +1387,9 @@ def stamp(
 
     original_norm = md.replace("\r\n", "\n").replace("\r", "\n")
     norm = original_norm
+    snapshot = _WriteSnapshot(norm, mode) if child_blocks else None
     if child_blocks:
-        prepared, drifted = _prepare_row_containers(norm, mode)
+        prepared, drifted, _declined = _prepare_row_containers(norm, mode, syntax, snapshot)
         if prepared is None:
             return StampResult(
                 text=md,
@@ -1012,6 +1399,7 @@ def stamp(
             )
         norm = prepared
     lines = norm.split("\n")
+    norm_offsets = _line_offsets(norm)
     # SPEC.md §3.3, computed on the blanked text so it agrees line-for-line with
     # what parse_document sees. `open_after` is the writer's half of the rule: a
     # marker appended after a line a fence is still open on lands *inside the
@@ -1067,7 +1455,14 @@ def stamp(
                         }
                     )
             current = {
-                "last_line0": start + n_lines - 2,
+                "first_line0": start - 1,
+                # The block's last CONTENT line, not the last line its span
+                # covers. A §5.2 node's source map runs to the start of the next
+                # block, so a loose list's span ends on the blank line after it
+                # and a marker written there begins the next run: §5.1 then binds
+                # it to the block BELOW, and one marker means two things. Trimming
+                # is a no-op under §5.1, whose runs have no trailing blank line.
+                "last_line0": start + n_lines - 2 - _trailing_blank_lines(chunk),
                 "content": content,
                 "has_id": has_id,
                 "children": children,
@@ -1094,6 +1489,7 @@ def stamp(
     append_inline: dict[int, list[str]] = {}
     row_inline: dict[int, str] = {}
     minted: list[dict] = []
+    refused_carriers: list[dict] = snapshot.refusals(norm) if snapshot else []
     expected_children: list[tuple[str, str]] = []
     expected_parents: list[str] = []
     for blk in needs_stamp:
@@ -1105,6 +1501,36 @@ def stamp(
                 # line. The row carrier is inside its last cell; appending the list
                 # marker after the closing pipe would invalidate the table.
                 continue
+            # SPEC.md §3.4: the carrier text and the marker's own bytes can each
+            # capture the marker at these two positions, and a writer that hits
+            # either mints nothing for that child block. The container is
+            # unaffected, and so is every other child. The carrier text is
+            # checked before an id is minted, so a refusal spends nothing; the
+            # marker is checked once its bytes exist.
+            #
+            # Check the original snapshot as well as prepared text. Relocation
+            # may remove an extension-bearing marker that §3.4 does not mask.
+            carrier = _carrier_prefix(
+                lines, blk["first_line0"], child["marker_line0"], child["kind"]
+            )
+            if (
+                child["kind"] == "row" and snapshot is not None
+                and snapshot.origins[norm_offsets[child["marker_line0"]]]
+                in snapshot.refused_rows
+            ):
+                carrier = None
+            flush = child["kind"] == "row"
+            original_carrier = snapshot.prefix(
+                norm, blk["first_line0"], child["marker_line0"], child["kind"]
+            ) if snapshot else carrier
+            if carrier is None or original_carrier is None or not all(
+                plain_text_state(prefix, syntax=syntax, flush=flush)
+                for prefix in (carrier, original_carrier)
+            ):
+                refusal = {"kind": child["kind"], "line": child["marker_line0"] + 1}
+                if refusal not in refused_carriers:
+                    refused_carriers.append(refusal)
+                continue
             new = next_id()
             hex_ = body_hash(child["content"], hash_length)
             marker = format_marker(
@@ -1112,6 +1538,11 @@ def stamp(
                 attrs=[("subhash", f"sha256:{hex_}")],
                 syntax=syntax,
             )
+            if not plain_text_state(carrier, marker, syntax=syntax, flush=flush):
+                refusal = {"kind": child["kind"], "line": child["marker_line0"] + 1}
+                if refusal not in refused_carriers:
+                    refused_carriers.append(refusal)
+                continue
             if child["kind"] == "row":
                 row_inline[child["marker_line0"]] = marker
             else:
@@ -1131,15 +1562,43 @@ def stamp(
         minted.append({"id": new, "line": carrier_line0 + 1})
         expected_parents.append(new)
 
+    # Refusals are discovered in prepared coordinates. Rollbacks report the
+    # original document; successful writes include any new marker-only lines.
+    offsets = _line_offsets(norm)
+    original_refusals = [
+        {"kind": item["kind"], "line": (
+            original_norm.count("\n", 0, snapshot.origins[offsets[item["line"] - 1]]) + 1
+            if snapshot else item["line"]
+        )}
+        for item in refused_carriers
+    ]
+    returned_refusals = sorted(
+        ({"kind": item["kind"], "line": item["line"] + sum(
+            at < item["line"] - 1 for at in insert_after
+        )} for item in refused_carriers),
+        key=lambda item: (item["line"], item["kind"]),
+    )
+
     if not insert_after and not append_inline and not row_inline:
-        return StampResult(text=norm, minted=[])
+        # Nothing was minted, so nothing justifies the provisional relocation a
+        # §5.6 preparation may have made: the document goes back as it arrived,
+        # line endings aside. Reachable only through §3.4, since a container is
+        # prepared exactly when it has a row to stamp.
+        return StampResult(
+            text=original_norm, minted=[], refused_carriers=original_refusals
+        )
 
     out: list[str] = []
     for i, line in enumerate(lines):
         if i in row_inline:
             position = _row_marker_position(line)
             if position is None:
-                return StampResult(text=md, minted=[], refused="no-row-carrier")
+                return StampResult(
+                text=md,
+                minted=[],
+                refused="no-row-carrier",
+                refused_carriers=original_refusals,
+            )
             line = line[:position] + row_inline[i] + line[position:]
         if i in append_inline:
             for marker in append_inline[i]:
@@ -1168,7 +1627,12 @@ def stamp(
                 and any(marker.id == child_id for marker in child.markers)
             ]
             if len(hits) != 1:
-                return StampResult(text=md, minted=[], refused="child-not-addressable")
+                return StampResult(
+                    text=md,
+                    minted=[],
+                    refused="child-not-addressable",
+                    refused_carriers=original_refusals,
+                )
         for parent_id in expected_parents:
             hits = [
                 (block, marker)
@@ -1177,14 +1641,26 @@ def stamp(
                 if marker.id == parent_id and not marker.has_subhash
             ]
             if len(hits) != 1:
-                return StampResult(text=md, minted=[], refused="parent-not-addressable")
+                return StampResult(
+                    text=md,
+                    minted=[],
+                    refused="parent-not-addressable",
+                    refused_carriers=original_refusals,
+                )
             block, marker = hits[0]
             if (
                 marker.hash is not None
                 and body_hash(block.content, len(marker.hash)) != marker.hash
             ):
-                return StampResult(text=md, minted=[], refused="proposal-drifts")
-    return StampResult(text=proposal, minted=minted)
+                return StampResult(
+                    text=md,
+                    minted=[],
+                    refused="proposal-drifts",
+                    refused_carriers=original_refusals,
+                )
+    return StampResult(
+        text=proposal, minted=minted, refused_carriers=returned_refusals
+    )
 
 
 def restamp(

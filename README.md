@@ -3,11 +3,11 @@
 [![PyPI](https://img.shields.io/pypi/v/markstay)](https://pypi.org/project/markstay/)
 [![Python versions](https://img.shields.io/pypi/pyversions/markstay)](https://pypi.org/project/markstay/)
 [![tests](https://img.shields.io/github/actions/workflow/status/markstaymd/markstay-py/test.yml?label=tests)](https://github.com/markstaymd/markstay-py/actions/workflows/test.yml)
-[![spec](https://img.shields.io/badge/spec-v1.6-blue)](https://markstay.org)
+[![spec](https://img.shields.io/badge/spec-v1.7-blue)](https://markstay.org)
 ![License](https://img.shields.io/pypi/l/markstay)
 
 The Python reference implementation of the [markstay spec](https://markstay.org)
-(v1.6). markstay is a source-level identity primitive for Markdown blocks: an id
+(v1.7). markstay is a source-level identity primitive for Markdown blocks: an id
 token that **stays** bound to its block across edits (marker `stay:`), so a
 reference to a block survives the document being rewritten, including by an LLM.
 
@@ -25,6 +25,22 @@ or accepted GFM table body row may carry its own stay under the reserved `subhas
 key, resolved through the §9.2 ladder. It is opt-in because §16 makes segmenting and
 resolving child blocks optional. The read/write safety rules §16 makes mandatory are
 unconditional here, as they are in every implementation.
+
+**Write safety (§3.4, v1.7).** Child markers are inserted only at carriers that
+pass the plain-text predicate. It scans the container's original source prefix
+outside existing plain markers, and skips a child when the prefix contains `<`,
+a backslash, or (in MDX) `{`. A flush row carrier also refuses a trailing `*`,
+`_` or `~`. Each skipped position is reported in `StampResult.refused_carriers`
+and by the CLI; other writable children can still receive stays. Table marker
+relocations must also pass the removal and insertion checks. Inline recovery
+evidence belongs in a side index, because a new child marker carries only an id
+and a digest.
+
+These checks preserve the specification's byte-level contract; they do not
+promise identical rendering for arbitrary Markdown. With the CommonMark extra
+installed, the linter emits the informational `OUTSIDE_SUBSET` advisory when
+§5.1 and §5.2 would select different blocks. Without the extra it emits no such
+advisory. Use `mode="commonmark"` or `--commonmark` to opt into tree segmentation.
 
 ## Install
 
@@ -102,7 +118,8 @@ res = M.stamp("First paragraph.\n\nSecond paragraph.\n")
 res.text     # each block now carries <!-- stay:ID hash=sha256:... -->
 res.minted   # [{"id": ..., "line": ...}, ...]
 res.drifted  # container ids whose pre-existing drift made a row write abort
-res.refused  # why the write path declined, or None; a refusal returns the source
+res.refused_carriers  # child positions skipped by §3.4, with returned-text line numbers
+res.refused  # why the whole write path declined, or None; a refusal returns the source
              # byte for byte with nothing minted, which is what a document with
              # nothing to do returns too
 
@@ -235,7 +252,7 @@ and finds each document's baseline itself, which is what a hook actually wants.
 # .pre-commit-config.yaml
 repos:
   - repo: https://github.com/markstaymd/markstay-py
-    rev: v0.10.0
+    rev: v0.11.0
     hooks:
       - id: markstay                  # or markstay-collections, to include table
                                       # rows and list bullets
@@ -284,8 +301,8 @@ reported as a move rather than a loss, so reorganising documents does not block.
 ## The conformance corpus (the actual deliverable)
 
 The corpus under [`conformance/`](conformance) is shared with the JavaScript
-reference. **420 core vectors** across two tiers, plus a 23-vector optional
-profile this package advertises, so its own runner reports **443**. The `check`
+reference. **420 core vectors** across two tiers, plus a 31-vector optional
+profile this package advertises, so its own runner reports **451**. The `check`
 category supplies 14 commit-shaped cases with paths, statuses, before/after text,
 expected baseline pairings, findings, move/deletion/tracking-departure notes, and
 scope behavior.
@@ -297,7 +314,7 @@ scope behavior.
 - **`rows/`** , the optional `rows` profile (SPEC.md §5.6 table-row identity).
   §16 keeps child segmentation optional, so a conforming runner MAY decline this
   profile; the JavaScript and Rust references do, and run the 420 core vectors
-  alone. This package implements §5.6, so it advertises `rows` and runs all 443.
+  alone. This package implements §5.6, so it advertises `rows` and runs all 451.
   A runner that meets a profile it has never heard of fails rather than skipping
   it, which is what stops a new category going missing quietly.
 

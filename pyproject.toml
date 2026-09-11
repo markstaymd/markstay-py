@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "markstay"
 dynamic = ["version"]
-description = "Python reference implementation of the markstay spec (v1.6): source-level block identity for Markdown"
+description = "Python reference implementation of the markstay spec (v1.7): source-level block identity for Markdown"
 readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"

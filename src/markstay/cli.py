@@ -454,6 +454,19 @@ def _cmd_stamp(args, ap) -> int:
         else:
             sys.stdout.write(res.text)
         sys.stderr.write(f"{f}: {len(res.minted)} id(s) minted\n")
+        if res.refused_carriers:
+            # SPEC.md §3.4 skips one child rather than the operation, so the rest
+            # of the document is stamped and the exit status stays 0. Say which
+            # lines were left unaddressed anyway: the rule fails towards refusing
+            # a position that was safe, and that trade only holds if a refusal is
+            # visible and countable rather than silent.
+            lines = ", ".join(
+                f"L{entry['line']} ({entry['kind']})" for entry in res.refused_carriers
+            )
+            sys.stderr.write(
+                f"{f}: {len(res.refused_carriers)} carrier(s) refused under §3.4, "
+                f"unaddressed: {lines}\n"
+            )
     return status
 
 

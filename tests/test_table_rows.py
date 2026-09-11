@@ -1041,20 +1041,45 @@ def test_a_comment_beside_a_marker_does_not_block_a_row_stamp():
     import markstay as M
 
     row = "| a<!-- stay:m0 subhash=sha256:ca978112ca1b --> |"
-    for doc, expected in (
-        (
-            "<!-- a note --><!-- stay:p -->\n| h |\n|---|\n| a |\n",
-            f"<!-- a note -->\n| h |\n|---|\n{row}\n<!-- stay:p -->\n",
-        ),
-        (
-            "<!-- stay:p --> tail\n| h |\n|---|\n| a |\n",
-            f" tail\n| h |\n|---|\n{row}\n<!-- stay:p -->\n",
-        ),
-    ):
-        result = M.stamp(doc, child_blocks=True, new_id=ids("m0", "m1"))
-        assert result.text == expected, result.text
-        assert [entry["id"] for entry in result.minted] == ["m0"]
-        assert M.lint_document(result.text, child_blocks=True)[1] == []
+    doc = "<!-- stay:p --> tail\n| h |\n|---|\n| a |\n"
+    result = M.stamp(doc, child_blocks=True, new_id=ids("m0", "m1"))
+    assert result.text == f" tail\n| h |\n|---|\n{row}\n<!-- stay:p -->\n"
+    assert [entry["id"] for entry in result.minted] == ["m0"]
+    assert M.lint_document(result.text, child_blocks=True)[1] == []
+
+
+def test_an_ordinary_comment_in_the_container_refuses_the_row_carrier():
+    """SPEC.md §3.4 refuses on presence, and an ordinary comment is presence.
+
+    Deciding that this particular comment closes itself is the predicate that was
+    written and withdrawn in review round 4, and `--!>` is why: HTML closes a
+    comment at a spelling CommonMark does not recognise, so "closed" is not one
+    question. A marker is different and is masked, because §4 defines its bytes.
+
+    The relocation is then **declined rather than made and rolled back**: moving
+    a stay is itself an edit, so a preparation that buys no row stay does not
+    happen. The container's rows go with it, because §5.6 wants the container's
+    own stay on a marker-only line after the body and a row stamped without the
+    move would leave it inside a cell.
+    """
+    import markstay as M
+
+    doc = "<!-- a note --><!-- stay:p -->\n| h |\n|---|\n| a |\n"
+    result = M.stamp(doc, child_blocks=True, new_id=ids("m0", "m1"))
+    assert result.text == doc
+    assert result.minted == []
+    assert result.refused is None
+    assert result.refused_carriers == [{"kind": "row", "line": 4}]
+
+    prepared, drifted, declined = _stamp_module()._prepare_row_containers(
+        doc, "blank-line", "html"
+    )
+    assert drifted == []
+    # Keyed on the container's content rather than on its stay's id: §7 duplicates
+    # are an error `stamp` does not refuse, and a shared id would spread this
+    # refusal to a different table.
+    assert declined == {"<!-- a note -->\n| h |\n|---|\n| a |"}
+    assert prepared == doc
 
 
 def test_relocation_refuses_to_land_a_record_inside_a_comment():

@@ -1,471 +1,628 @@
 {
-  "category": "rows",
-  "tier": "rows",
-  "profile": "rows",
-  "vectors": [
-    {
-      "name": "the-flush-carrier-addresses-its-row",
-      "note": "SPEC.md §5.6 Carrier: a row marker sits inside the row's last cell, flush against that cell's content. The row body is the trimmed cells joined with `|`, so the marker contributes nothing to it and the container's own hash is unaffected by the stamp. This is the canonical shape every other vector in this profile varies.",
-      "op": "children",
-      "doc": "| a | b |\n|---|---|\n| x | y<!-- stay:r1 subhash=sha256:1122 --> |\n\n<!-- stay:tb1 -->\n",
-      "expected": {
-        "blockIds": [
-          "tb1"
-        ],
-        "childIds": [
-          "r1"
-        ],
-        "rows": [
-          {
-            "container": 0,
-            "ordinal": 1,
-            "body": "x|y",
-            "ids": [
-              "r1"
-            ]
-          }
-        ]
-      }
-    },
-    {
-      "name": "a-marker-elsewhere-on-the-row-line-still-addresses-that-row",
-      "note": "SPEC.md §5.6 Rules for readers: 'Wherever in that accepted row's source line it sits, it is addressing that row and nothing else.' Flush is a MUST for WRITERS; a reader that only recognises the flush position loses a hand-written stay. The body is identical to the flush vector because marker tokens are deleted from the cells.",
-      "op": "children",
-      "doc": "| a | b |\n|---|---|\n| x<!-- stay:r1 subhash=sha256:1122 --> | y |\n\n<!-- stay:tb1 -->\n",
-      "expected": {
-        "blockIds": [
-          "tb1"
-        ],
-        "childIds": [
-          "r1"
-        ],
-        "rows": [
-          {
-            "container": 0,
-            "ordinal": 1,
-            "body": "x|y",
-            "ids": [
-              "r1"
-            ]
-          }
-        ]
-      }
-    },
-    {
-      "name": "cell-padding-is-not-drift",
-      "note": "SPEC.md §5.6 Body and hash step 3: each cell's leading and trailing ASCII whitespace (space, tab, form feed, vertical tab) is removed. The first two containers hold the same content at different column widths and produce the SAME row body, which is why the row body is trimmed rather than source-sliced: every table formatter re-pads cells and §8 keeps interior whitespace, so a source slice would drift on a format run that changed no content. The third container pins the set as EXACT rather than as 'whitespace': its cell is padded with NO-BREAK SPACE (U+00A0), which is not in the ASCII set and therefore SURVIVES into the body. An implementation reaching for the runtime's own idea of whitespace (Python `str.strip()`, JavaScript `\\\\s`, Rust `char::is_whitespace`) trims it and hashes a different row, which is §3.3's named-set lesson one construct over.",
-      "op": "children",
-      "doc": "| a | b |\n|---|---|\n|   x   |   y<!-- stay:r1 subhash=sha256:1122 -->   |\n\n<!-- stay:tb1 -->\n\n| a | b |\n|---|---|\n|x|y<!-- stay:r2 subhash=sha256:1122 -->|\n\n<!-- stay:tb2 -->\n\n| a | b |\n|---|---|\n| x | y<!-- stay:r3 subhash=sha256:1122 --> |\n\n<!-- stay:tb3 -->\n",
-      "expected": {
-        "blockIds": [
-          "tb1",
-          "tb2",
-          "tb3"
-        ],
-        "childIds": [
-          "r1",
-          "r2",
-          "r3"
-        ],
-        "rows": [
-          {
-            "container": 0,
-            "ordinal": 1,
-            "body": "x|y",
-            "ids": [
-              "r1"
-            ]
-          },
-          {
-            "container": 1,
-            "ordinal": 1,
-            "body": "x|y",
-            "ids": [
-              "r2"
-            ]
-          },
-          {
-            "container": 2,
-            "ordinal": 1,
-            "body": "x| y ",
-            "ids": [
-              "r3"
-            ]
-          }
-        ]
-      }
-    },
-    {
-      "name": "the-cell-encoding-makes-the-join-reversible",
-      "note": "SPEC.md §5.6 Body and hash step 4: inside each cell every `\\` is replaced with `\\\\`, then every `|` with `\\|`, in that order. This is the collision the spec names in its own prose: `| a\\ | b |` is TWO cells (the backslash precedes a space, so the delimiter after it is unescaped) and `| a\\|b |` is ONE cell (an odd run of backslashes escapes that pipe). Without step 4 both would join to `a\\|b` and two structurally different rows would hash identically. With it they are `a\\\\|b` and `a\\\\\\|b`. No other vector in this profile contains an escaped pipe, so dropping step 4 entirely passed the whole corpus.",
-      "op": "children",
-      "doc": "| h | h |\n|---|---|\n| a\\ | b<!-- stay:r1 subhash=sha256:1122 --> |\n\n<!-- stay:tb1 -->\n\n| h |\n|---|\n| a\\|b<!-- stay:r2 subhash=sha256:1122 --> |\n\n<!-- stay:tb2 -->\n",
-      "expected": {
-        "blockIds": [
-          "tb1",
-          "tb2"
-        ],
-        "childIds": [
-          "r1",
-          "r2"
-        ],
-        "rows": [
-          {
-            "container": 0,
-            "ordinal": 1,
-            "body": "a\\\\|b",
-            "ids": [
-              "r1"
-            ]
-          },
-          {
-            "container": 1,
-            "ordinal": 1,
-            "body": "a\\\\\\|b",
-            "ids": [
-              "r2"
-            ]
-          }
-        ]
-      }
-    },
-    {
-      "name": "the-ascii-trim-set-is-all-four-characters",
-      "note": "SPEC.md §5.6 Body and hash step 3 names four characters: space, tab, form feed, vertical tab. `cell-padding-is-not-drift` pins the set's OUTER edge (NO-BREAK SPACE is not in it and survives); this pins the inner edge, that all four really are trimmed. HTAB, FF and VT appeared nowhere in this profile as positive padding, so an implementation trimming only spaces passed every row vector. Note FF and VT are trim characters HERE while a form feed in the DELIMITER line refuses the table outright, which is a deliberate narrowing rather than an inconsistency.",
-      "op": "children",
-      "doc": "| h | h |\n|---|---|\n|\tx\f |\u000b y<!-- stay:r1 subhash=sha256:1122 --> |\n\n<!-- stay:tb1 -->\n",
-      "expected": {
-        "blockIds": [
-          "tb1"
-        ],
-        "childIds": [
-          "r1"
-        ],
-        "rows": [
-          {
-            "container": 0,
-            "ordinal": 1,
-            "body": "x|y",
-            "ids": [
-              "r1"
-            ]
-          }
-        ]
-      }
-    },
-    {
-      "name": "empty-cell-positions-survive-the-join",
-      "note": "SPEC.md §5.6: the separator is `|` rather than a newline or a space so an empty cell survives. Joining with LF would put a blank line at one end for §8 step 3 to drop, hashing `| | a |` the same as `| a |`. The body here keeps its leading and trailing empty cells as bare separators.",
-      "op": "children",
-      "doc": "| a | b | c |\n|---|---|---|\n| | y | <!-- stay:r1 subhash=sha256:1122 -->|\n\n<!-- stay:tb1 -->\n",
-      "expected": {
-        "blockIds": [
-          "tb1"
-        ],
-        "childIds": [
-          "r1"
-        ],
-        "rows": [
-          {
-            "container": 0,
-            "ordinal": 1,
-            "body": "|y|",
-            "ids": [
-              "r1"
-            ]
-          }
-        ]
-      }
-    },
-    {
-      "name": "a-row-without-outer-pipes-refuses-the-whole-table",
-      "note": "SPEC.md §5.6 rule 1: a row line begins with the first unescaped delimiter and ends with the last, which is narrower than GFM. The header and delimiter are WELL FORMED and a VALID marked body row precedes the invalid one, so this pins rule 4's PER TABLE refusal specifically: `r0` addresses nothing either, even though its own line is a perfectly good row. Two weaker readings produce a different answer here and are therefore observable: accepting GFM's optional outer pipes makes `x | y` a second row, and ending the candidate at its first non-row leaves `r0` addressing the first. The reason the whole table goes is ordinals: §9.2 tier 2 maps markerless children by position, so two tools disagreeing about whether a line is a row disagree about every ordinal after it. §16 also holds: neither `r0` nor `r1` enters the block id index.",
-      "op": "children",
-      "doc": "| a | b |\n|---|---|\n| p | q<!-- stay:r0 subhash=sha256:1122 --> |\nx | y<!-- stay:r1 subhash=sha256:1122 -->\n\n<!-- stay:tb1 -->\n",
-      "expected": {
-        "blockIds": [
-          "tb1"
-        ],
-        "childIds": [],
-        "rows": []
-      }
-    },
-    {
-      "name": "a-ragged-row-is-neither-padded-nor-truncated",
-      "note": "SPEC.md §5.6: 'a parser pads or truncates a row to the header's cell count and this rule does neither, so a tool implementing §5.6 MUST take a row's cells from the rule above rather than from a parser's cell list even where it has one.' The header has three cells and this body row has two, so the body is the two cells it actually has. A tool reading cells off a GFM parser hashes a third empty cell here and diverges from every tool that does not.",
-      "op": "children",
-      "doc": "| a | b | c |\n|---|---|---|\n| x | y<!-- stay:r1 subhash=sha256:1122 --> |\n\n<!-- stay:tb1 -->\n",
-      "expected": {
-        "blockIds": [
-          "tb1"
-        ],
-        "childIds": [
-          "r1"
-        ],
-        "rows": [
-          {
-            "container": 0,
-            "ordinal": 1,
-            "body": "x|y",
-            "ids": [
-              "r1"
-            ]
-          }
-        ]
-      }
-    },
-    {
-      "name": "a-header-marker-addresses-nothing",
-      "note": "SPEC.md §5.6: the header and delimiter rows are the table's schema rather than its content, so a conforming tool MUST NOT mint a stay on either and a `subhash` marker found on one addresses nothing. The table is still recognised and its body row is still ordinal 1 with no ids, which separates 'this marker addresses nothing' from 'this table is refused'.",
-      "op": "children",
-      "doc": "| a | b<!-- stay:h1 subhash=sha256:1122 --> |\n|---|---|\n| x | y |\n\n<!-- stay:tb1 -->\n",
-      "expected": {
-        "blockIds": [
-          "tb1"
-        ],
-        "childIds": [],
-        "rows": [
-          {
-            "container": 0,
-            "ordinal": 1,
-            "body": "x|y",
-            "ids": []
-          }
-        ]
-      }
-    },
-    {
-      "name": "a-delimiter-marker-stops-the-candidate-starting",
-      "note": "SPEC.md §5.6 rule 2: the delimiter source line MUST contain no marker token. Unlike the header case above, the candidate never starts, so the table has no body rows at all. The delimiter-line rule preserves the refusal-only relation with GFM: a marker is not deleted to manufacture delimiter syntax.",
-      "op": "children",
-      "doc": "| a | b |\n|---|---<!-- stay:d1 subhash=sha256:1122 -->|\n| x | y |\n\n<!-- stay:tb1 -->\n",
-      "expected": {
-        "blockIds": [
-          "tb1"
-        ],
-        "childIds": [],
-        "rows": []
-      }
-    },
-    {
-      "name": "a-form-feed-in-the-delimiter-refuses-the-table",
-      "note": "SPEC.md §5.6 rule 2: the delimiter line MUST contain no form feed or vertical tab, and each cell trimmed of spaces and tabs only MUST be an optional `:`, one or more `-`, an optional `:`, and nothing else. This is a deliberate narrowing: `cmark-gfm` accepts these where the pinned MarkdownIt table rule refuses them, so §5.6 rejects both rather than making child addressability depend on which parser an implementation happened to test against.",
-      "op": "children",
-      "doc": "| a | b |\n|---|--\f-|\n| x | y<!-- stay:r1 subhash=sha256:1122 --> |\n\n<!-- stay:tb1 -->\n",
-      "expected": {
-        "blockIds": [
-          "tb1"
-        ],
-        "childIds": [],
-        "rows": []
-      }
-    },
-    {
-      "name": "a-non-row-line-refuses-the-whole-table",
-      "note": "SPEC.md §5.6 rules 3 and 4: the candidate body continues to the first blank line, marker-only line, or EOF, and every other line in it MUST be a row line. A started candidate with any non-row line has no child blocks AT ALL, including the row lines before the refusal. Ending the candidate at the first non-row line instead would leave `r1` addressable and is mutation 5.",
-      "op": "children",
-      "doc": "| a | b |\n|---|---|\n| x | y<!-- stay:r1 subhash=sha256:1122 --> |\nplain line\n\n<!-- stay:tb1 -->\n",
-      "expected": {
-        "blockIds": [
-          "tb1"
-        ],
-        "childIds": [],
-        "rows": []
-      }
-    },
-    {
-      "name": "a-fence-in-the-body-refuses-the-whole-table",
-      "note": "SPEC.md §5.6 rule 0: a line §3.3 masks as fenced code is ineligible as a row line, and rule 3 says such a line never terminates a candidate even if its source has that shape. So the fence neither ends the table nor is bridged across: rule 4 refuses the candidate. A tool that let the fence terminate the body would keep `r1` addressable and silently disagree with one that bridged it.",
-      "op": "children",
-      "doc": "| a | b |\n|---|---|\n| x | y<!-- stay:r1 subhash=sha256:1122 --> |\n```\n| p | q |\n```\n\n<!-- stay:tb1 -->\n",
-      "expected": {
-        "blockIds": [
-          "tb1"
-        ],
-        "childIds": [],
-        "rows": []
-      }
-    },
-    {
-      "name": "two-candidates-in-one-container-address-nothing",
-      "note": "SPEC.md §5.6: an accepted candidate has child blocks only when it is the ONLY accepted candidate in its selected §5 container. The marker-only line terminates the first candidate without splitting the block, so both tables share one container and neither addresses anything. Same fail-closed reason as rule 4: §9.2 records the container and the row ordinal, not a second table discriminator, so two ordinal-1 rows in one container cannot be recovered unambiguously.",
-      "op": "children",
-      "doc": "| a | b |\n|---|---|\n| x | y<!-- stay:r1 subhash=sha256:1122 --> |\n<!-- stay:mid -->\n| c | d |\n|---|---|\n| p | q<!-- stay:r2 subhash=sha256:3344 --> |\n\n<!-- stay:tb1 -->\n",
-      "expected": {
-        "blockIds": [
-          "mid",
-          "tb1"
-        ],
-        "childIds": [],
-        "rows": []
-      }
-    },
-    {
-      "name": "two-candidates-in-separate-containers-both-address",
-      "note": "The control for the vector above: one blank line moves the second table into its own §5 container, so each is the sole accepted candidate in its own container and both rows address. The filter is per container, not per document.",
-      "op": "children",
-      "doc": "| a | b |\n|---|---|\n| x | y<!-- stay:r1 subhash=sha256:1122 --> |\n\n<!-- stay:tb1 -->\n\n| c | d |\n|---|---|\n| p | q<!-- stay:r2 subhash=sha256:3344 --> |\n\n<!-- stay:tb2 -->\n",
-      "expected": {
-        "blockIds": [
-          "tb1",
-          "tb2"
-        ],
-        "childIds": [
-          "r1",
-          "r2"
-        ],
-        "rows": [
-          {
-            "container": 0,
-            "ordinal": 1,
-            "body": "x|y",
-            "ids": [
-              "r1"
-            ]
-          },
-          {
-            "container": 1,
-            "ordinal": 1,
-            "body": "p|q",
-            "ids": [
-              "r2"
-            ]
-          }
-        ]
-      }
-    },
-    {
-      "name": "a-legacy-suffix-stay-migrates-to-a-marker-only-line",
-      "note": "SPEC.md §5.6 Rules for writers, migration probe: a bare container marker written before v1.6 may legally follow the last row's closing pipe. Left there, the opaque marker token would follow the final delimiter, rule 1 would reject the line, and the new row stay would be unaddressable. The probe relocates the span verbatim to a marker-only line after the candidate body, leaving every non-marker byte unchanged. The container hash is UNCHANGED by the whole operation, which is what the flush carrier buys.",
-      "op": "stamp",
-      "doc": "| a | b |\n|---|---|\n| x | y |<!-- stay:tb1 hash=sha256:8a2e294d70b7 -->\n",
+ "category": "rows",
+ "tier": "rows",
+ "profile": "rows",
+ "vectors": [
+  {
+   "name": "the-flush-carrier-addresses-its-row",
+   "note": "SPEC.md §5.6 Carrier: a row marker sits inside the row's last cell, flush against that cell's content. The row body is the trimmed cells joined with `|`, so the marker contributes nothing to it and the container's own hash is unaffected by the stamp. This is the canonical shape every other vector in this profile varies.",
+   "op": "children",
+   "doc": "| a | b |\n|---|---|\n| x | y<!-- stay:r1 subhash=sha256:1122 --> |\n\n<!-- stay:tb1 -->\n",
+   "expected": {
+    "blockIds": [
+     "tb1"
+    ],
+    "childIds": [
+     "r1"
+    ],
+    "rows": [
+     {
+      "container": 0,
+      "ordinal": 1,
+      "body": "x|y",
       "ids": [
-        "n1"
-      ],
-      "expected": {
-        "text": "| a | b |\n|---|---|\n| x | y<!-- stay:n1 subhash=sha256:791a886d455a --> |\n<!-- stay:tb1 hash=sha256:8a2e294d70b7 -->\n",
-        "minted": [
-          {
-            "id": "n1",
-            "line": 3
-          }
-        ],
-        "drifted": []
-      }
-    },
-    {
-      "name": "a-subhash-suffix-is-never-eligible-to-move",
-      "note": "SPEC.md §5.6: 'A marker carrying `subhash` is never eligible to move as a container marker,' and the probe's suffix test admits only complete marker spans WITHOUT `subhash`. Moving one would relocate a child's stay as though it were the container's. The write is refused and the source stays byte-identical, which is the transactional half of the writer rule.",
-      "op": "stamp",
-      "doc": "| a | b |\n|---|---|\n| x | y |<!-- stay:tb1 subhash=sha256:1122 -->\n",
+       "r1"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "a-marker-elsewhere-on-the-row-line-still-addresses-that-row",
+   "note": "SPEC.md §5.6 Rules for readers: 'Wherever in that accepted row's source line it sits, it is addressing that row and nothing else.' Flush is a MUST for WRITERS; a reader that only recognises the flush position loses a hand-written stay. The body is identical to the flush vector because marker tokens are deleted from the cells.",
+   "op": "children",
+   "doc": "| a | b |\n|---|---|\n| x<!-- stay:r1 subhash=sha256:1122 --> | y |\n\n<!-- stay:tb1 -->\n",
+   "expected": {
+    "blockIds": [
+     "tb1"
+    ],
+    "childIds": [
+     "r1"
+    ],
+    "rows": [
+     {
+      "container": 0,
+      "ordinal": 1,
+      "body": "x|y",
       "ids": [
-        "n1"
-      ],
-      "expected": {
-        "text": "| a | b |\n|---|---|\n| x | y |<!-- stay:tb1 subhash=sha256:1122 -->\n",
-        "minted": [],
-        "drifted": []
-      }
-    },
-    {
-      "name": "a-mixed-content-suffix-refuses-the-migration",
-      "note": "SPEC.md §5.6: the probe fires only when the suffix after the final unescaped delimiter is ASCII whitespace and complete marker spans and nothing else. Here the suffix carries prose, so relocating the marker would move a stay away from text that is part of the container body. The probe MUST NOT write, and the source stays byte-identical.",
-      "op": "stamp",
-      "doc": "| a | b |\n|---|---|\n| x | y | prose <!-- stay:tb1 hash=sha256:8a2e294d70b7 -->\n",
+       "r1"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "cell-padding-is-not-drift",
+   "note": "SPEC.md §5.6 Body and hash step 3: each cell's leading and trailing ASCII whitespace (space, tab, form feed, vertical tab) is removed. The first two containers hold the same content at different column widths and produce the SAME row body, which is why the row body is trimmed rather than source-sliced: every table formatter re-pads cells and §8 keeps interior whitespace, so a source slice would drift on a format run that changed no content. The third container pins the set as EXACT rather than as 'whitespace': its cell is padded with NO-BREAK SPACE (U+00A0), which is not in the ASCII set and therefore SURVIVES into the body. An implementation reaching for the runtime's own idea of whitespace (Python `str.strip()`, JavaScript `\\\\s`, Rust `char::is_whitespace`) trims it and hashes a different row, which is §3.3's named-set lesson one construct over.",
+   "op": "children",
+   "doc": "| a | b |\n|---|---|\n|   x   |   y<!-- stay:r1 subhash=sha256:1122 -->   |\n\n<!-- stay:tb1 -->\n\n| a | b |\n|---|---|\n|x|y<!-- stay:r2 subhash=sha256:1122 -->|\n\n<!-- stay:tb2 -->\n\n| a | b |\n|---|---|\n| x | y<!-- stay:r3 subhash=sha256:1122 --> |\n\n<!-- stay:tb3 -->\n",
+   "expected": {
+    "blockIds": [
+     "tb1",
+     "tb2",
+     "tb3"
+    ],
+    "childIds": [
+     "r1",
+     "r2",
+     "r3"
+    ],
+    "rows": [
+     {
+      "container": 0,
+      "ordinal": 1,
+      "body": "x|y",
       "ids": [
-        "n1"
-      ],
-      "expected": {
-        "text": "| a | b |\n|---|---|\n| x | y | prose <!-- stay:tb1 hash=sha256:8a2e294d70b7 -->\n",
-        "minted": [],
-        "drifted": []
-      }
-    },
-    {
-      "name": "a-migration-that-creates-a-second-candidate-rolls-the-document-back",
-      "note": "SPEC.md §5.6: the relocation 'succeeds only when the suffix-bearing line becomes the candidate's last body row and the requested row belongs to the sole accepted candidate in that selected container', and is provisional until the segmenter and the complete scan have run again over the whole proposed document. Relocating `tb1` here turns the second table into an accepted candidate, so the container holds two and nothing addresses. The write is abandoned whole: byte-identical source, nothing minted, and NOTHING REPORTED AS DRIFTED, because the container was clean before the tool touched it. Reporting drift here would blame the source for the tool's own provisional edit.",
-      "op": "stamp",
-      "doc": "| a | b |\n|---|---|\n| x | y |\n<!-- stay:mid -->\n| c | d |\n|---|---|\n| p | q |<!-- stay:tb1 hash=sha256:5ecd02e09215 -->\n",
+       "r1"
+      ]
+     },
+     {
+      "container": 1,
+      "ordinal": 1,
+      "body": "x|y",
       "ids": [
-        "n1"
-      ],
-      "expected": {
-        "text": "| a | b |\n|---|---|\n| x | y |\n<!-- stay:mid -->\n| c | d |\n|---|---|\n| p | q |<!-- stay:tb1 hash=sha256:5ecd02e09215 -->\n",
-        "minted": [],
-        "drifted": []
-      }
-    },
-    {
-      "name": "a-relocation-that-would-refit-an-existing-rows-cells-rolls-the-document-back",
-      "note": "SPEC.md §5.6: relocating a container stay out of a row's cell is provisional until the whole proposed document has been re-read, and what must survive it is every row's hash body, not only the children this pass mints. Removing `p` here leaves `a\\` against the delimiter, so the backslash escapes it and the two cells fuse: row 1's body goes from `a\\\\|b` to a single cell, and the `subhash` already stored on that row covers a body that no longer exists. Nothing downstream would catch it, because the child marker is still present at the same id, the container refresh only re-checks freshly minted children, and a block-level lint of the result is clean. So the write is abandoned whole: byte-identical source, nothing minted, and nothing reported as drifted, since the document was consistent before the tool touched it.",
-      "op": "stamp",
-      "doc": "| h | h |\n|---|---|\n| a\\<!-- stay:p hash=sha256:d911b9ba7908 -->| b<!-- stay:r subhash=sha256:0c12c17a7c55 --> |\n| c | d |\n",
+       "r2"
+      ]
+     },
+     {
+      "container": 2,
+      "ordinal": 1,
+      "body": "x| y ",
       "ids": [
-        "n1"
-      ],
-      "expected": {
-        "text": "| h | h |\n|---|---|\n| a\\<!-- stay:p hash=sha256:d911b9ba7908 -->| b<!-- stay:r subhash=sha256:0c12c17a7c55 --> |\n| c | d |\n",
-        "minted": [],
-        "drifted": []
-      }
-    },
-    {
-      "name": "pre-existing-container-drift-is-reported-before-any-refresh",
-      "note": "SPEC.md §5.6: 'Before writing, the tool MUST compare every such stored hash with the complete pre-write container body. If one is already drifted, the tool MUST report that fact and MAY abort without changing the source.' The two forbidden outcomes are preserving a hash the tool's own write made stale, and clearing pre-existing drift without first reporting it. Here `tb1`'s hash never matched, so the row stamp does not proceed and `tb1` is named.",
-      "op": "stamp",
-      "doc": "| a | b |\n|---|---|\n| x | y |\n<!-- stay:tb1 hash=sha256:deadbeefdead -->\n",
+       "r3"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "the-cell-encoding-makes-the-join-reversible",
+   "note": "SPEC.md §5.6 Body and hash step 4: inside each cell every `\\` is replaced with `\\\\`, then every `|` with `\\|`, in that order. This is the collision the spec names in its own prose: `| a\\ | b |` is TWO cells (the backslash precedes a space, so the delimiter after it is unescaped) and `| a\\|b |` is ONE cell (an odd run of backslashes escapes that pipe). Without step 4 both would join to `a\\|b` and two structurally different rows would hash identically. With it they are `a\\\\|b` and `a\\\\\\|b`. No other vector in this profile contains an escaped pipe, so dropping step 4 entirely passed the whole corpus.",
+   "op": "children",
+   "doc": "| h | h |\n|---|---|\n| a\\ | b<!-- stay:r1 subhash=sha256:1122 --> |\n\n<!-- stay:tb1 -->\n\n| h |\n|---|\n| a\\|b<!-- stay:r2 subhash=sha256:1122 --> |\n\n<!-- stay:tb2 -->\n",
+   "expected": {
+    "blockIds": [
+     "tb1",
+     "tb2"
+    ],
+    "childIds": [
+     "r1",
+     "r2"
+    ],
+    "rows": [
+     {
+      "container": 0,
+      "ordinal": 1,
+      "body": "a\\\\|b",
       "ids": [
-        "n1"
-      ],
-      "expected": {
-        "text": "| a | b |\n|---|---|\n| x | y |\n<!-- stay:tb1 hash=sha256:deadbeefdead -->\n",
-        "minted": [],
-        "drifted": [
-          "tb1"
-        ]
-      }
+       "r1"
+      ]
+     },
+     {
+      "container": 1,
+      "ordinal": 1,
+      "body": "a\\\\\\|b",
+      "ids": [
+       "r2"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "the-ascii-trim-set-is-all-four-characters",
+   "note": "SPEC.md §5.6 Body and hash step 3 names four characters: space, tab, form feed, vertical tab. `cell-padding-is-not-drift` pins the set's OUTER edge (NO-BREAK SPACE is not in it and survives); this pins the inner edge, that all four really are trimmed. HTAB, FF and VT appeared nowhere in this profile as positive padding, so an implementation trimming only spaces passed every row vector. Note FF and VT are trim characters HERE while a form feed in the DELIMITER line refuses the table outright, which is a deliberate narrowing rather than an inconsistency.",
+   "op": "children",
+   "doc": "| h | h |\n|---|---|\n|\tx\f |\u000b y<!-- stay:r1 subhash=sha256:1122 --> |\n\n<!-- stay:tb1 -->\n",
+   "expected": {
+    "blockIds": [
+     "tb1"
+    ],
+    "childIds": [
+     "r1"
+    ],
+    "rows": [
+     {
+      "container": 0,
+      "ordinal": 1,
+      "body": "x|y",
+      "ids": [
+       "r1"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "empty-cell-positions-survive-the-join",
+   "note": "SPEC.md §5.6: the separator is `|` rather than a newline or a space so an empty cell survives. Joining with LF would put a blank line at one end for §8 step 3 to drop, hashing `| | a |` the same as `| a |`. The body here keeps its leading and trailing empty cells as bare separators.",
+   "op": "children",
+   "doc": "| a | b | c |\n|---|---|---|\n| | y | <!-- stay:r1 subhash=sha256:1122 -->|\n\n<!-- stay:tb1 -->\n",
+   "expected": {
+    "blockIds": [
+     "tb1"
+    ],
+    "childIds": [
+     "r1"
+    ],
+    "rows": [
+     {
+      "container": 0,
+      "ordinal": 1,
+      "body": "|y|",
+      "ids": [
+       "r1"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "a-row-without-outer-pipes-refuses-the-whole-table",
+   "note": "SPEC.md §5.6 rule 1: a row line begins with the first unescaped delimiter and ends with the last, which is narrower than GFM. The header and delimiter are WELL FORMED and a VALID marked body row precedes the invalid one, so this pins rule 4's PER TABLE refusal specifically: `r0` addresses nothing either, even though its own line is a perfectly good row. Two weaker readings produce a different answer here and are therefore observable: accepting GFM's optional outer pipes makes `x | y` a second row, and ending the candidate at its first non-row leaves `r0` addressing the first. The reason the whole table goes is ordinals: §9.2 tier 2 maps markerless children by position, so two tools disagreeing about whether a line is a row disagree about every ordinal after it. §16 also holds: neither `r0` nor `r1` enters the block id index.",
+   "op": "children",
+   "doc": "| a | b |\n|---|---|\n| p | q<!-- stay:r0 subhash=sha256:1122 --> |\nx | y<!-- stay:r1 subhash=sha256:1122 -->\n\n<!-- stay:tb1 -->\n",
+   "expected": {
+    "blockIds": [
+     "tb1"
+    ],
+    "childIds": [],
+    "rows": []
+   }
+  },
+  {
+   "name": "a-ragged-row-is-neither-padded-nor-truncated",
+   "note": "SPEC.md §5.6: 'a parser pads or truncates a row to the header's cell count and this rule does neither, so a tool implementing §5.6 MUST take a row's cells from the rule above rather than from a parser's cell list even where it has one.' The header has three cells and this body row has two, so the body is the two cells it actually has. A tool reading cells off a GFM parser hashes a third empty cell here and diverges from every tool that does not.",
+   "op": "children",
+   "doc": "| a | b | c |\n|---|---|---|\n| x | y<!-- stay:r1 subhash=sha256:1122 --> |\n\n<!-- stay:tb1 -->\n",
+   "expected": {
+    "blockIds": [
+     "tb1"
+    ],
+    "childIds": [
+     "r1"
+    ],
+    "rows": [
+     {
+      "container": 0,
+      "ordinal": 1,
+      "body": "x|y",
+      "ids": [
+       "r1"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "a-header-marker-addresses-nothing",
+   "note": "SPEC.md §5.6: the header and delimiter rows are the table's schema rather than its content, so a conforming tool MUST NOT mint a stay on either and a `subhash` marker found on one addresses nothing. The table is still recognised and its body row is still ordinal 1 with no ids, which separates 'this marker addresses nothing' from 'this table is refused'.",
+   "op": "children",
+   "doc": "| a | b<!-- stay:h1 subhash=sha256:1122 --> |\n|---|---|\n| x | y |\n\n<!-- stay:tb1 -->\n",
+   "expected": {
+    "blockIds": [
+     "tb1"
+    ],
+    "childIds": [],
+    "rows": [
+     {
+      "container": 0,
+      "ordinal": 1,
+      "body": "x|y",
+      "ids": []
+     }
+    ]
+   }
+  },
+  {
+   "name": "a-delimiter-marker-stops-the-candidate-starting",
+   "note": "SPEC.md §5.6 rule 2: the delimiter source line MUST contain no marker token. Unlike the header case above, the candidate never starts, so the table has no body rows at all. The delimiter-line rule preserves the refusal-only relation with GFM: a marker is not deleted to manufacture delimiter syntax.",
+   "op": "children",
+   "doc": "| a | b |\n|---|---<!-- stay:d1 subhash=sha256:1122 -->|\n| x | y |\n\n<!-- stay:tb1 -->\n",
+   "expected": {
+    "blockIds": [
+     "tb1"
+    ],
+    "childIds": [],
+    "rows": []
+   }
+  },
+  {
+   "name": "a-form-feed-in-the-delimiter-refuses-the-table",
+   "note": "SPEC.md §5.6 rule 2: the delimiter line MUST contain no form feed or vertical tab, and each cell trimmed of spaces and tabs only MUST be an optional `:`, one or more `-`, an optional `:`, and nothing else. This is a deliberate narrowing: `cmark-gfm` accepts these where the pinned MarkdownIt table rule refuses them, so §5.6 rejects both rather than making child addressability depend on which parser an implementation happened to test against.",
+   "op": "children",
+   "doc": "| a | b |\n|---|--\f-|\n| x | y<!-- stay:r1 subhash=sha256:1122 --> |\n\n<!-- stay:tb1 -->\n",
+   "expected": {
+    "blockIds": [
+     "tb1"
+    ],
+    "childIds": [],
+    "rows": []
+   }
+  },
+  {
+   "name": "a-non-row-line-refuses-the-whole-table",
+   "note": "SPEC.md §5.6 rules 3 and 4: the candidate body continues to the first blank line, marker-only line, or EOF, and every other line in it MUST be a row line. A started candidate with any non-row line has no child blocks AT ALL, including the row lines before the refusal. Ending the candidate at the first non-row line instead would leave `r1` addressable and is mutation 5.",
+   "op": "children",
+   "doc": "| a | b |\n|---|---|\n| x | y<!-- stay:r1 subhash=sha256:1122 --> |\nplain line\n\n<!-- stay:tb1 -->\n",
+   "expected": {
+    "blockIds": [
+     "tb1"
+    ],
+    "childIds": [],
+    "rows": []
+   }
+  },
+  {
+   "name": "a-fence-in-the-body-refuses-the-whole-table",
+   "note": "SPEC.md §5.6 rule 0: a line §3.3 masks as fenced code is ineligible as a row line, and rule 3 says such a line never terminates a candidate even if its source has that shape. So the fence neither ends the table nor is bridged across: rule 4 refuses the candidate. A tool that let the fence terminate the body would keep `r1` addressable and silently disagree with one that bridged it.",
+   "op": "children",
+   "doc": "| a | b |\n|---|---|\n| x | y<!-- stay:r1 subhash=sha256:1122 --> |\n```\n| p | q |\n```\n\n<!-- stay:tb1 -->\n",
+   "expected": {
+    "blockIds": [
+     "tb1"
+    ],
+    "childIds": [],
+    "rows": []
+   }
+  },
+  {
+   "name": "two-candidates-in-one-container-address-nothing",
+   "note": "SPEC.md §5.6: an accepted candidate has child blocks only when it is the ONLY accepted candidate in its selected §5 container. The marker-only line terminates the first candidate without splitting the block, so both tables share one container and neither addresses anything. Same fail-closed reason as rule 4: §9.2 records the container and the row ordinal, not a second table discriminator, so two ordinal-1 rows in one container cannot be recovered unambiguously.",
+   "op": "children",
+   "doc": "| a | b |\n|---|---|\n| x | y<!-- stay:r1 subhash=sha256:1122 --> |\n<!-- stay:mid -->\n| c | d |\n|---|---|\n| p | q<!-- stay:r2 subhash=sha256:3344 --> |\n\n<!-- stay:tb1 -->\n",
+   "expected": {
+    "blockIds": [
+     "mid",
+     "tb1"
+    ],
+    "childIds": [],
+    "rows": []
+   }
+  },
+  {
+   "name": "two-candidates-in-separate-containers-both-address",
+   "note": "The control for the vector above: one blank line moves the second table into its own §5 container, so each is the sole accepted candidate in its own container and both rows address. The filter is per container, not per document.",
+   "op": "children",
+   "doc": "| a | b |\n|---|---|\n| x | y<!-- stay:r1 subhash=sha256:1122 --> |\n\n<!-- stay:tb1 -->\n\n| c | d |\n|---|---|\n| p | q<!-- stay:r2 subhash=sha256:3344 --> |\n\n<!-- stay:tb2 -->\n",
+   "expected": {
+    "blockIds": [
+     "tb1",
+     "tb2"
+    ],
+    "childIds": [
+     "r1",
+     "r2"
+    ],
+    "rows": [
+     {
+      "container": 0,
+      "ordinal": 1,
+      "body": "x|y",
+      "ids": [
+       "r1"
+      ]
+     },
+     {
+      "container": 1,
+      "ordinal": 1,
+      "body": "p|q",
+      "ids": [
+       "r2"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "a-legacy-suffix-stay-migrates-to-a-marker-only-line",
+   "note": "SPEC.md §5.6 Rules for writers, migration probe: a bare container marker written before v1.6 may legally follow the last row's closing pipe. Left there, the opaque marker token would follow the final delimiter, rule 1 would reject the line, and the new row stay would be unaddressable. The probe relocates the span verbatim to a marker-only line after the candidate body, leaving every non-marker byte unchanged. The container hash is UNCHANGED by the whole operation, which is what the flush carrier buys.",
+   "op": "stamp",
+   "doc": "| a | b |\n|---|---|\n| x | y |<!-- stay:tb1 hash=sha256:8a2e294d70b7 -->\n",
+   "ids": [
+    "n1"
+   ],
+   "expected": {
+    "text": "| a | b |\n|---|---|\n| x | y<!-- stay:n1 subhash=sha256:791a886d455a --> |\n<!-- stay:tb1 hash=sha256:8a2e294d70b7 -->\n",
+    "minted": [
+     {
+      "id": "n1",
+      "line": 3
+     }
+    ],
+    "drifted": []
+   }
+  },
+  {
+   "name": "a-subhash-suffix-is-never-eligible-to-move",
+   "note": "SPEC.md §5.6: 'A marker carrying `subhash` is never eligible to move as a container marker,' and the probe's suffix test admits only complete marker spans WITHOUT `subhash`. Moving one would relocate a child's stay as though it were the container's. The write is refused and the source stays byte-identical, which is the transactional half of the writer rule.",
+   "op": "stamp",
+   "doc": "| a | b |\n|---|---|\n| x | y |<!-- stay:tb1 subhash=sha256:1122 -->\n",
+   "ids": [
+    "n1"
+   ],
+   "expected": {
+    "text": "| a | b |\n|---|---|\n| x | y |<!-- stay:tb1 subhash=sha256:1122 -->\n",
+    "minted": [],
+    "drifted": []
+   }
+  },
+  {
+   "name": "a-mixed-content-suffix-refuses-the-migration",
+   "note": "SPEC.md §5.6: the probe fires only when the suffix after the final unescaped delimiter is ASCII whitespace and complete marker spans and nothing else. Here the suffix carries prose, so relocating the marker would move a stay away from text that is part of the container body. The probe MUST NOT write, and the source stays byte-identical.",
+   "op": "stamp",
+   "doc": "| a | b |\n|---|---|\n| x | y | prose <!-- stay:tb1 hash=sha256:8a2e294d70b7 -->\n",
+   "ids": [
+    "n1"
+   ],
+   "expected": {
+    "text": "| a | b |\n|---|---|\n| x | y | prose <!-- stay:tb1 hash=sha256:8a2e294d70b7 -->\n",
+    "minted": [],
+    "drifted": []
+   }
+  },
+  {
+   "name": "a-migration-that-creates-a-second-candidate-rolls-the-document-back",
+   "note": "SPEC.md §5.6: the relocation 'succeeds only when the suffix-bearing line becomes the candidate's last body row and the requested row belongs to the sole accepted candidate in that selected container', and is provisional until the segmenter and the complete scan have run again over the whole proposed document. Relocating `tb1` here turns the second table into an accepted candidate, so the container holds two and nothing addresses. The write is abandoned whole: byte-identical source, nothing minted, and NOTHING REPORTED AS DRIFTED, because the container was clean before the tool touched it. Reporting drift here would blame the source for the tool's own provisional edit.",
+   "op": "stamp",
+   "doc": "| a | b |\n|---|---|\n| x | y |\n<!-- stay:mid -->\n| c | d |\n|---|---|\n| p | q |<!-- stay:tb1 hash=sha256:5ecd02e09215 -->\n",
+   "ids": [
+    "n1"
+   ],
+   "expected": {
+    "text": "| a | b |\n|---|---|\n| x | y |\n<!-- stay:mid -->\n| c | d |\n|---|---|\n| p | q |<!-- stay:tb1 hash=sha256:5ecd02e09215 -->\n",
+    "minted": [],
+    "drifted": []
+   }
+  },
+  {
+   "name": "a-relocation-that-would-refit-an-existing-rows-cells-rolls-the-document-back",
+   "note": "SPEC.md §5.6: relocating a container stay out of a row's cell is provisional until the whole proposed document has been re-read, and what must survive it is every row's hash body, not only the children this pass mints. Removing `p` here leaves `a\\` against the delimiter, so the backslash escapes it and the two cells fuse: row 1's body goes from `a\\\\|b` to a single cell, and the `subhash` already stored on that row covers a body that no longer exists. Nothing downstream would catch it, because the child marker is still present at the same id, the container refresh only re-checks freshly minted children, and a block-level lint of the result is clean. So the write is abandoned whole: byte-identical source, nothing minted, and nothing reported as drifted, since the document was consistent before the tool touched it.",
+   "op": "stamp",
+   "doc": "| h | h |\n|---|---|\n| a\\<!-- stay:p hash=sha256:d911b9ba7908 -->| b<!-- stay:r subhash=sha256:0c12c17a7c55 --> |\n| c | d |\n",
+   "ids": [
+    "n1"
+   ],
+   "expected": {
+    "text": "| h | h |\n|---|---|\n| a\\<!-- stay:p hash=sha256:d911b9ba7908 -->| b<!-- stay:r subhash=sha256:0c12c17a7c55 --> |\n| c | d |\n",
+    "minted": [],
+    "drifted": []
+   }
+  },
+  {
+   "name": "pre-existing-container-drift-is-reported-before-any-refresh",
+   "note": "SPEC.md §5.6: 'Before writing, the tool MUST compare every such stored hash with the complete pre-write container body. If one is already drifted, the tool MUST report that fact and MAY abort without changing the source.' The two forbidden outcomes are preserving a hash the tool's own write made stale, and clearing pre-existing drift without first reporting it. Here `tb1`'s hash never matched, so the row stamp does not proceed and `tb1` is named.",
+   "op": "stamp",
+   "doc": "| a | b |\n|---|---|\n| x | y |\n<!-- stay:tb1 hash=sha256:deadbeefdead -->\n",
+   "ids": [
+    "n1"
+   ],
+   "expected": {
+    "text": "| a | b |\n|---|---|\n| x | y |\n<!-- stay:tb1 hash=sha256:deadbeefdead -->\n",
+    "minted": [],
+    "drifted": [
+     "tb1"
+    ]
+   }
+  },
+  {
+   "name": "markerless-rows-map-by-ordinal-under-an-exact-container-hash",
+   "note": "SPEC.md §9.2 tier 2: a markerless child is mapped by ordinal, gated on the CONTAINER's hash matching exactly. Every row marker was deleted here and the container body is unchanged (§8 strips markers), so all three recover by position. The gate is what makes ordinals safe to use as evidence without making them identity (§2.1): if the container body had changed at all, this tier would not fire.",
+   "op": "resolve",
+   "before": "| id | note |\n|---|---|\n| 1 | one<!-- stay:r1 subhash=sha256:0001 --> |\n| 2 | two<!-- stay:r2 subhash=sha256:0002 --> |\n| 3 | three<!-- stay:r3 subhash=sha256:0003 --> |\n<!-- stay:tb1 -->\n",
+   "after": "| id | note |\n|---|---|\n| 1 | one |\n| 2 | two |\n| 3 | three |\n<!-- stay:tb1 -->\n",
+   "expected": {
+    "r1": {
+     "method": "parent-hash",
+     "target": 0
     },
-    {
-      "name": "markerless-rows-map-by-ordinal-under-an-exact-container-hash",
-      "note": "SPEC.md §9.2 tier 2: a markerless child is mapped by ordinal, gated on the CONTAINER's hash matching exactly. Every row marker was deleted here and the container body is unchanged (§8 strips markers), so all three recover by position. The gate is what makes ordinals safe to use as evidence without making them identity (§2.1): if the container body had changed at all, this tier would not fire.",
-      "op": "resolve",
-      "before": "| id | note |\n|---|---|\n| 1 | one<!-- stay:r1 subhash=sha256:0001 --> |\n| 2 | two<!-- stay:r2 subhash=sha256:0002 --> |\n| 3 | three<!-- stay:r3 subhash=sha256:0003 --> |\n<!-- stay:tb1 -->\n",
-      "after": "| id | note |\n|---|---|\n| 1 | one |\n| 2 | two |\n| 3 | three |\n<!-- stay:tb1 -->\n",
-      "expected": {
-        "r1": {
-          "method": "parent-hash",
-          "target": 0
-        },
-        "r2": {
-          "method": "parent-hash",
-          "target": 1
-        },
-        "r3": {
-          "method": "parent-hash",
-          "target": 2
-        }
-      }
+    "r2": {
+     "method": "parent-hash",
+     "target": 1
     },
-    {
-      "name": "row-quote-recovery-ignores-the-ordinal",
-      "note": "SPEC.md §9.2 bars the ordinal from the commit rule, so tier 5 scores a row on its body and context alone. Every row here is both REORDERED and reworded: the hash tiers all miss, and ordinal 3 recovers to position 0 while ordinal 1 recovers to position 1. An implementation that folded the ordinal into the score or the margin would either refuse these or bind them back to their old positions, which is the 'evidence, never identity' rule failing in the one place it is load-bearing.",
-      "op": "resolve",
-      "before": "| id | note |\n|---|---|\n| 1 | retry budget resets nightly per partner<!-- stay:r1 subhash=sha256:0001 --> |\n| 2 | overrides expire after thirty days<!-- stay:r2 subhash=sha256:0002 --> |\n| 3 | stale tuning is discarded on restart<!-- stay:r3 subhash=sha256:0003 --> |\n<!-- stay:tb1 -->\n",
-      "after": "| id | note |\n|---|---|\n| 3 | stale tuning gets discarded on restart |\n| 1 | the retry budget resets nightly per partner |\n| 2 | overrides now expire after thirty days |\n<!-- stay:tb1 -->\n",
-      "expected": {
-        "r1": {
-          "method": "quote",
-          "target": 1
-        },
-        "r2": {
-          "method": "quote",
-          "target": 2
-        },
-        "r3": {
-          "method": "quote",
-          "target": 0
-        }
-      }
+    "r3": {
+     "method": "parent-hash",
+     "target": 2
     }
-  ]
+   }
+  },
+  {
+   "name": "row-quote-recovery-ignores-the-ordinal",
+   "note": "SPEC.md §9.2 bars the ordinal from the commit rule, so tier 5 scores a row on its body and context alone. Every row here is both REORDERED and reworded: the hash tiers all miss, and ordinal 3 recovers to position 0 while ordinal 1 recovers to position 1. An implementation that folded the ordinal into the score or the margin would either refuse these or bind them back to their old positions, which is the 'evidence, never identity' rule failing in the one place it is load-bearing.",
+   "op": "resolve",
+   "before": "| id | note |\n|---|---|\n| 1 | retry budget resets nightly per partner<!-- stay:r1 subhash=sha256:0001 --> |\n| 2 | overrides expire after thirty days<!-- stay:r2 subhash=sha256:0002 --> |\n| 3 | stale tuning is discarded on restart<!-- stay:r3 subhash=sha256:0003 --> |\n<!-- stay:tb1 -->\n",
+   "after": "| id | note |\n|---|---|\n| 3 | stale tuning gets discarded on restart |\n| 1 | the retry budget resets nightly per partner |\n| 2 | overrides now expire after thirty days |\n<!-- stay:tb1 -->\n",
+   "expected": {
+    "r1": {
+     "method": "quote",
+     "target": 1
+    },
+    "r2": {
+     "method": "quote",
+     "target": 2
+    },
+    "r3": {
+     "method": "quote",
+     "target": 0
+    }
+   }
+  },
+  {
+   "name": "a-capturing-character-refuses-its-row-and-every-row-after-it",
+   "note": "SPEC.md §3.4: the carrier text is the container's raw source up to the insertion point, and a `<` anywhere in it refuses the carrier whatever that `<` turns out to mean. The scope reaches forward, so a `<` in the first body row refuses the second row's carrier as well. The container is unaffected and still takes its own stay.",
+   "op": "stamp",
+   "doc": "| h | v |\n|---|---|\n| a<b | 1 |\n| c | 2 |\n",
+   "ids": [
+    "tb"
+   ],
+   "expected": {
+    "text": "| h | v |\n|---|---|\n| a<b | 1 |\n| c | 2 |\n<!-- stay:tb hash=sha256:0d66f78ba01d -->\n",
+    "minted": [
+     {
+      "id": "tb",
+      "line": 4
+     }
+    ],
+    "drifted": []
+   }
+  },
+  {
+   "name": "a-refusal-is-per-child-and-leaves-the-earlier-rows-stamped",
+   "note": "SPEC.md §3.4: refusing one row does not refuse its container or its siblings. The `<` is in the last body row, so only that row's prefix carries it and the row above is stamped in the same pass.",
+   "op": "stamp",
+   "doc": "| h | v |\n|---|---|\n| a | 1 |\n| b<c | 2 |\n",
+   "ids": [
+    "r1",
+    "tb"
+   ],
+   "expected": {
+    "text": "| h | v |\n|---|---|\n| a | 1<!-- stay:r1 subhash=sha256:df4504ce9250 --> |\n| b<c | 2 |\n<!-- stay:tb hash=sha256:2ac4501adeaa -->\n",
+    "minted": [
+     {
+      "id": "r1",
+      "line": 3
+     },
+     {
+      "id": "tb",
+      "line": 4
+     }
+    ],
+    "drifted": []
+   }
+  },
+  {
+   "name": "a-marker-already-in-the-container-does-not-refuse-the-next-row",
+   "note": "SPEC.md §3.4: those characters are looked for OUTSIDE the carrier text's own complete markers. Without the mask a stamped container refuses every row added to it afterwards, permanently, and child identity is single-shot per container. The container digest here is the one a `restamp` leaves after the row was added, so the drift check passes and §3.4 is what decides.",
+   "op": "stamp",
+   "doc": "| h | v |\n|---|---|\n| a | 1<!-- stay:r1 subhash=sha256:df4504ce9250 --> |\n| b | 2 |\n<!-- stay:tb hash=sha256:791ff2d16630 -->\n",
+   "ids": [
+    "r2"
+   ],
+   "expected": {
+    "text": "| h | v |\n|---|---|\n| a | 1<!-- stay:r1 subhash=sha256:df4504ce9250 --> |\n| b | 2<!-- stay:r2 subhash=sha256:8e636bda5720 --> |\n<!-- stay:tb hash=sha256:791ff2d16630 -->\n",
+    "minted": [
+     {
+      "id": "r2",
+      "line": 4
+     }
+    ],
+    "drifted": []
+   }
+  },
+  {
+   "name": "a-raw-text-element-in-the-header-refuses-every-body-row",
+   "note": "SPEC.md §3.4: the scope is the container, not the child. A `<textarea>` opened in the header row is still open when a body row is read, so a child-scoped rule would report safe on a document a renderer changes.",
+   "op": "stamp",
+   "doc": "| a | <textarea>b |\n|---|---|\n| x | y |\n| z | </textarea> |\n",
+   "ids": [
+    "tb"
+   ],
+   "expected": {
+    "text": "| a | <textarea>b |\n|---|---|\n| x | y |\n| z | </textarea> |\n<!-- stay:tb hash=sha256:a148562254c2 -->\n",
+    "minted": [
+     {
+      "id": "tb",
+      "line": 4
+     }
+    ],
+    "drifted": []
+   }
+  },
+  {
+   "name": "a-flush-carrier-refuses-a-trailing-delimiter-run",
+   "note": "SPEC.md §3.4's flush clause: the insertion changes the byte after the delimiter run from whitespace to `<`, so the run becomes both opening and closing and CommonMark's multiple-of-three rule refuses the match it used to make. Nothing is captured and no refused character appears in the document, so no prefix can see this: it is the insertion itself.",
+   "op": "stamp",
+   "doc": "| a |\n|---|\n| *Hello!** |\n",
+   "ids": [
+    "tb"
+   ],
+   "expected": {
+    "text": "| a |\n|---|\n| *Hello!** |\n<!-- stay:tb hash=sha256:d23d5ecab6fb -->\n",
+    "minted": [
+     {
+      "id": "tb",
+      "line": 3
+     }
+    ],
+    "drifted": []
+   }
+  },
+  {
+   "name": "an-ordinary-comment-is-presence-and-refuses-the-row",
+   "note": "SPEC.md §3.4 masks a complete MARKER and nothing else. Deciding that an ordinary comment closes itself is the predicate that was withdrawn in review, and `--!>` is why: HTML closes a comment at a spelling CommonMark does not recognise. So the note refuses the carrier behind it.",
+   "op": "stamp",
+   "doc": "| h |\n|---|\n| a<!-- note --> |\n",
+   "ids": [
+    "tb"
+   ],
+   "expected": {
+    "text": "| h |\n|---|\n| a<!-- note --> |\n<!-- stay:tb hash=sha256:45e2bdb48467 -->\n",
+    "minted": [
+     {
+      "id": "tb",
+      "line": 3
+     }
+    ],
+    "drifted": []
+   }
+  },
+  {
+   "name": "a-backslash-in-an-earlier-cell-refuses-the-row",
+   "note": "SPEC.md §3.4 condition 2: a backslash can escape the marker's opening bracket. Presence is enough, so an escaped pipe in an earlier cell refuses the carrier in the last one.",
+   "op": "stamp",
+   "doc": "| h | v |\n|---|---|\n| a\\| b | 1 |\n",
+   "ids": [
+    "tb"
+   ],
+   "expected": {
+    "text": "| h | v |\n|---|---|\n| a\\| b | 1 |\n<!-- stay:tb hash=sha256:dd784217c804 -->\n",
+    "minted": [
+     {
+      "id": "tb",
+      "line": 3
+     }
+    ],
+    "drifted": []
+   }
+  },
+  {
+   "name": "a-record-closed-at-the-html-only-spelling-is-not-masked",
+   "note": "SPEC.md §3.4: a marker is masked only when it ends in the host syntax's own closer. §4 lets an HTML record end at `--!>` because a browser's parser stops there, while a CommonMark renderer does not recognise that spelling at all, so the bytes stay visible to a reader and the `<` still refuses the carrier behind them. Masking every §4 record instead would stamp this row.",
+   "op": "stamp",
+   "doc": "| h |\n|---|\n| a<!-- stay:hash=1 --!> |\n",
+   "ids": [
+    "tb"
+   ],
+   "expected": {
+    "text": "| h |\n|---|\n| a<!-- stay:hash=1 --!> |\n<!-- stay:tb hash=sha256:fd90c0cd9b15 -->\n",
+    "minted": [
+     {
+      "id": "tb",
+      "line": 3
+     }
+    ],
+    "drifted": []
+   }
+  }
+ ]
 }

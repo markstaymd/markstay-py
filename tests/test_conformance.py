@@ -102,6 +102,15 @@ def approx(a, b) -> bool:
     return a == b
 
 
+def corpus_findings(findings, *, with_line):
+    """Exclude only §5.4's optional parser advisory from core equality."""
+    return [
+        finding_dict(f, with_line=with_line)
+        for f in findings
+        if not (f.code == "OUTSIDE_SUBSET" and f.level == "info")
+    ]
+
+
 # --- per-category verifiers: (vector) -> (ok, detail) ---------------------
 
 def v_hash(v):
@@ -123,13 +132,13 @@ def v_parse(v):
 
 def v_lint(v):
     _, findings = M.lint_document(v["doc"])
-    got = [finding_dict(f, with_line=True) for f in M.sort_findings(findings)]
+    got = corpus_findings(M.sort_findings(findings), with_line=True)
     return approx(got, v["findings"]), f"got={got}"
 
 
 def v_diff(v):
     findings = M.lint_diff(v["before"], v["after"])
-    got = [finding_dict(f, with_line=False) for f in M.sort_findings(findings)]
+    got = corpus_findings(M.sort_findings(findings), with_line=False)
     return approx(got, v["findings"]), f"got={got}"
 
 
@@ -263,8 +272,8 @@ def v_check(v):
                      for path, baseline in result.pairings],
         "reports": [
             {"label": label,
-             "findings": [finding_dict(f, with_line=True)
-                          for f in M.sort_findings(findings)]}
+             "findings": corpus_findings(M.sort_findings(findings),
+                                         with_line=True)}
             for label, findings in result.reports
         ],
         "notes": result.notes,
@@ -333,7 +342,7 @@ PROFILE_CATEGORIES = {"rows": "rows"}
 CORE_VECTORS = 420
 # Advertised profiles are pinned too. A count that is only reported cannot
 # catch a vector going missing, because the denominator shrinks with it.
-PROFILE_VECTORS = {"rows": 23}
+PROFILE_VECTORS = {"rows": 31}
 
 
 # --- discover every vector at collection time -----------------------------

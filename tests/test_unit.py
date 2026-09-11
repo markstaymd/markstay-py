@@ -905,3 +905,132 @@ def test_cli_commonmark_without_the_parser_is_an_error_not_a_traceback(tmp_path)
     assert r.returncode == 2, r.stderr
     assert "markstay[commonmark]" in r.stderr
     assert "Traceback" not in r.stderr
+
+
+def test_the_agreement_subset_ignores_marker_spans():
+    """SPEC.md §5.4: marker spans are excluded from both sides of the comparison.
+
+    Counted, they put every stamped document outside the subset: a trailing
+    comment interrupts a paragraph in CommonMark while blank-line segmentation
+    keeps the run whole, so `Body.` with a marker under it is one run and two
+    nodes. The subset would then be empty exactly when the guarantee is wanted.
+    """
+    stamped = "Body.\n<!-- stay:x hash=sha256:521b25cc4586 -->\n"
+    assert L.in_agreement_subset("Body.\n") is True
+    assert L.in_agreement_subset(stamped) is True
+    # Case 1 of the three §5.4 lists: a block boundary with no blank line at it.
+    assert L.in_agreement_subset("# Heading\nBody.\n") is False
+    # Case 2: a blank line inside one node, here a loose list.
+    assert L.in_agreement_subset("- a\n\n- b\n") is False
+    # Frontmatter is excluded (§5.3), so it does not read as a run of its own.
+    assert L.in_agreement_subset("---\ntitle: x\n---\nBody.\n") is True
+
+
+def test_a_document_outside_the_subset_is_reported_as_advice():
+    """SPEC.md §13: a §5.2 linter SHOULD say so, one-directionally.
+
+    `info` rather than `warn`: nothing about the document is wrong, and the
+    signal only points one way. A §5.1 write is measurably more likely to change
+    what such a document shows; being inside the subset is a better bet rather
+    than a promise (§3.4).
+    """
+    _, findings = M.lint_document("# Heading\nBody.\n")
+    advisory = [f for f in findings if f.code == "OUTSIDE_SUBSET"]
+    assert [f.level for f in advisory] == ["info"]
+    assert not M.has_errors(findings)
+
+    _, clean = M.lint_document("# Heading\n\nBody.\n")
+    assert [f for f in clean if f.code == "OUTSIDE_SUBSET"] == []
+
+
+def test_a_marker_only_line_is_transparent_rather_than_blank():
+    """SPEC.md §5.4, corrected in review round 10.
+
+    Blanking a marker-only line manufactures a run boundary no segmenter draws:
+    `foo` / marker / `bar` reads as two runs and two nodes, while the blank-line
+    segmenter gives ONE block and the tree segmenter gives two. Deleting the line
+    instead joins the runs each side of it and certifies the same document for the
+    opposite reason.
+    """
+    assert L.in_agreement_subset("Body.\n<!-- stay:x hash=sha256:521b25cc4586 -->\n") is True
+    assert L.in_agreement_subset("foo\n<!-- stay:s -->\nbar\n") is False
+    # Transparent only AFTER content. A marker-only line that begins a run is
+    # where the profiles part company: this one binds to `B.` under §5.1, whose
+    # run starts at the marker line, and to `A.` under §5.2, where an html_block
+    # folds into the block before it. Round 11 found this certified.
+    assert L.in_agreement_subset("A.\n\n<!-- stay:m -->\nB.\n") is False
+    assert L.in_agreement_subset("<!-- stay:m -->\nBody.\n") is False
+    # Alone between blank lines it binds to `A.` under both, so it agrees.
+    assert L.in_agreement_subset("A.\n\n<!-- stay:m -->\n\nB.\n") is True
+    # A marker may span lines; the mask keeps the line endings so the accounting
+    # sees the same lines the source has.
+    crossing = 'a <!-- stay:x quote="one\n  two" -->\n# b\n'
+    assert L.in_agreement_subset(crossing) is False
+
+
+def test_malformed_diagnostics_remain_content_in_the_agreement_subset():
+    for malformed in ("<!-- stay:hash=x -->", "<!-- stay:note=hello -->"):
+        doc = f"A.\n{malformed}\n<!-- stay:m -->\n"
+
+        def blocks(mode):
+            return [
+                (b.line, b.content, [m.id for m in b.markers if not m.malformed])
+                for b in L.parse_document(doc, mode=mode)
+                if b.index >= 0
+            ]
+
+        # The malformed comment remains a block in CommonMark, and the real
+        # marker binds to it rather than to the baseline's combined paragraph.
+        assert blocks("blank-line") == [(1, f"A.\n{malformed}", ["m"])]
+        assert blocks("commonmark") == [(1, "A.", []), (2, malformed, ["m"])]
+        assert L.in_agreement_subset(doc) is False
+
+    # MDX-shaped malformed text stays paragraph content under both profiles.
+    mdx = "A.\n{/* stay:hash=x */}\n<!-- stay:m -->\n"
+    assert L.in_agreement_subset(mdx) is True
+
+
+def test_the_subset_predicate_agrees_with_the_two_segmenters():
+    """The property it is a predicate FOR, rather than its own reasoning.
+
+    Checked here on the shapes that decide it and over the 2417-document corpus in
+    `eval/write_safety` (0 certified that segment differently, 0 refused that
+    segment identically).
+    """
+    for doc in (
+        "Body.\n",
+        "Body.\n<!-- stay:x hash=sha256:521b25cc4586 -->\n",
+        "foo\n<!-- stay:s -->\nbar\n",
+        "# Heading\nBody.\n",
+        "- a\n\n- b\n",
+        "A.\n\nB.\n",
+        "---\ntitle: x\n---\nBody.\n",
+        "Para.\n```\ncode\n```\n",
+        "[label]: /url\nBody.\n",
+        "A.\n\n<!-- stay:m -->\nB.\n",
+        "A.\n\n<!-- stay:m -->\n\nB.\n",
+        "<!-- stay:m -->\nBody.\n",
+        "Body.\n<!-- stay:a -->\n<!-- stay:b -->\n",
+        "A.\n\n<!-- stay:a -->\n<!-- stay:b -->\nB.\n",
+    ):
+        def blocks(mode):
+            return [
+                (b.line, b.content)
+                for b in M.parse_document(doc, mode=mode)
+                if b.index >= 0
+            ]
+
+        assert L.in_agreement_subset(doc) is (
+            blocks("blank-line") == blocks("commonmark")
+        ), doc
+
+
+def test_a_line_of_unicode_whitespace_is_content_to_both_segmenters():
+    """§5's blank line is ASCII-only, and so is this comparison.
+
+    A bare `.strip()` folds U+00A0 in with the spaces, so a line holding one read
+    as blank to the predicate and as content to both segmenters, and the document
+    was certified while the baseline gave one block and the tree gave two.
+    """
+    nbsp = "A.\n<!-- stay:x -->\n\u00a0\n"
+    assert L.in_agreement_subset(nbsp) is False

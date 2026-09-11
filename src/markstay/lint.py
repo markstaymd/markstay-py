@@ -1407,6 +1407,160 @@ def parse_document(
 # --- checks ---------------------------------------------------------------
 
 
+def _mask_markers(text: str) -> str:
+    """``text`` with every active marker span replaced by spaces, in place.
+
+    SPEC.md §5.4 excludes marker spans from both sides of its comparison. Spaces
+    rather than deletion, so the bytes around a marker stay where they were and a
+    line that is nothing but marker text is recognisable by being blank here while
+    it was not blank in the source.
+
+    Either host form, and a marker carrying evidence counts: §5.4 asks which lines
+    are content, and a marker is not content whatever it carries. §3.4's
+    writer-side mask is a different question, "can these bytes capture the marker I
+    am about to write", and is narrower for that reason: there a marker's own
+    quoted evidence is reachable from outside it, so only a plain one is masked.
+    §3.3 binds both: a marker-shaped string inside a fenced code block is content.
+    """
+    code = code_lines(_blank_frontmatter(text))
+    out = list(text)
+    for record in _scan_marker_records(text):
+        if record.marker.malformed:
+            # Diagnostic records have no marker identity; both segmenters keep
+            # their source as content, so §5.4 must keep it too.
+            continue
+        if not marker_outside_code(record.marker, code):
+            continue
+        closer = "-->" if record.marker.syntax == "html" else "*/}"
+        if not record.marker.raw.endswith(closer):
+            # Not a closed host comment for a CommonMark renderer, whatever an
+            # HTML parser does with `--!>`. It is text, and it stays text here.
+            continue
+        for at in range(record.start, min(record.end, len(out))):
+            # Every byte but the line endings, which stay where they are: a
+            # marker may span lines (§4 admits normalized LF inside a quoted
+            # value), and masking its LF away would merge the lines around it and
+            # change the very line accounting this exists to feed.
+            if out[at] != "\n":
+                out[at] = " "
+    return "".join(out)
+
+
+def _content_lines(text: str) -> tuple[set[int], set[int]]:
+    """0-based (content lines, marker-only lines) for §5.4's comparison.
+
+    A line whose marker spans are all of it is **transparent**: §5.4 counts it as
+    neither content nor a boundary. Blanking it instead would manufacture a run
+    boundary the baseline segmenter never sees, which certifies
+    ``foo`` / marker / ``bar`` as agreeing when the two segmenters give one block
+    and two; deleting it would join the runs each side of it.
+    """
+    masked = _mask_markers(text).split("\n")
+    source = text.split("\n")
+    content, transparent = set(), set()
+    after_content = False
+    for i, line in enumerate(source):
+        # §5's blank line is ASCII-only, and so is this. A bare `.strip()` folds
+        # U+00A0 in with the spaces, so a line holding one reads as blank here and
+        # as content to both segmenters, and the comparison then certifies a
+        # document whose blocks differ.
+        if masked[i].strip(" \t\f\v"):
+            content.add(i)
+            after_content = True
+        elif line.strip(" \t\f\v"):
+            # A marker-only line is transparent only where it FOLLOWS content in
+            # its run. One that begins a run is where the two profiles part
+            # company: `A.` / blank / marker / `B.` gives the marker to `B.`
+            # under §5.1, because the run starts at the marker line, and to `A.`
+            # under §5.2, because an html_block folds into the block before it.
+            # Counting such a line as content is what makes the comparison see
+            # that, and it is why this is not simply "exclude marker spans".
+            if after_content:
+                transparent.add(i)
+            else:
+                content.add(i)
+                after_content = True
+        else:
+            after_content = False
+    return content, transparent
+
+
+def _nonblank_runs(text: str) -> list[frozenset]:
+    """Maximal runs of content lines, as sets of 0-based line numbers.
+
+    Sets rather than spans, because a transparent line inside a run is a hole in
+    it: the run continues across the line without covering it, and a node that
+    covers the same lines has the same hole.
+    """
+    content, transparent = _content_lines(text)
+    runs: list[frozenset] = []
+    current: set[int] = set()
+    for i in range(len(text.split("\n"))):
+        if i in transparent:
+            continue
+        if i in content:
+            current.add(i)
+        elif current:
+            runs.append(frozenset(current))
+            current = set()
+    if current:
+        runs.append(frozenset(current))
+    return runs
+
+
+def _top_level_nodes(text: str) -> list[frozenset]:
+    """Top-level CommonMark block nodes, as sets of the content lines they cover.
+
+    Parsed from the source rather than from the masked copy, so the node structure
+    is the one a CommonMark reader sees; the marker lines are then taken out of
+    each node's line set, and a node made only of marker text (a marker-only line
+    is its own `html_block`) drops out entirely.
+    """
+    from markdown_it import MarkdownIt  # lazy: optional extra, see SPEC.md §5.2
+
+    content, _ = _content_lines(text)
+    spans: list[tuple[int, int]] = []
+    depth = 0
+    # The same configuration §5.2's segmenter uses. The `commonmark` preset
+    # already enables HTML blocks, which §5.4 needs and which passing `html`
+    # again would only appear to add.
+    for token in MarkdownIt("commonmark").parse(text):
+        if token.nesting == 1:
+            if depth == 0 and token.map:
+                spans.append(tuple(token.map))
+            depth += 1
+        elif token.nesting == -1:
+            depth -= 1
+        elif depth == 0 and token.map:
+            spans.append(tuple(token.map))
+    nodes = []
+    for start, end in spans:
+        covered = frozenset(i for i in range(start, end) if i in content)
+        if covered:
+            nodes.append(covered)
+    return nodes
+
+
+def in_agreement_subset(md: str) -> bool | None:
+    """SPEC.md §5.4: do the two segmenters draw the same block boundaries here?
+
+    ``None`` when the CommonMark parser is not installed, which is the answer a
+    dependency-free tool has to give: the condition is a statement about a parse,
+    and §5.4 says checking it needs the parser. Frontmatter (§5.3) is excluded and
+    marker spans are transparent on both sides.
+
+    One-directional by design (§13): outside the subset a §5.1 write is more
+    likely to change what a document shows, while inside it the measurement is a
+    better bet rather than a guarantee (§3.4).
+    """
+    import importlib.util
+
+    if importlib.util.find_spec("markdown_it") is None:
+        return None
+    text = _blank_frontmatter(md.replace("\r\n", "\n").replace("\r", "\n"))
+    return sorted(_nonblank_runs(text)) == sorted(_top_level_nodes(text))
+
+
 def lint_document(
     md: str, mode: str = "blank-line", child_blocks: bool = False
 ) -> tuple[list[Block], list[Finding]]:
@@ -1534,6 +1688,23 @@ def lint_document(
                                 line=mk.line,
                             )
                         )
+    # SPEC.md §13: a linter that implements §5.2 already carries the parser this
+    # question needs, so it SHOULD say when the two segmenters would draw
+    # different block boundaries here. One-directional and therefore `info`: a
+    # document outside the subset is one a §5.1 write is more likely to change
+    # (159 of 1397 measured, against 0 of 1020 inside it), while being inside is
+    # a better bet rather than a promise (§3.4). Silent when the parser is absent,
+    # because then the tool is not one §13 is talking about.
+    if in_agreement_subset(md) is False:
+        findings.append(
+            Finding(
+                "info",
+                "OUTSIDE_SUBSET",
+                "the two segmenters of §5 draw different block boundaries here "
+                "(§5.4); a §5.1 write is more likely to change what this document "
+                "shows, and §5.4 lists the three shapes and the fix",
+            )
+        )
     return blocks, findings
 
 

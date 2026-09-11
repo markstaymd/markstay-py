@@ -221,7 +221,9 @@ def test_a_fence_opening_on_a_list_marker_line_swallows_the_rest_of_the_document
     )
     assert M.code_lines(md) == {3, 4, 5, 6, 7}
     assert all(b.markers == [] for b in M.parse_document(md))
-    assert M.lint_document(md)[1] == []
+    # Nothing is reported about the swallowed markers. The one finding is §13's
+    # subset advisory, since a fence inside a list item is §5.4 case 2.
+    assert [f.code for f in M.lint_document(md)[1]] == ["OUTSIDE_SUBSET"]
     assert M.stamp(md, new_id=ids()).minted == []
 
 
