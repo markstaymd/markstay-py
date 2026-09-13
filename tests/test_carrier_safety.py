@@ -6,6 +6,10 @@ of `<`, a backslash or `{` in the container's raw-source prefix, permits only an
 id-and-digest marker there, and refuses a flush carrier landing against `*`, `_`
 or `~`. It never asks what a character means.
 
+v1.8 adds one scoped exception at the §5.5 child carrier: a `<` that a code span
+opened AND closed inside the carrier text is masked before the scan. Rows keep
+the v1.7 presence rule exactly.
+
 The row half is pinned by the shared corpus (`conformance/rows`). This file is
 where the list half lives, because §16 makes list-item segmentation optional and
 only this reference implements it, so there is no profile for it to sit in.
@@ -16,8 +20,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import markstay as M  # noqa: E402
+from markstay.lint import code_lines  # noqa: E402
 from markstay.stamp import (  # noqa: E402
     _carrier_prefix,
+    _code_spans,
+    _inert_code_spans,
     _outside_markers,
     plain_marker,
     plain_text_state,
@@ -376,3 +383,111 @@ def test_refusal_lines_follow_insertions_before_the_declined_table():
                          new_id=ids("intro"))
         assert result.refused_carriers == [{"kind": "row", "line": 6}]
         assert result.text.splitlines()[5] == "| x |"
+
+
+# §3.4 v1.8: the code-span clause at a §5.5 child carrier.
+
+
+def test_a_closed_code_span_neutralises_the_capturing_character():
+    """The clause's whole purpose, and the consumer's case verbatim.
+
+    `<repo>` in a tracker's action line is CLI metasyntax inside a code span. The
+    span binds before raw inline HTML, so the `<` opens nothing.
+    """
+    assert plain_text_state("- run `git -C <repo> status` first") is True
+    assert plain_text_state("- see `<style scoped>` and `<div`") is True
+
+
+def test_an_unclosed_code_span_neutralises_nothing():
+    """A run with no equal-length partner opens no span that closes here, so the
+    `<` after it is still live and the presence rule still refuses."""
+    assert plain_text_state("- run `git -C <repo> status") is False
+    assert plain_text_state("- ``a ` b <c") is False
+
+
+def test_a_backslash_is_refused_before_the_clause_runs():
+    """The ordering the clause depends on: a carrier holding a backslash never
+    reaches the backtick scan, which is what keeps that scan unambiguous. An
+    escaped backtick therefore cannot change which runs pair."""
+    assert plain_text_state("- a `b` c \\") is False
+    assert plain_text_state("- a \\` b `") is False
+
+
+def test_a_row_carrier_keeps_the_presence_rule():
+    """Rows are excluded on purpose: GFM splits cells before inline parsing, so a
+    lexical backtick scan pairs across a `|` where a renderer does not."""
+    assert plain_text_state("| a | `<div>` ", flush=True) is False
+    assert plain_text_state("| a | `<div>` ", flush=False) is True
+
+
+def test_the_flush_guard_survives_the_clause():
+    """A flush carrier landing against a delimiter run is still refused, and the
+    clause must not mask the byte the guard reads.
+
+    This is the shape `eval/write_safety/carrier_cost.py` lost by calling
+    `plain_text_state` without `flush`.
+    """
+    assert plain_text_state("| star | \u2605 | *", flush=True) is False
+
+
+def test_an_unbalanced_line_ends_the_scan():
+    """The round-8 false accept, found by probing a review arm's direction.
+
+    CommonMark pairs backtick runs sequentially across a whole paragraph, so one
+    leftover run on an earlier line takes the next line's first run as its
+    closer and shifts every pairing after it. Per-line pairing would instead
+    pair that next line's two runs with each other and mask what lies between,
+    which CommonMark leaves literal. Appending a marker to the second carrier
+    below changed its rendering before this fix.
+    """
+    assert plain_text_state("- a `\n  b ` <div ` c") is False
+    assert plain_text_state("- a `\n  b ` <!-- ` c") is False
+    assert plain_text_state("- x `\n  y ` <textarea ` z") is False
+
+
+def test_spans_before_an_unbalanced_line_still_stand():
+    """Only lines from the ambiguity onward are poisoned. A balanced earlier line
+    agrees with CommonMark's sequential scan exactly, because nothing is left
+    over to carry into it."""
+    assert plain_text_state("- a `x<y` z\n- b plain") is True
+    assert plain_text_state("- a `x<y` z\n- b ` <div") is False
+
+
+def test_pairing_never_crosses_a_line():
+    """The safety property. A carrier text is the container's prefix, so for a
+    list it spans earlier items, which are separate blocks. Backticks in two
+    different blocks pair for a lexical scan and not for a renderer, so masking
+    across them would hide a live `<`. Refusing instead is the safe direction."""
+    assert plain_text_state("- a `open\n- b <c close` d") is False
+    assert plain_text_state("- a `open\n- b <c") is False
+    assert plain_text_state("- a `x<y` z\n- b plain") is True
+
+
+def test_masking_preserves_every_offset():
+    """Masked rather than deleted, so a trailing backslash is still trailing and
+    the flush clause still reads the real last byte."""
+    text = "- a `x<y` z"
+    masked = _inert_code_spans(text)
+    assert len(masked) == len(text)
+    assert masked == "- a `   ` z"
+
+
+def test_a_span_inside_a_fence_masks_nothing():
+    """§3.3 decides what a fence is before §3.4 reads it, so a `<` shown inside
+    one stays visible to the capture scan even when the line it sits on holds a
+    perfectly good pair of backticks around it.
+
+    A BACKTICK fence needs no help here: its delimiter is a lone run on its own
+    line, so the balance rule ends the scan before the fence body is reached.
+    A TILDE fence contributes no backtick runs at all, so its body looks like
+    ordinary balanced text, and §3.3's line set is the only thing standing
+    between a span shown inside it and the mask. That is the case this pins.
+    """
+    tilde = "- a\n  ~~~\n  `<div>` shown\n  ~~~\n- b"
+    assert _code_spans(tilde) != []              # unaware of §3.3, it masks
+    assert _code_spans(tilde, code_lines(tilde)) == []
+    assert plain_text_state(tilde) is False
+
+    backtick = "- a\n  ```\n  `<div>` shown\n  ```\n- b"
+    assert _code_spans(backtick) == []           # the balance rule already stops it
+    assert plain_text_state(backtick) is False

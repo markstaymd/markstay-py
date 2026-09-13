@@ -1120,8 +1120,16 @@ def _row_marker_position(line: str) -> int | None:
 # marker, and the document then shows something it did not show before.
 #
 # The rule refuses on the PRESENCE of a character, never on what that character
-# means. A `<` inside a code span opens nothing and is refused anyway. The
-# predicate that decided which `<` was live was written and withdrawn: fifteen
+# means, with one scoped exception added in v1.8: at a §5.5 child carrier a `<`
+# that a code span opened AND CLOSED inside the carrier text is masked before the
+# scan, because such a span binds before raw inline HTML and has already put the
+# `<` beyond reach. That is a lexical question with a lexical answer (CommonMark
+# pairs a backtick run with the next run of equal length) and it only ever
+# narrows the refusal. It does NOT extend to §5.6 rows, where GFM splits cells
+# before inline parsing and so a lexical scan pairs backticks across a `|` where
+# a renderer does not.
+#
+# The predicate that decided which `<` was live was written and withdrawn: fifteen
 # documents across four review rounds broke it, and deciding them correctly needs
 # tag and attribute state, per-element raw-text termination, processing
 # instruction and CDATA closers, inline precedence by first opener, backslash
@@ -1222,6 +1230,116 @@ def _outside_markers(text: str, syntax: str = "html") -> str:
     return "".join(out)
 
 
+_BACKTICKS = re.compile(r"`+")
+
+_LINE_BREAK = re.compile(r"\r\n|\r|\n")
+
+
+def _lines_with_offsets(text: str):
+    """``(1-based number, line, offset)`` for each line of ``text``.
+
+    Splits on CRLF, bare CR and LF, because `code_lines` normalizes all three
+    (`lint.py`) and a scan that split on LF alone would number its lines
+    differently: a fence `code_lines` sees would then be invisible here, and the
+    backticks either side of it would pair across it.
+
+    Offsets are into the ORIGINAL string and no normalized copy is built, so a
+    span this yields can mask ``text`` directly. Normalizing first would collapse
+    each CRLF to one byte and move every offset after it.
+    """
+    at = 0
+    for number, match in enumerate(_LINE_BREAK.finditer(text), start=1):
+        yield number, text[at:match.start()], at
+        at = match.end()
+    yield text.count("\n") + text.count("\r") - text.count("\r\n") + 1, text[at:], at
+
+
+
+
+def _code_spans(text: str, code: set[int] | None = None) -> list[tuple[int, int]]:
+    """Closed INLINE code spans in ``text``, as ``[start, end)`` content spans.
+
+    CommonMark pairs a backtick run with the next run of exactly the same length
+    (6.1). A run with no equal-length run after it opens nothing that closes
+    inside this text, so it yields no span and whatever follows it stays visible
+    to the scan.
+
+    ``code`` is §3.3's fenced-code line set. A backtick run on one of those lines
+    is a fence delimiter or fence content, never an inline span delimiter, so it
+    is dropped before pairing. Without that, a fence's opening and closing rows
+    pair with each other and mask the block between them, which would hide a
+    live `<` that §3.3 keeps as content. The characters on those lines are NOT
+    removed, only their backticks' ability to pair: §3.3 decides what a marker
+    is, and §3.4 still sees every capturing character the fence contains.
+
+    **Pairing is per line, and it stops at the first line it cannot balance.**
+    Both halves are the safety property, and the second was missing in the first
+    build of this clause.
+
+    Per line, because a carrier text is the *container's* prefix: for a list it
+    spans earlier items, which are separate blocks, and two backticks in
+    different blocks pair for a lexical scan but not for a renderer.
+
+    Stopping, because per-line pairing is **not** a subset of CommonMark's.
+    CommonMark pairs runs sequentially across a whole paragraph, so one leftover
+    run on an earlier line takes the next line's first run as its closer and
+    shifts every pairing after it. A per-line scan would instead pair that next
+    line's two runs with each other and mask what lies between them, which
+    CommonMark leaves literal. Executed counterexample, which changes the
+    rendering when a marker is appended::
+
+        - a `
+          b ` <!-- ` c
+
+    So a line whose runs do not pair evenly ends the scan: spans already found on
+    earlier lines stand, because those lines were balanced and CommonMark's
+    sequential scan agrees with the per-line one exactly while nothing is left
+    over, and nothing from that line on is masked at all.
+    """
+    spans: list[tuple[int, int]] = []
+    for number, line, offset in _lines_with_offsets(text):
+        if not code or number not in code:
+            runs = [(m.start() + offset, m.end() + offset)
+                    for m in _BACKTICKS.finditer(line)]
+            found: list[tuple[int, int]] = []
+            i = 0
+            while i < len(runs):
+                width = runs[i][1] - runs[i][0]
+                j = i + 1
+                while j < len(runs) and runs[j][1] - runs[j][0] != width:
+                    j += 1
+                if j == len(runs):
+                    # A run with no partner on its own line. CommonMark will
+                    # close it from a later line and re-pair everything after
+                    # it, so this line and every line below it are ambiguous.
+                    return spans
+                found.append((runs[i][1], runs[j][0]))
+                i = j + 1
+            spans.extend(found)
+    return spans
+
+
+def _inert_code_spans(text: str) -> str:
+    """``text`` with the CONTENT of closed code spans replaced by spaces.
+
+    Masked rather than deleted so every byte keeps its offset: a backslash in
+    front of a masked span is still where it was, and the flush clause still
+    reads the real last byte. The backticks themselves are left in place, since
+    they are not characters this scan refuses on.
+
+    Measured 2026-09-13 over 2557 documents (2417 npm READMEs pinned by
+    ``eval/write_safety/corpus.sha256``, plus 140 tracker documents from the
+    first consumer's corpus): masking recovers carrier positions the presence
+    rule refused, introduces no rendering change the shipped predicate did not
+    already make, and every recovered position is a list child.
+    """
+    out = list(text)
+    for start, end in _code_spans(text, code_lines(text)):
+        for at in range(start, end):
+            out[at] = " "
+    return "".join(out)
+
+
 def plain_text_state(
     carrier_text: str,
     marker: str = "",
@@ -1237,9 +1355,23 @@ def plain_text_state(
     unclosed construct in one list item captures a carrier in the next one.
 
     ``flush`` marks a carrier written hard against the text rather than after a
-    separator, which today is §5.6's row carrier and nothing else.
+    separator, which today is §5.6's row carrier and nothing else. It selects
+    the profile as well as the clause: a flush carrier keeps v1.7's presence
+    rule exactly, and only a non-flush §5.5 child carrier gets v1.8's code-span
+    mask.
+
+    **Pass ``flush`` through.** A caller that omits it for a row silently drops
+    the ``_TRAILING_DELIMITER`` guard below and permits a carrier the writer
+    refuses. `eval/write_safety/carrier_cost.py` did exactly that through its
+    ``conservative()`` helper, and the two row carriers it permitted on the npm
+    corpus each introduce an ``<em>`` when stamped.
     """
     scanned = _outside_markers(carrier_text, syntax)
+    if not flush:
+        # §5.5 only. A row carrier keeps the presence rule: GFM splits cells
+        # before inline parsing, so a lexical backtick scan pairs across a `|`
+        # where a renderer does not.
+        scanned = _inert_code_spans(scanned)
     if any(character in scanned for character in CARRIER_CAPTURING[syntax]):
         return False
     if flush and _TRAILING_DELIMITER.search(scanned):

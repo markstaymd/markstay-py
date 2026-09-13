@@ -3,11 +3,11 @@
 [![PyPI](https://img.shields.io/pypi/v/markstay)](https://pypi.org/project/markstay/)
 [![Python versions](https://img.shields.io/pypi/pyversions/markstay)](https://pypi.org/project/markstay/)
 [![tests](https://img.shields.io/github/actions/workflow/status/markstaymd/markstay-py/test.yml?label=tests)](https://github.com/markstaymd/markstay-py/actions/workflows/test.yml)
-[![spec](https://img.shields.io/badge/spec-v1.7-blue)](https://markstay.org)
+[![spec](https://img.shields.io/badge/spec-v1.8-blue)](https://markstay.org)
 ![License](https://img.shields.io/pypi/l/markstay)
 
 The Python reference implementation of the [markstay spec](https://markstay.org)
-(v1.7). markstay is a source-level identity primitive for Markdown blocks: an id
+(v1.8). markstay is a source-level identity primitive for Markdown blocks: an id
 token that **stays** bound to its block across edits (marker `stay:`), so a
 reference to a block survives the document being rewritten, including by an LLM.
 
@@ -26,12 +26,17 @@ key, resolved through the §9.2 ladder. It is opt-in because §16 makes segmenti
 resolving child blocks optional. The read/write safety rules §16 makes mandatory are
 unconditional here, as they are in every implementation.
 
-**Write safety (§3.4, v1.7).** Child markers are inserted only at carriers that
+**Write safety (§3.4, v1.8).** Child markers are inserted only at carriers that
 pass the plain-text predicate. It scans the container's original source prefix
 outside existing plain markers, and skips a child when the prefix contains `<`,
-a backslash, or (in MDX) `{`. A flush row carrier also refuses a trailing `*`,
-`_` or `~`. Each skipped position is reported in `StampResult.refused_carriers`
-and by the CLI; other writable children can still receive stays. Table marker
+a backslash, or (in MDX) `{`. At a list-item carrier the content of a **closed**
+inline code span is masked out of that scan first, so `` `<repo>` `` in an earlier
+item does not refuse a later one; the scan reads one line at a time and stops at
+the first line whose backtick runs do not pair evenly, and an unclosed run masks
+nothing. A flush row carrier keeps the unmasked rule, because GFM splits cells
+before inline parsing, and also refuses a trailing `*`, `_` or `~`. Each skipped
+position is reported in `StampResult.refused_carriers` and by the CLI; other
+writable children can still receive stays. Table marker
 relocations must also pass the removal and insertion checks. Inline recovery
 evidence belongs in a side index, because a new child marker carries only an id
 and a digest.
@@ -252,7 +257,7 @@ and finds each document's baseline itself, which is what a hook actually wants.
 # .pre-commit-config.yaml
 repos:
   - repo: https://github.com/markstaymd/markstay-py
-    rev: v0.11.0
+    rev: v0.12.0
     hooks:
       - id: markstay                  # or markstay-collections, to include table
                                       # rows and list bullets
@@ -301,8 +306,8 @@ reported as a move rather than a loss, so reorganising documents does not block.
 ## The conformance corpus (the actual deliverable)
 
 The corpus under [`conformance/`](conformance) is shared with the JavaScript
-reference. **420 core vectors** across two tiers, plus a 31-vector optional
-profile this package advertises, so its own runner reports **451**. The `check`
+reference. **420 core vectors** across two tiers, plus a 32-vector optional
+profile this package advertises, so its own runner reports **452**. The `check`
 category supplies 14 commit-shaped cases with paths, statuses, before/after text,
 expected baseline pairings, findings, move/deletion/tracking-departure notes, and
 scope behavior.
@@ -314,7 +319,7 @@ scope behavior.
 - **`rows/`** , the optional `rows` profile (SPEC.md §5.6 table-row identity).
   §16 keeps child segmentation optional, so a conforming runner MAY decline this
   profile; the JavaScript and Rust references do, and run the 420 core vectors
-  alone. This package implements §5.6, so it advertises `rows` and runs all 451.
+  alone. This package implements §5.6, so it advertises `rows` and runs all 452.
   A runner that meets a profile it has never heard of fails rather than skipping
   it, which is what stops a new category going missing quietly.
 

@@ -623,6 +623,25 @@
     ],
     "drifted": []
    }
+  },
+  {
+   "name": "a-closed-code-span-still-refuses-a-row-carrier",
+   "note": "SPEC.md §3.4 v1.8 masks a closed inline code span only at a §5.5 list-item carrier (`flush` false). A row carrier is always `flush` true, so v1.8's mask never runs for it and it keeps the v1.7 presence rule exactly: this row's `<div>` is inside backticks, and the identical bytes one level up in a list item are exactly what v1.8 now accepts, but here the row is still refused. Rows are scoped out because GFM splits cells before inline parsing, so a lexical backtick scan pairing across a `|` would mask something a renderer does not.",
+   "op": "stamp",
+   "doc": "| h | v |\n|---|---|\n| `<div>` | 1 |\n",
+   "ids": [
+    "tb"
+   ],
+   "expected": {
+    "text": "| h | v |\n|---|---|\n| `<div>` | 1 |\n<!-- stay:tb hash=sha256:a8dee6c50653 -->\n",
+    "minted": [
+     {
+      "id": "tb",
+      "line": 3
+     }
+    ],
+    "drifted": []
+   }
   }
  ]
 }

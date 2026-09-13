@@ -1031,6 +1031,14 @@ def _restricted_child_spans(chunk: str, start: int) -> list[_ChildSpan]:
         clean = strip_markers(raw).strip(" \t\r\f\v")
         markers = find_markers(raw, line_offset=start + off - 1)
         if clean == "" and markers:
+            # A marker-only line indented to the open item's content column is
+            # that item's, not the container's: §5.5 lets a child stay take a
+            # line of its own rather than share the item's last one. Only the
+            # container's own indentation ends the list.
+            indent = len(raw) - len(raw.lstrip(" "))
+            if item_start is not None and content_indent and indent >= content_indent:
+                item_lines.append(raw)
+                continue
             saw_parent_marker = True
             continue
         if saw_parent_marker or _THEMATIC_RE.match(strip_markers(raw)):

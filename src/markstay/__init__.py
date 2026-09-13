@@ -1,4 +1,4 @@
-"""markstay , Python reference implementation of the markstay spec (v1.7).
+"""markstay , Python reference implementation of the markstay spec (v1.8).
 
 A source-level identity primitive for Markdown blocks: an id token that *stays*
 bound to its block across edits. This package is the parser-free core (everything
@@ -99,7 +99,7 @@ from .preserve import (
 )
 from .staged import CommitEntry, StagedCheck, check_entries
 
-__version__ = "0.11.0"
+__version__ = "0.12.0"
 
 __all__ = [
     "__version__",
