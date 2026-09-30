@@ -234,7 +234,10 @@ def test_subhash_is_lexical_for_duplicates_but_never_a_block_stay():
 
 def test_block_diff_ignores_subhash_but_keeps_x_subhash():
     child = "Body.\n<!-- stay:child subhash=bogus -->\n"
-    assert M.lint_diff(child, "Body edited.\n") == []
+    # §16 v1.9: the loss is reported, as a child drop, never as the container's.
+    assert [(f.code, f.id) for f in M.lint_diff(child, "Body edited.\n")] == [
+        ("DROPPED_CHILD_ID", "child")
+    ]
 
     extension = "Body.\n<!-- stay:block x-subhash=bogus -->\n"
     assert codes(M.lint_diff(extension, "Body edited.\n")) == ["DROPPED_ID"]

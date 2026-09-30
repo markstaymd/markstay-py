@@ -1727,6 +1727,26 @@ def _id_index(blocks: list[Block]) -> dict[str, list[Block]]:
     return out
 
 
+def _stay_marker_ids(blocks: list[Block]) -> list[tuple[str, bool]]:
+    """Every well-formed attached marker as ``(id, has_subhash)``, in document
+    order, whether it sits on a block or on one of its child blocks.
+
+    Lexical rather than attached-stay semantics: it answers "does any marker
+    still carry this id", which is the §16 v1.9 drop check for a child stay and
+    needs no §5.5 or §5.6 segmentation. Orphan chunks are included: an orphan
+    marker still carries its id, and the single-document lint reports the
+    position as ORPHAN_MARKER."""
+    out: list[tuple[str, bool]] = []
+    for b in blocks:
+        markers = list(b.markers)
+        for child in b.children:
+            markers.extend(child.markers)
+        for mk in markers:
+            if mk.id and not mk.malformed:
+                out.append((mk.id, mk.has_subhash))
+    return out
+
+
 def _child_id_index(blocks: list[Block]) -> dict[str, list[ChildBlock]]:
     out: dict[str, list[ChildBlock]] = {}
     for b in blocks:
@@ -1922,6 +1942,31 @@ def lint_diff(
                         id=mid,
                     )
                 )
+
+    # SPEC.md §16 (v1.9): a child stay is a stay, so its loss is reported too,
+    # under its own code so the reader rule holds (a `subhash` marker is never
+    # reported as its container's stay, which is what DROPPED_ID would say). The
+    # test is lexical and needs no child segmentation: the id sat on exactly one
+    # marker in the baseline, that marker carried `subhash`, and no marker of any
+    # kind carries it after the edit. Under child identity CHILD_DROPPED already
+    # names an id whose item is gone too, so the id is reported once.
+    already = {f.id for f in findings if f.code == "CHILD_DROPPED"}
+    before_markers = _stay_marker_ids(before_blocks)
+    counts: dict[str, int] = {}
+    for mid, _ in before_markers:
+        counts[mid] = counts.get(mid, 0) + 1
+    after_ids = {mid for mid, _ in _stay_marker_ids(after_blocks)}
+    for mid, child in before_markers:
+        if child and counts[mid] == 1 and mid not in after_ids and mid not in already:
+            findings.append(
+                Finding(
+                    "error",
+                    "DROPPED_CHILD_ID",
+                    f"child id {mid} was in the baseline but no marker carries it "
+                    f"after the edit (silent loss)",
+                    id=mid,
+                )
+            )
     return findings
 
 

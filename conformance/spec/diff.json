@@ -75,16 +75,93 @@
     },
     {
       "name": "a-vanished-subhash-id-is-not-a-dropped-block-stay",
-      "note": "SPEC.md §16 mandatory reader rule (v1.6): a tool MUST NOT report a marker carrying the exact `subhash` key as the stay of the block containing it. The key is compared exactly, without segmenting or resolving a child, so a tool that implements neither §5.5 nor §5.6 still applies it. The list and the doomed paragraph both vanish. Only `b2` is a dropped block stay; `c1` never was one, so an implementation whose block id index still admits `subhash` markers reports two DROPPED_IDs here and sends a caller looking for a block that never existed.",
+      "note": "SPEC.md §16 mandatory reader rule (v1.6): a tool MUST NOT report a marker carrying the exact `subhash` key as the stay of the block containing it. The key is compared exactly, without segmenting or resolving a child, so a tool that implements neither §5.5 nor §5.6 still applies it. The list and the doomed paragraph both vanish. Only `b2` is a dropped block stay; `c1` never was one, so an implementation whose block id index still admits `subhash` markers reports two DROPPED_IDs here and sends a caller looking for a block that never existed. Since v1.9 `c1`'s loss is still reported, as DROPPED_CHILD_ID: a list item deleted with its stay is treated like a section deleted with its stay, a blocking loss the editor confirms rather than a silent one.",
       "before": "- alpha<!-- stay:c1 subhash=sha256:1122 -->\n- beta\n\nA settled paragraph.\n<!-- stay:b1 hash=sha256:0000 -->\n\nA doomed paragraph.\n<!-- stay:b2 hash=sha256:0000 -->\n",
       "after": "A settled paragraph.\n<!-- stay:b1 hash=sha256:0000 -->\n",
       "findings": [
+        {
+          "level": "error",
+          "code": "DROPPED_CHILD_ID",
+          "id": "c1"
+        },
         {
           "level": "error",
           "code": "DROPPED_ID",
           "id": "b2"
         }
       ]
+    },
+    {
+      "name": "a-child-stay-stripped-from-a-surviving-item-is-dropped",
+      "note": "SPEC.md §16 (v1.9): a child stay is a stay, so the before/after diff reports its loss, under DROPPED_CHILD_ID rather than DROPPED_ID so the §16 reader rule still holds (a `subhash` marker is never reported as its container's stay). The test is lexical: the id sat on exactly one marker in the baseline, that marker carried the exact `subhash` key, and no marker carries the id after the edit. No §5.5 or §5.6 segmentation is needed, so every implementation applies it. This is the failure the rule exists for: the item text survives and only its marker went, so nothing but the id set can see it. The container's hash is over marker-stripped content, so it does not drift either.",
+      "before": "- alpha <!-- stay:c1 subhash=sha256:1122 -->\n- beta <!-- stay:c2 subhash=sha256:3344 -->\n<!-- stay:list hash=sha256:0000 -->\n",
+      "after": "- alpha\n- beta <!-- stay:c2 subhash=sha256:3344 -->\n<!-- stay:list hash=sha256:0000 -->\n",
+      "findings": [
+        {
+          "level": "error",
+          "code": "DROPPED_CHILD_ID",
+          "id": "c1"
+        }
+      ]
+    },
+    {
+      "name": "a-child-stay-moved-to-another-item-is-not-dropped",
+      "note": "SPEC.md §16 (v1.9): a child stay is a stay, so the before/after diff reports its loss, under DROPPED_CHILD_ID rather than DROPPED_ID so the §16 reader rule still holds (a `subhash` marker is never reported as its container's stay). The test is lexical: the id sat on exactly one marker in the baseline, that marker carried the exact `subhash` key, and no marker carries the id after the edit. No §5.5 or §5.6 segmentation is needed, so every implementation applies it. Presence is the whole test, so a child marker that moved to a sibling is not reported here. Whether it now addresses the right item is §9.2's question, which only a tool implementing child identity can ask.",
+      "before": "- alpha <!-- stay:c1 subhash=sha256:1122 -->\n- beta\n<!-- stay:list hash=sha256:0000 -->\n",
+      "after": "- alpha\n- beta <!-- stay:c1 subhash=sha256:1122 -->\n<!-- stay:list hash=sha256:0000 -->\n",
+      "findings": []
+    },
+    {
+      "name": "a-child-id-now-carried-by-a-block-marker-is-not-dropped",
+      "note": "SPEC.md §16 (v1.9): a child stay is a stay, so the before/after diff reports its loss, under DROPPED_CHILD_ID rather than DROPPED_ID so the §16 reader rule still holds (a `subhash` marker is never reported as its container's stay). The test is lexical: the id sat on exactly one marker in the baseline, that marker carried the exact `subhash` key, and no marker carries the id after the edit. No §5.5 or §5.6 segmentation is needed, so every implementation applies it. Any marker carrying the id after the edit counts, a block marker included, so this is a new block stay rather than a lost child one.",
+      "before": "- alpha <!-- stay:c1 subhash=sha256:1122 -->\n- beta\n\nPara.\n<!-- stay:p -->\n",
+      "after": "- alpha\n- beta\n<!-- stay:c1 -->\n\nPara.\n<!-- stay:p -->\n",
+      "findings": [
+        {
+          "level": "info",
+          "code": "NEW_ID",
+          "id": "c1"
+        }
+      ]
+    },
+    {
+      "name": "a-child-id-duplicated-in-the-baseline-is-not-reported-dropped",
+      "note": "SPEC.md §16 (v1.9): a child stay is a stay, so the before/after diff reports its loss, under DROPPED_CHILD_ID rather than DROPPED_ID so the §16 reader rule still holds (a `subhash` marker is never reported as its container's stay). The test is lexical: the id sat on exactly one marker in the baseline, that marker carried the exact `subhash` key, and no marker carries the id after the edit. No §5.5 or §5.6 segmentation is needed, so every implementation applies it. The baseline must carry the id on exactly one marker, the same condition DROPPED_ID puts on a block stay: a duplicate is already a §7 error in the baseline and has no single identity to lose.",
+      "before": "- alpha <!-- stay:c1 subhash=sha256:1122 -->\n- beta <!-- stay:c1 subhash=sha256:3344 -->\n",
+      "after": "- alpha\n- beta\n",
+      "findings": []
+    },
+    {
+      "name": "a-child-id-under-an-unparseable-subhash-is-still-dropped",
+      "note": "SPEC.md §16 (v1.9): a child stay is a stay, so the before/after diff reports its loss, under DROPPED_CHILD_ID rather than DROPPED_ID so the §16 reader rule still holds (a `subhash` marker is never reported as its container's stay). The test is lexical: the id sat on exactly one marker in the baseline, that marker carried the exact `subhash` key, and no marker carries the id after the edit. No §5.5 or §5.6 segmentation is needed, so every implementation applies it. The key is compared exactly and its value is not parsed, the same test §16's reader rule applies: `subhash=bogus` is a child marker. The `x-subhash` form is not, and its loss is an ordinary DROPPED_ID.",
+      "before": "- alpha <!-- stay:c1 subhash=bogus -->\n- beta\n\nPara.\n<!-- stay:x x-subhash=bogus -->\n",
+      "after": "- alpha\n- beta\n\nPara.\n",
+      "findings": [
+        {
+          "level": "error",
+          "code": "DROPPED_CHILD_ID",
+          "id": "c1"
+        },
+        {
+          "level": "error",
+          "code": "DROPPED_ID",
+          "id": "x"
+        }
+      ]
+    },
+    {
+      "name": "a-child-marker-now-in-an-orphan-chunk-is-not-dropped",
+      "note": "SPEC.md §16 (v1.9): the child drop test is lexical, so a marker in an orphan chunk still counts. It is present when it carries the id after the edit, and it counts toward the baseline's exactly-one condition. The orphan position is reported by the single-document lint as ORPHAN_MARKER, not by the diff as a drop.",
+      "before": "- alpha <!-- stay:c1 subhash=sha256:1122 -->\n- beta\n",
+      "after": "<!-- stay:c1 subhash=sha256:1122 -->\n\n- alpha\n- beta\n",
+      "findings": []
+    },
+    {
+      "name": "an-orphan-occurrence-counts-toward-a-duplicated-child-id",
+      "note": "SPEC.md §16 (v1.9): the child drop test is lexical, so a marker in an orphan chunk still counts. It is present when it carries the id after the edit, and it counts toward the baseline's exactly-one condition. The orphan position is reported by the single-document lint as ORPHAN_MARKER, not by the diff as a drop.",
+      "before": "<!-- stay:c1 subhash=sha256:1122 -->\n\n- alpha <!-- stay:c1 subhash=sha256:1122 -->\n- beta\n",
+      "after": "- alpha\n- beta\n",
+      "findings": []
     }
   ]
 }

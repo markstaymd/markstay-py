@@ -422,8 +422,8 @@
       }
     },
     {
-      "name": "a-subhash-id-neither-pairs-a-baseline-nor-goes-missing",
-      "note": "SPEC.md §16 mandatory reader rule (v1.6): a tool MUST NOT report a marker carrying the exact `subhash` key as the stay of the block containing it. The key is compared exactly, without segmenting or resolving a child, so a tool that implements neither §5.5 nor §5.6 still applies it. Staged pairing and loss reporting both run off the block id index. `old.md` is deleted and `new.md` added; the pairing is carried by `keep`. `c1` leaves the tree with the list, and an unfiltered index reports it lost, which fails a commit over a block stay that never existed.",
+      "name": "a-subhash-id-does-not-pair-a-baseline-but-its-loss-is-reported",
+      "note": "SPEC.md §16 mandatory reader rule (v1.6): a tool MUST NOT report a marker carrying the exact `subhash` key as the stay of the block containing it. The key is compared exactly, without segmenting or resolving a child, so a tool that implements neither §5.5 nor §5.6 still applies it. Staged pairing runs off the block id index. `old.md` is deleted and `new.md` added; the pairing is carried by `keep`, never by `c1`. `c1` leaves the tree with the list, and since v1.9 that loss is reported as DROPPED_CHILD_ID and blocks, the way a deleted section's stay does, rather than as a DROPPED_ID for a block stay that never existed.",
       "entries": [
         {
           "status": "D",
@@ -450,6 +450,12 @@
             "label": "new.md (baseline old.md)",
             "findings": [
               {
+                "level": "error",
+                "code": "DROPPED_CHILD_ID",
+                "id": "c1",
+                "line": null
+              },
+              {
                 "level": "warn",
                 "code": "HASH_DRIFT",
                 "id": "keep",
@@ -459,7 +465,116 @@
           }
         ],
         "notes": [],
+        "hasErrors": true
+      }
+    },
+    {
+      "name": "a-child-stay-stripped-in-a-modified-file-blocks-the-commit",
+      "note": "SPEC.md §16 (v1.9): a child stay is a stay, so the before/after diff reports its loss, under DROPPED_CHILD_ID rather than DROPPED_ID so the §16 reader rule still holds (a `subhash` marker is never reported as its container's stay). The test is lexical: the id sat on exactly one marker in the baseline, that marker carried the exact `subhash` key, and no marker carries the id after the edit. No §5.5 or §5.6 segmentation is needed, so every implementation applies it. The commit-hook shape of the same loss: the item survives, its marker does not, and no other staged file carries the id.",
+      "entries": [
+        {
+          "status": "M",
+          "src": "a.md",
+          "dst": "a.md",
+          "before": "Body.\n<!-- stay:keep -->\n\n- alpha <!-- stay:c1 subhash=sha256:1122 -->\n- beta\n",
+          "after": "Body.\n<!-- stay:keep -->\n\n- alpha\n- beta\n"
+        }
+      ],
+      "expected": {
+        "pairings": [
+          {
+            "path": "a.md",
+            "baseline": "a.md"
+          }
+        ],
+        "reports": [
+          {
+            "label": "a.md",
+            "findings": [
+              {
+                "level": "error",
+                "code": "DROPPED_CHILD_ID",
+                "id": "c1",
+                "line": null
+              }
+            ]
+          }
+        ],
+        "notes": [],
+        "hasErrors": true
+      }
+    },
+    {
+      "name": "a-child-stay-moved-into-another-staged-file-is-not-blocking",
+      "note": "SPEC.md §16 (v1.9): a child stay is a stay, so the before/after diff reports its loss, under DROPPED_CHILD_ID rather than DROPPED_ID so the §16 reader rule still holds (a `subhash` marker is never reported as its container's stay). The test is lexical: the id sat on exactly one marker in the baseline, that marker carried the exact `subhash` key, and no marker carries the id after the edit. No §5.5 or §5.6 segmentation is needed, so every implementation applies it. A move between documents in one commit is not a loss, for a child stay exactly as for a block stay: any marker in any staged file carrying the id keeps it in the commit. It does not drive baseline pairing, which stays on block ids.",
+      "entries": [
+        {
+          "status": "M",
+          "src": "a.md",
+          "dst": "a.md",
+          "before": "Body.\n<!-- stay:keep -->\n\n- alpha <!-- stay:c1 subhash=sha256:1122 -->\n- beta\n",
+          "after": "Body.\n<!-- stay:keep -->\n\n- beta\n"
+        },
+        {
+          "status": "M",
+          "src": "b.md",
+          "dst": "b.md",
+          "before": "Other.\n<!-- stay:other -->\n",
+          "after": "Other.\n<!-- stay:other -->\n\n- alpha <!-- stay:c1 subhash=sha256:1122 -->\n"
+        }
+      ],
+      "expected": {
+        "pairings": [
+          {
+            "path": "a.md",
+            "baseline": "a.md"
+          },
+          {
+            "path": "b.md",
+            "baseline": "b.md"
+          }
+        ],
+        "reports": [],
+        "notes": [
+          "c1: moved out of a.md into b.md (still in this commit, not blocking)"
+        ],
         "hasErrors": false
+      }
+    },
+    {
+      "name": "a-child-stay-moved-within-its-own-file-is-not-a-move-out",
+      "note": "SPEC.md §16 (v1.9): a move is a note only when another staged file carries the id. A block stay whose marker becomes a child marker in the same file is still a dropped block stay, and the report must not claim it moved into no file at all.",
+      "entries": [
+        {
+          "status": "M",
+          "src": "a.md",
+          "dst": "a.md",
+          "before": "Body.\n<!-- stay:b1 -->\n\n- alpha\n- beta\n",
+          "after": "Body.\n\n- alpha <!-- stay:b1 subhash=sha256:1122 -->\n- beta\n"
+        }
+      ],
+      "expected": {
+        "pairings": [
+          {
+            "path": "a.md",
+            "baseline": "a.md"
+          }
+        ],
+        "reports": [
+          {
+            "label": "a.md",
+            "findings": [
+              {
+                "level": "error",
+                "code": "DROPPED_ID",
+                "id": "b1",
+                "line": null
+              }
+            ]
+          }
+        ],
+        "notes": [],
+        "hasErrors": true
       }
     }
   ]

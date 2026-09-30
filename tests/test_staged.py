@@ -203,6 +203,65 @@ def test_worktree_check_sees_a_loss_before_it_is_staged(repo):
     assert codes(result).count("DROPPED_ID") == 3
 
 
+def test_worktree_check_blocks_a_stripped_child_stay(repo):
+    """The gate for item stays: a hand edit that drops one item's `subhash` marker
+    and keeps the item fails the default check-worktree, naming the id, while a
+    reword of the same item stays a quiet drift and a move to another document is
+    a note."""
+    from markstay.staged import check_worktree
+
+    stamped = (
+        "## Action\n<!-- stay:head -->\n\n"
+        "- [ ] **First.** Body. <!-- stay:itemA subhash=sha256:1111aaaa2222 -->\n\n"
+        "- [ ] **Second.** Body. <!-- stay:itemB subhash=sha256:3333bbbb4444 -->\n"
+    )
+    write(repo, "a.md", stamped)
+    write(repo, "b.md", "Other.\n<!-- stay:other -->\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-qm", "init")
+
+    write(
+        repo,
+        "a.md",
+        stamped.replace(" <!-- stay:itemA subhash=sha256:1111aaaa2222 -->", ""),
+    )
+    result = check_worktree(repo=str(repo))
+    assert result.has_errors
+    assert [
+        (f.code, f.id) for _, fs in result.reports for f in fs if f.level == "error"
+    ] == [("DROPPED_CHILD_ID", "itemA")]
+
+    write(
+        repo, "a.md", stamped.replace("**First.** Body.", "**First.** Reworded body.")
+    )
+    assert not check_worktree(repo=str(repo)).has_errors
+
+    item = "- [ ] **First.** Body. <!-- stay:itemA subhash=sha256:1111aaaa2222 -->\n\n"
+    write(repo, "a.md", stamped.replace(item, ""))
+    write(repo, "b.md", "Other.\n<!-- stay:other -->\n\n" + item)
+    moved = check_worktree(repo=str(repo))
+    assert not moved.has_errors
+    assert any(n.startswith("itemA: moved out of a.md into b.md") for n in moved.notes)
+
+
+def test_a_drop_is_never_excused_by_the_same_file_carrying_the_id():
+    """Codex found this in review: under child identity, moving a child marker from
+    its deleted bullet into unrelated prose in the same file read as a move into no
+    file at all, and the CHILD_DROPPED error was swallowed."""
+    before = (
+        "- alpha <!-- stay:c1 subhash=sha256:1111aaaa2222 -->\n- beta\n"
+        "<!-- stay:list -->\n\nProse.\n<!-- stay:p -->\n"
+    )
+    after = (
+        "- beta\n<!-- stay:list -->\n\n"
+        "Prose. <!-- stay:c1 subhash=sha256:1111aaaa2222 -->\n<!-- stay:p -->\n"
+    )
+    entry = CommitEntry("M", "a.md", "a.md", before, after)
+    result = check_entries([entry], mode="commonmark", child_blocks=True)
+    assert result.has_errors
+    assert not [n for n in result.notes if "moved out" in n]
+
+
 def test_worktree_check_pairs_an_untracked_rename(repo):
     """An agent that rewrites a document under a new name leaves a deleted path and an
     untracked one, with nothing staged at all."""

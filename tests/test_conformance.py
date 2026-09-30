@@ -339,7 +339,7 @@ VERIFIERS = {
 KNOWN_PROFILES = {"rows"}
 ADVERTISED_PROFILES = {"rows"}
 PROFILE_CATEGORIES = {"rows": "rows"}
-CORE_VECTORS = 420
+CORE_VECTORS = 430
 # Advertised profiles are pinned too. A count that is only reported cannot
 # catch a vector going missing, because the denominator shrinks with it.
 PROFILE_VECTORS = {"rows": 32}

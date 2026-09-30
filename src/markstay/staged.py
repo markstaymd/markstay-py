@@ -277,12 +277,20 @@ def check_entries(
             ids.update(L._child_id_index(blocks))
         return ids
 
+    def carried_by(text: str) -> set[str]:
+        # Every id any marker carries, child markers included: a child stay that
+        # moved to another staged file is still in the commit (§16, v1.9). Only
+        # the move check reads this; pairing stays on block ids above.
+        blocks = L.parse_document(text, mode=mode, child_blocks=child_blocks)
+        return {mid for mid, _ in L._stay_marker_ids(blocks)}
+
     staged_text = {e.dst: e.after or "" for e in changed}
     staged_ids = {p: ids_of(t) for p, t in staged_text.items()}
+    staged_carried = {p: carried_by(t) for p, t in staged_text.items()}
     # An id present anywhere in the staged tree has not been lost, wherever it
     # ended up.
     committed_ids: set[str] = set()
-    for s in staged_ids.values():
+    for s in staged_carried.values():
         committed_ids |= s
 
     deleted_ids = {e.src: ids_of(e.before) for e in deleted}
@@ -325,10 +333,15 @@ def check_entries(
 
         kept = []
         for fd in findings:
-            if fd.code in ("DROPPED_ID", "CHILD_DROPPED") and fd.id in committed_ids:
-                elsewhere = sorted(
-                    p for p, s in staged_ids.items() if p != entry.dst and fd.id in s
-                )
+            # A move needs another staged file carrying the id: this file's own
+            # markers never excuse a drop reported against it.
+            elsewhere = sorted(
+                p for p, s in staged_carried.items() if p != entry.dst and fd.id in s
+            )
+            if (
+                fd.code in ("DROPPED_ID", "CHILD_DROPPED", "DROPPED_CHILD_ID")
+                and elsewhere
+            ):
                 result.notes.append(
                     f"{fd.id}: moved out of {origin or entry.dst} into "
                     f"{', '.join(elsewhere)} (still in this commit, not blocking)"
