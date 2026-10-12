@@ -3,11 +3,11 @@
 [![PyPI](https://img.shields.io/pypi/v/markstay)](https://pypi.org/project/markstay/)
 [![Python versions](https://img.shields.io/pypi/pyversions/markstay)](https://pypi.org/project/markstay/)
 [![tests](https://img.shields.io/github/actions/workflow/status/markstaymd/markstay-py/test.yml?label=tests)](https://github.com/markstaymd/markstay-py/actions/workflows/test.yml)
-[![spec](https://img.shields.io/badge/spec-v1.9-blue)](https://markstay.org)
+[![spec](https://img.shields.io/badge/spec-v1.10-blue)](https://markstay.org)
 ![License](https://img.shields.io/pypi/l/markstay)
 
 The Python reference implementation of the [markstay spec](https://markstay.org)
-(v1.9). markstay is a source-level identity primitive for Markdown blocks: an id
+(v1.10). markstay is a source-level identity primitive for Markdown blocks: an id
 token that **stays** bound to its block across edits (marker `stay:`), so a
 reference to a block survives the document being rewritten, including by an LLM.
 
@@ -257,7 +257,7 @@ and finds each document's baseline itself, which is what a hook actually wants.
 # .pre-commit-config.yaml
 repos:
   - repo: https://github.com/markstaymd/markstay-py
-    rev: v0.13.0
+    rev: v0.14.0
     hooks:
       - id: markstay                  # or markstay-collections, to include table
                                       # rows and list bullets
@@ -306,9 +306,9 @@ reported as a move rather than a loss, so reorganising documents does not block.
 ## The conformance corpus (the actual deliverable)
 
 The corpus under [`conformance/`](conformance) is shared with the JavaScript
-reference. **430 core vectors** across two tiers, plus a 32-vector optional
-profile this package advertises, so its own runner reports **462**. The `check`
-category supplies 17 commit-shaped cases with paths, statuses, before/after text,
+reference. **469 core vectors** across two tiers, plus a 32-vector optional
+profile this package advertises, so its own runner reports **501**. The `check`
+category supplies 20 commit-shaped cases with paths, statuses, before/after text,
 expected baseline pairings, findings, move/deletion/tracking-departure notes, and
 scope behavior.
 
@@ -318,8 +318,8 @@ scope behavior.
 - **`gen/`** , emitted from the reference for breadth/regression.
 - **`rows/`** , the optional `rows` profile (SPEC.md §5.6 table-row identity).
   §16 keeps child segmentation optional, so a conforming runner MAY decline this
-  profile; the JavaScript and Rust references do, and run the 430 core vectors
-  alone. This package implements §5.6, so it advertises `rows` and runs all 462.
+  profile; the JavaScript and Rust references do, and run the 469 core vectors
+  alone. This package implements §5.6, so it advertises `rows` and runs all 501.
   A runner that meets a profile it has never heard of fails rather than skipping
   it, which is what stops a new category going missing quietly.
 

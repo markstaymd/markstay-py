@@ -32,6 +32,7 @@ not this deterministic linter.
 
 from __future__ import annotations
 
+import bisect
 import hashlib
 import re
 from dataclasses import dataclass, field, replace
@@ -1794,6 +1795,208 @@ def _item_count(content: str) -> int:
     return count
 
 
+# SPEC.md §16 (v1.10): the line shapes the in-place adoption test reads. Each is
+# lexical and ASCII-pinned, so the four implementations agree byte for byte.
+_ADOPT_ATX_RE = re.compile(r"^ {0,3}#{1,6}(?:[ \t]|$)")
+_ADOPT_OPENER_RE = re.compile(r"^ {0,3}(?:[-+*]|[0-9]{1,9}[.)])(?:[ \t]|$)")
+_ADOPT_LEAD_RE = re.compile(r"^[ \t]*(?:>|<|\||```|~~~)")
+_ADOPT_EMPTY_ITEM_RE = re.compile(r"^[ \t]*(?:[-+*]|[0-9]{1,9}[.)])[ \t]*$")
+_ADOPT_HEADING_RE = re.compile(
+    r"^[ \t]*(?:(?:[-+*]|[0-9]{1,9}[.)])(?:[ \t]+|$))*#{1,6}(?:[ \t]|$)"
+)
+# The HTML blocks that run on across blank lines (CommonMark types 1 to 5).
+_ADOPT_HTML_RE = re.compile(r"^[ \t]*(?:<!--|<\?|<![A-Za-z]|<!\[CDATA\[)")
+_ADOPT_HTML_TAG_RE = re.compile(
+    r"^[ \t]*<(?:script|pre|style|textarea)(?:[ \t>]|$)", re.IGNORECASE | re.ASCII
+)
+
+
+@dataclass
+class _AdoptionCarrier:
+    subhash: bool
+    block: int  # index into the view's blocks: (body unique, stripped source)
+    offset: int  # the marker's position in the block's marker-stripped source
+    eligible: bool  # every per-document condition of the rule holds
+
+
+def _adoption_view(md: str, mode: str, ids: set[str]) -> tuple[
+    dict[str, int],
+    dict[str, list[_AdoptionCarrier]],
+    list[tuple[bool, str]],
+]:
+    """One document's half of the §16 (v1.10) in-place adoption test: how many
+    markers carry each id, the carrier facts for each marker of ``ids`` inside
+    a content block, and the blocks those carriers sit in: whether no other
+    content block shares the block's normalized body, and its stripped source. Carriers are built for ``ids`` alone and
+    share their block's stripped source, so the cost stays linear in the
+    document however many markers it holds or adopts."""
+    text = _blank_frontmatter(md.replace("\r\n", "\n").replace("\r", "\n"))
+    code = code_lines(text)
+    chunks = (
+        segment_commonmark(text) if mode == "commonmark" else segment_blank_line(text)
+    )
+    records = [
+        record
+        for record in _document_marker_records(md, text)
+        if marker_outside_code(record.marker, code) and not record.marker.malformed
+    ]
+    counts: dict[str, int] = {}
+    for record in records:
+        if record.marker.id:
+            counts[record.marker.id] = counts.get(record.marker.id, 0) + 1
+
+    doc_lines = text.split("\n")
+    starts = _line_starts(text)
+    # Each line's records (by index), so a strip reads the few markers near it
+    # rather than every marker in the document.
+    by_line: dict[int, list[int]] = {}
+    for k, record in enumerate(records):
+        first = bisect.bisect_right(starts, record.start)
+        last = bisect.bisect_right(starts, max(record.start, record.end - 1))
+        for n in range(first, last + 1):
+            by_line.setdefault(n, []).append(k)
+
+    def on(n: int) -> list[_MarkerRecord]:
+        return [records[k] for k in by_line.get(n, [])]
+
+    html_first: int | None = None  # first line opening a run-on HTML block
+    for n, line in enumerate(doc_lines, 1):
+        if n in code:
+            continue
+        line = _strip_record_ranges(line, on(n), source_start=starts[n - 1])
+        if _ADOPT_HTML_RE.match(line) or _ADOPT_HTML_TAG_RE.match(line):
+            html_first = n
+            break
+
+    carriers: dict[str, list[_AdoptionCarrier]] = {}
+    bodies: dict[str, int] = {}
+    blocks: list[tuple[str, str]] = []  # (normalized body, stripped source)
+    for start, chunk in chunks:
+        chunk_start = starts[start - 1]
+        chunk_end = chunk_start + len(chunk)
+        lines = chunk.split("\n")
+        near = [
+            records[k]
+            for k in sorted(
+                {
+                    k
+                    for n in range(start, start + len(lines))
+                    for k in by_line.get(n, [])
+                }
+            )
+        ]
+        stripped = _strip_record_ranges(chunk, near, source_start=chunk_start)
+        if stripped.strip(" \t\n\r\f\v") == "":
+            continue  # a marker-only chunk is not a block
+        body = normalize_body(stripped)
+        bodies[body] = bodies.get(body, 0) + 1
+        inside = [r for r in near if chunk_start <= r.start < chunk_end]
+        wanted = [r for r in inside if r.marker.id in ids]
+        if not wanted:
+            continue
+        clean = [
+            _strip_record_ranges(
+                line, on(start + i), source_start=starts[start - 1 + i]
+            )
+            for i, line in enumerate(lines)
+        ]
+        single = not any("\n" in text[r.start : r.end] for r in inside)
+        opening = 0
+        if _ADOPT_ATX_RE.match(lines[0]):
+            # Skip lines holding nothing but markers and (§5's ASCII) whitespace.
+            opening = 1
+            while opening < len(lines) and clean[opening].strip(" \t\f\v") == "":
+                opening += 1
+        opens = (
+            opening < len(lines)
+            and bool(_ADOPT_OPENER_RE.match(lines[opening]))
+            and not _THEMATIC_RE.match(lines[opening])
+        )
+        # The first row past the opening line each line test refuses: a marker
+        # is eligible only above both.
+        led = next(
+            (
+                i
+                for i in range(opening + 1, len(lines))
+                if _THEMATIC_RE.match(lines[i]) or _ADOPT_LEAD_RE.match(lines[i])
+            ),
+            len(lines),
+        )
+        bare = next(
+            (
+                i
+                for i in range(opening, len(lines))
+                if _ADOPT_EMPTY_ITEM_RE.match(clean[i])
+                or _ADOPT_HEADING_RE.match(clean[i])
+            ),
+            len(lines),
+        )
+        # Where each marker lands in `stripped`: its offset in the chunk less
+        # the marker characters removed before it.
+        spans = _merged_record_ranges(near, chunk_start, chunk_end)
+        span_starts = [left for left, _ in spans]
+        removed = [0]
+        for left, right in spans:
+            removed.append(removed[-1] + right - left)
+        blocks.append((body, stripped))
+        for record in wanted:
+            row = bisect.bisect_right(starts, record.start) - start  # 0-based in chunk
+            k = bisect.bisect_left(span_starts, record.start)
+            gone = removed[k] - (max(0, spans[k - 1][1] - record.start) if k else 0)
+            eligible = (
+                single
+                and opens
+                and opening <= row < min(led, bare)
+                and clean[row].strip(" \t") != ""
+                and (html_first is None or html_first >= start + row)
+            )
+            carriers.setdefault(record.marker.id, []).append(
+                _AdoptionCarrier(
+                    subhash=record.marker.has_subhash,
+                    block=len(blocks) - 1,
+                    offset=record.start - chunk_start - gone,
+                    eligible=eligible,
+                )
+            )
+    # Whether each carrier's block body is unique, settled once per block.
+    return counts, carriers, [(bodies[body] == 1, src) for body, src in blocks]
+
+
+def _adopted_ids(before_md: str, after_md: str, mode: str, ids) -> set[str]:
+    """The ids among ``ids`` whose block stay was rewritten in place as a child
+    stay (SPEC.md §16, v1.10): one plain marker before and one `subhash` marker
+    after, in the same place in an unchanged list block that no other block
+    duplicates. Lexical, so it needs no §5.5 segmentation and binds every
+    linter; what it reads as the block is whatever this segmenter selects."""
+    ids = set(ids)
+    b_counts, b_carriers, b_blocks = _adoption_view(before_md, mode, ids)
+    a_counts, a_carriers, a_blocks = _adoption_view(after_md, mode, ids)
+    same: dict[tuple[int, int], bool] = {}  # block pair -> unchanged, once each
+    out: set[str] = set()
+    for mid in ids:
+        if b_counts.get(mid) != 1 or a_counts.get(mid) != 1:
+            continue
+        b, a = b_carriers.get(mid, []), a_carriers.get(mid, [])
+        if len(b) != 1 or len(a) != 1:
+            continue
+        b, a = b[0], a[0]
+        pair = (b.block, a.block)
+        if pair not in same:
+            same[pair] = b_blocks[b.block][1] == a_blocks[a.block][1]
+        if (
+            not b.subhash
+            and a.subhash
+            and b.eligible
+            and a.eligible
+            and same[pair]
+            and b.offset == a.offset
+            and b_blocks[b.block][0]
+            and a_blocks[a.block][0]
+        ):
+            out.add(mid)
+    return out
+
+
 def lint_diff(
     before_md: str,
     after_md: str,
@@ -1817,8 +2020,23 @@ def lint_diff(
     after = _id_index(after_blocks)
     findings: list[Finding] = []
 
-    for mid in before:
-        if mid not in after:
+    gone = [mid for mid in before if mid not in after]
+    # SPEC.md §16 (v1.10): a block stay rewritten in place as its list item's
+    # child stay is kept, and said so: the test is lexical, so a shape it
+    # misjudges is printed rather than passed in silence.
+    adopted = _adopted_ids(before_md, after_md, mode, gone) if gone else set()
+    for mid in gone:
+        if mid in adopted:
+            findings.append(
+                Finding(
+                    "warn",
+                    "ADOPTED_ID",
+                    f"id {mid} was rewritten in place as a child stay and is kept; "
+                    f"check it sits on the list item it names",
+                    id=mid,
+                )
+            )
+        else:
             findings.append(
                 Finding(
                     "error",
@@ -1827,6 +2045,7 @@ def lint_diff(
                     id=mid,
                 )
             )
+
 
     for mid, blks in after.items():
         if len(blks) > 1:

@@ -576,6 +576,114 @@
         "notes": [],
         "hasErrors": true
       }
+    },
+    {
+      "name": "a-bare-stay-adopted-in-place-as-its-items-child-stay-is-kept",
+      "note": "SPEC.md §16 (v1.10): a block stay rewritten in place as a child stay keeps its id and is reported as a non-blocking ADOPTED_ID warning, under the conditions listed there, all lexical. Commit-shaped: the id never leaves the file, so there is no move-out note and nothing blocks; the adoption is reported as a warning.",
+      "entries": [
+        {
+          "status": "M",
+          "src": "a.md",
+          "dst": "a.md",
+          "before": "Body.\n<!-- stay:keep -->\n\n- alpha <!-- stay:i1 -->\n- beta\n",
+          "after": "Body.\n<!-- stay:keep -->\n\n- alpha <!-- stay:i1 subhash=sha256:1122 -->\n- beta\n"
+        }
+      ],
+      "expected": {
+        "pairings": [
+          {
+            "path": "a.md",
+            "baseline": "a.md"
+          }
+        ],
+        "reports": [
+          {
+            "label": "a.md",
+            "findings": [
+              {
+                "level": "warn",
+                "code": "ADOPTED_ID",
+                "id": "i1",
+                "line": null
+              }
+            ]
+          }
+        ],
+        "notes": [],
+        "hasErrors": false
+      }
+    },
+    {
+      "name": "a-bare-stay-removed-from-its-item-in-a-commit-is-dropped",
+      "note": "SPEC.md §16 (v1.10): a block stay rewritten in place as a child stay keeps its id and is reported as a non-blocking ADOPTED_ID warning, under the conditions listed there, all lexical. Control: no marker in any staged file carries the id.",
+      "entries": [
+        {
+          "status": "M",
+          "src": "a.md",
+          "dst": "a.md",
+          "before": "Body.\n<!-- stay:keep -->\n\n- alpha <!-- stay:i1 -->\n- beta\n",
+          "after": "Body.\n<!-- stay:keep -->\n\n- alpha\n- beta\n"
+        }
+      ],
+      "expected": {
+        "pairings": [
+          {
+            "path": "a.md",
+            "baseline": "a.md"
+          }
+        ],
+        "reports": [
+          {
+            "label": "a.md",
+            "findings": [
+              {
+                "level": "error",
+                "code": "DROPPED_ID",
+                "id": "i1",
+                "line": null
+              }
+            ]
+          }
+        ],
+        "notes": [],
+        "hasErrors": true
+      }
+    },
+    {
+      "name": "a-bare-stay-adopted-onto-a-different-item-in-a-commit-is-dropped",
+      "note": "SPEC.md §16 (v1.10): a block stay rewritten in place as a child stay keeps its id and is reported as a non-blocking ADOPTED_ID warning, under the conditions listed there, all lexical. Control: the child marker moved to another item of the same list. Every other byte is unchanged, so the marker-stripped text is identical and only the place differs.",
+      "entries": [
+        {
+          "status": "M",
+          "src": "a.md",
+          "dst": "a.md",
+          "before": "Body.\n<!-- stay:keep -->\n\n- alpha<!-- stay:i1 -->\n- beta\n",
+          "after": "Body.\n<!-- stay:keep -->\n\n- alpha\n- beta<!-- stay:i1 subhash=sha256:1122 -->\n"
+        }
+      ],
+      "expected": {
+        "pairings": [
+          {
+            "path": "a.md",
+            "baseline": "a.md"
+          }
+        ],
+        "reports": [
+          {
+            "label": "a.md",
+            "findings": [
+              {
+                "level": "error",
+                "code": "DROPPED_ID",
+                "id": "i1",
+                "line": null
+              }
+            ]
+          }
+        ],
+        "notes": [],
+        "hasErrors": true
+      }
     }
   ]
 }

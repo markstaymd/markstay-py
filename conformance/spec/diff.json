@@ -162,6 +162,479 @@
       "before": "<!-- stay:c1 subhash=sha256:1122 -->\n\n- alpha <!-- stay:c1 subhash=sha256:1122 -->\n- beta\n",
       "after": "- alpha\n- beta\n",
       "findings": []
+    },
+    {
+      "name": "a-bare-stay-rewritten-in-place-as-its-items-child-stay-is-kept",
+      "note": "SPEC.md §16 (v1.10): a block stay rewritten in place as a child stay keeps its id and is reported as a non-blocking ADOPTED_ID warning, under the conditions listed there, all lexical. This is how a tool adopts a hand-written stay on a list item as that item's own stay: only the marker's text changes.",
+      "before": "- [ ] alpha\n  **Waits**: none <!-- stay:i1 -->\n- [ ] beta\n<!-- stay:list -->\n",
+      "after": "- [ ] alpha\n  **Waits**: none <!-- stay:i1 subhash=sha256:1122 -->\n- [ ] beta\n<!-- stay:list -->\n",
+      "findings": [
+        {
+          "level": "warn",
+          "code": "ADOPTED_ID",
+          "id": "i1"
+        }
+      ]
+    },
+    {
+      "name": "two-bare-stays-adopted-in-one-list-in-one-edit-are-both-kept",
+      "note": "SPEC.md §16 (v1.10): a block stay rewritten in place as a child stay keeps its id and is reported as a non-blocking ADOPTED_ID warning, under the conditions listed there, all lexical. The body is compared with every marker removed, so adopting a second item's stay in the same edit does not move the first one's place.",
+      "before": "Intro.\n<!-- stay:intro -->\n\n- alpha <!-- stay:i1 -->\n- beta <!-- stay:i2 -->\n",
+      "after": "Intro.\n<!-- stay:intro -->\n\n- alpha <!-- stay:i1 subhash=sha256:1122 -->\n- beta <!-- stay:i2 subhash=sha256:3344 -->\n",
+      "findings": [
+        {
+          "level": "warn",
+          "code": "ADOPTED_ID",
+          "id": "i1"
+        },
+        {
+          "level": "warn",
+          "code": "ADOPTED_ID",
+          "id": "i2"
+        }
+      ]
+    },
+    {
+      "name": "a-bare-stay-on-an-item-removed-is-dropped",
+      "note": "SPEC.md §16 (v1.10): a block stay rewritten in place as a child stay keeps its id and is reported as a non-blocking ADOPTED_ID warning, under the conditions listed there, all lexical. Control: no marker carries the id after the edit, so it is an ordinary drop.",
+      "before": "- alpha <!-- stay:i1 -->\n- beta\n",
+      "after": "- alpha\n- beta\n",
+      "findings": [
+        {
+          "level": "error",
+          "code": "DROPPED_ID",
+          "id": "i1"
+        }
+      ]
+    },
+    {
+      "name": "a-bare-stay-adopted-onto-a-different-item-is-dropped",
+      "note": "SPEC.md §16 (v1.10): a block stay rewritten in place as a child stay keeps its id and is reported as a non-blocking ADOPTED_ID warning, under the conditions listed there, all lexical. Control: the child marker moved to another item of the same list. Every other byte is unchanged, so the marker-stripped text is identical and only the place differs.",
+      "before": "- alpha<!-- stay:i1 -->\n- beta\n",
+      "after": "- alpha\n- beta<!-- stay:i1 subhash=sha256:1122 -->\n",
+      "findings": [
+        {
+          "level": "error",
+          "code": "DROPPED_ID",
+          "id": "i1"
+        }
+      ]
+    },
+    {
+      "name": "a-lists-own-line-stay-rewritten-in-place-is-dropped",
+      "note": "SPEC.md §16 (v1.10): a block stay rewritten in place as a child stay keeps its id and is reported as a non-blocking ADOPTED_ID warning, under the conditions listed there, all lexical. Control: a marker on a line of its own is the list's stay, not an item's, and a child marker there addresses no item, so the list loses its stay.",
+      "before": "- alpha\n- beta\n<!-- stay:b1 -->\n",
+      "after": "- alpha\n- beta\n<!-- stay:b1 subhash=sha256:1122 -->\n",
+      "findings": [
+        {
+          "level": "error",
+          "code": "DROPPED_ID",
+          "id": "b1"
+        }
+      ]
+    },
+    {
+      "name": "a-paragraphs-inline-stay-rewritten-in-place-is-dropped",
+      "note": "SPEC.md §16 (v1.10): a block stay rewritten in place as a child stay keeps its id and is reported as a non-blocking ADOPTED_ID warning, under the conditions listed there, all lexical. Control: the block's first line opens no list item, so a child marker there addresses nothing.",
+      "before": "Body text. <!-- stay:p1 -->\n",
+      "after": "Body text. <!-- stay:p1 subhash=sha256:1122 -->\n",
+      "findings": [
+        {
+          "level": "error",
+          "code": "DROPPED_ID",
+          "id": "p1"
+        }
+      ]
+    },
+    {
+      "name": "a-bare-stay-adopted-while-its-list-is-edited-is-dropped",
+      "note": "SPEC.md §16 (v1.10): a block stay rewritten in place as a child stay keeps its id and is reported as a non-blocking ADOPTED_ID warning, under the conditions listed there, all lexical. Control: the rule is narrower than 'the same item'. Any other change to the block's text in the same edit fails it, and the drop is reported rather than the linter guessing which item survived.",
+      "before": "- alpha <!-- stay:i1 -->\n- beta\n",
+      "after": "- alpha <!-- stay:i1 subhash=sha256:1122 -->\n- gamma\n",
+      "findings": [
+        {
+          "level": "error",
+          "code": "DROPPED_ID",
+          "id": "i1"
+        }
+      ]
+    },
+    {
+      "name": "a-bare-stay-adopted-into-an-identical-list-elsewhere-is-dropped",
+      "note": "SPEC.md §16 (v1.10): a block stay rewritten in place as a child stay keeps its id and is reported as a non-blocking ADOPTED_ID warning, under the conditions listed there, all lexical. Control: the marker moved to another block whose text is the same, at the same place. The body is not unique, so nothing says which block the id was on, and it is a drop.",
+      "before": "- alpha <!-- stay:i1 -->\n\nSeparator.\n<!-- stay:sep -->\n\n- alpha\n",
+      "after": "- alpha\n\nSeparator.\n<!-- stay:sep -->\n\n- alpha <!-- stay:i1 subhash=sha256:1122 -->\n",
+      "findings": [
+        {
+          "level": "error",
+          "code": "DROPPED_ID",
+          "id": "i1"
+        }
+      ]
+    },
+    {
+      "name": "a-bare-stay-adopted-on-a-blockquote-line-under-a-list-is-dropped",
+      "note": "SPEC.md §16 (v1.10): a block stay rewritten in place as a child stay keeps its id and is reported as a non-blocking ADOPTED_ID warning, under the conditions listed there, all lexical. Control: a line up to the marker's begins with `>`. The marker sits in a blockquote, which addresses no item under §5.2, and the line test refuses it under either segmenter.",
+      "before": "- alpha\n> quoted <!-- stay:i1 -->\n",
+      "after": "- alpha\n> quoted <!-- stay:i1 subhash=sha256:1122 -->\n",
+      "findings": [
+        {
+          "level": "error",
+          "code": "DROPPED_ID",
+          "id": "i1"
+        }
+      ]
+    },
+    {
+      "name": "a-bare-stay-after-a-paragraph-and-a-list-shaped-line-is-dropped",
+      "note": "SPEC.md §16 (v1.10): a block stay rewritten in place as a child stay keeps its id and is reported as a non-blocking ADOPTED_ID warning, under the conditions listed there, all lexical. Control: the block's first line opens no list item. An ordered list starting at 2 cannot interrupt a paragraph, so this is paragraph text and the child marker would address nothing.",
+      "before": "paragraph\n2. alleged item <!-- stay:i1 -->\n",
+      "after": "paragraph\n2. alleged item <!-- stay:i1 subhash=sha256:1122 -->\n",
+      "findings": [
+        {
+          "level": "error",
+          "code": "DROPPED_ID",
+          "id": "i1"
+        }
+      ]
+    },
+    {
+      "name": "a-bare-stay-inside-an-html-block-is-dropped",
+      "note": "SPEC.md §16 (v1.10): a block stay rewritten in place as a child stay keeps its id and is reported as a non-blocking ADOPTED_ID warning, under the conditions listed there, all lexical. Control: the block's first line opens no list item, and a line begins with `<`.",
+      "before": "<div>\n- fake\nparagraph <!-- stay:i1 -->\n</div>\n",
+      "after": "<div>\n- fake\nparagraph <!-- stay:i1 subhash=sha256:1122 -->\n</div>\n",
+      "findings": [
+        {
+          "level": "error",
+          "code": "DROPPED_ID",
+          "id": "i1"
+        }
+      ]
+    },
+    {
+      "name": "a-bare-stay-after-a-fenced-list-shaped-line-is-dropped",
+      "note": "SPEC.md §16 (v1.10): a block stay rewritten in place as a child stay keeps its id and is reported as a non-blocking ADOPTED_ID warning, under the conditions listed there, all lexical. Control: the block's first line is a fence, not a list item; §3.3 makes the fenced `- fake` code.",
+      "before": "```\n- fake\n```\nprose <!-- stay:i1 -->\n",
+      "after": "```\n- fake\n```\nprose <!-- stay:i1 subhash=sha256:1122 -->\n",
+      "findings": [
+        {
+          "level": "error",
+          "code": "DROPPED_ID",
+          "id": "i1"
+        }
+      ]
+    },
+    {
+      "name": "a-bare-stay-in-a-table-row-inside-a-list-item-is-dropped",
+      "note": "SPEC.md §16 (v1.10): a block stay rewritten in place as a child stay keeps its id and is reported as a non-blocking ADOPTED_ID warning, under the conditions listed there, all lexical. Control: a line up to the marker's begins with `|`. A child marker there would be a §5.6 row stay, not the item's.",
+      "before": "- item\n\n  | a | b |\n  |---|---|\n  | 1 | 2 <!-- stay:i1 --> |\n",
+      "after": "- item\n\n  | a | b |\n  |---|---|\n  | 1 | 2 <!-- stay:i1 subhash=sha256:1122 --> |\n",
+      "findings": [
+        {
+          "level": "error",
+          "code": "DROPPED_ID",
+          "id": "i1"
+        }
+      ]
+    },
+    {
+      "name": "a-bare-stay-ahead-of-the-list-it-precedes-is-dropped",
+      "note": "SPEC.md §16 (v1.10): a block stay rewritten in place as a child stay keeps its id and is reported as a non-blocking ADOPTED_ID warning, under the conditions listed there, all lexical. Control: a list-item line after the marker does not qualify it; the block's first line must open the item.",
+      "before": "Intro <!-- stay:i1 -->\n- item\n",
+      "after": "Intro <!-- stay:i1 subhash=sha256:1122 -->\n- item\n",
+      "findings": [
+        {
+          "level": "error",
+          "code": "DROPPED_ID",
+          "id": "i1"
+        }
+      ]
+    },
+    {
+      "name": "a-bare-stay-adopted-in-a-nested-item-is-kept-though-it-addresses-nothing",
+      "note": "SPEC.md §16 (v1.10): a block stay rewritten in place as a child stay keeps its id and is reported as a non-blocking ADOPTED_ID warning, under the conditions listed there, all lexical. The accepted limit: every lexical condition holds, so the id is kept, although a child marker in a nested item addresses nothing (§5.5). Pinned so every implementation agrees on it; an adopting writer refuses this position.",
+      "before": "- alpha\n  - beta <!-- stay:i1 -->\n",
+      "after": "- alpha\n  - beta <!-- stay:i1 subhash=sha256:1122 -->\n",
+      "findings": [
+        {
+          "level": "warn",
+          "code": "ADOPTED_ID",
+          "id": "i1"
+        }
+      ]
+    },
+    {
+      "name": "a-bare-stay-adopted-in-place-in-a-crlf-document-is-kept",
+      "note": "SPEC.md §16 (v1.10): a block stay rewritten in place as a child stay keeps its id and is reported as a non-blocking ADOPTED_ID warning, under the conditions listed there, all lexical. The comparison runs on LF-normalized source (§8 step 1), so CRLF does not change the answer.",
+      "before": "- alpha <!-- stay:i1 -->\r\n- beta\r\n",
+      "after": "- alpha <!-- stay:i1 subhash=sha256:1122 -->\r\n- beta\r\n",
+      "findings": [
+        {
+          "level": "warn",
+          "code": "ADOPTED_ID",
+          "id": "i1"
+        }
+      ]
+    },
+    {
+      "name": "a-bare-stay-adopted-in-place-in-the-mdx-form-is-kept",
+      "note": "SPEC.md §16 (v1.10): a block stay rewritten in place as a child stay keeps its id and is reported as a non-blocking ADOPTED_ID warning, under the conditions listed there, all lexical. The MDX comment form (§3.2) is a marker like the HTML form.",
+      "before": "- alpha {/* stay:i1 */}\n- beta\n",
+      "after": "- alpha {/* stay:i1 subhash=sha256:1122 */}\n- beta\n",
+      "findings": [
+        {
+          "level": "warn",
+          "code": "ADOPTED_ID",
+          "id": "i1"
+        }
+      ]
+    },
+    {
+      "name": "a-bare-stay-rewritten-across-two-lines-is-dropped",
+      "note": "SPEC.md §16 (v1.10): a block stay rewritten in place as a child stay keeps its id and is reported as a non-blocking ADOPTED_ID warning, under the conditions listed there, all lexical. Control: the rewritten marker spans a line break inside a quoted value, so it sits on no single line and belongs to neither item, although the text with markers removed is unchanged.",
+      "before": "- alpha <!-- stay:i1 -->\n- beta\n",
+      "after": "- alpha <!-- stay:i1 subhash=sha256:1122 quote=\"\n- gamma\" -->\n- beta\n",
+      "findings": [
+        {
+          "level": "error",
+          "code": "DROPPED_ID",
+          "id": "i1"
+        }
+      ]
+    },
+    {
+      "name": "a-bare-stay-adopted-while-an-orphan-copy-appears-is-dropped",
+      "note": "SPEC.md §16 (v1.10): a block stay rewritten in place as a child stay keeps its id and is reported as a non-blocking ADOPTED_ID warning, under the conditions listed there, all lexical. Control: an orphan marker carrying the id is still a marker, so two carry it after the edit, not one.",
+      "before": "- alpha <!-- stay:i1 -->\n- beta\n",
+      "after": "<!-- stay:i1 -->\n\n- alpha <!-- stay:i1 subhash=sha256:1122 -->\n- beta\n",
+      "findings": [
+        {
+          "level": "error",
+          "code": "DROPPED_ID",
+          "id": "i1"
+        }
+      ]
+    },
+    {
+      "name": "a-bare-stay-adopted-while-an-identical-list-appears-is-dropped",
+      "note": "SPEC.md §16 (v1.10): a block stay rewritten in place as a child stay keeps its id and is reported as a non-blocking ADOPTED_ID warning, under the conditions listed there, all lexical. Control: the body is unique before the edit but not after it, and uniqueness must hold in both documents.",
+      "before": "- alpha <!-- stay:i1 -->\n- beta\n",
+      "after": "- alpha <!-- stay:i1 subhash=sha256:1122 -->\n- beta\n\nSeparator.\n\n- alpha\n- beta\n",
+      "findings": [
+        {
+          "level": "error",
+          "code": "DROPPED_ID",
+          "id": "i1"
+        }
+      ]
+    },
+    {
+      "name": "a-bare-stay-adopted-under-a-heading-that-touches-its-list-is-kept",
+      "note": "SPEC.md §16 (v1.10): a block stay rewritten in place as a child stay keeps its id and is reported as a non-blocking ADOPTED_ID warning, under the conditions listed there, all lexical. A tracker action list directly under its heading. Blank-line segmentation makes heading and list one block, so the opening line is the first line after the heading; §5.2 selects the list block. Both keep it.",
+      "before": "## Action <!-- stay:head -->\n- [ ] **Title** text\n      **Gate**: ready\n      **Waits**: none <!-- stay:i1 -->\n",
+      "after": "## Action <!-- stay:head -->\n- [ ] **Title** text\n      **Gate**: ready\n      **Waits**: none <!-- stay:i1 subhash=sha256:1122 -->\n",
+      "findings": [
+        {
+          "level": "warn",
+          "code": "ADOPTED_ID",
+          "id": "i1"
+        }
+      ]
+    },
+    {
+      "name": "a-bare-stay-adopted-under-a-heading-and-its-own-marker-line-is-kept",
+      "note": "SPEC.md §16 (v1.10): a block stay rewritten in place as a child stay keeps its id and is reported as a non-blocking ADOPTED_ID warning, under the conditions listed there, all lexical. The heading's stay on a line of its own between heading and list: a line holding only markers is skipped when finding the opening line.",
+      "before": "## Action\n<!-- stay:head -->\n- [ ] **Title** text\n  **Waits**: none <!-- stay:i1 -->\n",
+      "after": "## Action\n<!-- stay:head -->\n- [ ] **Title** text\n  **Waits**: none <!-- stay:i1 subhash=sha256:1122 -->\n",
+      "findings": [
+        {
+          "level": "warn",
+          "code": "ADOPTED_ID",
+          "id": "i1"
+        }
+      ]
+    },
+    {
+      "name": "a-bare-stay-on-a-heading-line-above-a-list-is-dropped",
+      "note": "SPEC.md §16 (v1.10): a block stay rewritten in place as a child stay keeps its id and is reported as a non-blocking ADOPTED_ID warning, under the conditions listed there, all lexical. Control: the marker sits on the heading, above the opening line, so it is the heading's stay and as a child marker would address nothing.",
+      "before": "## Action <!-- stay:i1 -->\n- [ ] item\n",
+      "after": "## Action <!-- stay:i1 subhash=sha256:1122 -->\n- [ ] item\n",
+      "findings": [
+        {
+          "level": "error",
+          "code": "DROPPED_ID",
+          "id": "i1"
+        }
+      ]
+    },
+    {
+      "name": "a-bare-stay-under-a-heading-then-a-list-shaped-line-is-dropped",
+      "note": "SPEC.md §16 (v1.10): a block stay rewritten in place as a child stay keeps its id and is reported as a non-blocking ADOPTED_ID warning, under the conditions listed there, all lexical. Control: after the heading the opening line is `paragraph`, which opens no list item; the heading prefix does not reopen the `2.` case.",
+      "before": "## H\nparagraph\n2. alleged <!-- stay:i1 -->\n",
+      "after": "## H\nparagraph\n2. alleged <!-- stay:i1 subhash=sha256:1122 -->\n",
+      "findings": [
+        {
+          "level": "error",
+          "code": "DROPPED_ID",
+          "id": "i1"
+        }
+      ]
+    },
+    {
+      "name": "a-bare-stay-on-a-heading-after-a-list-item-is-dropped",
+      "note": "SPEC.md §16 (v1.10): a block stay rewritten in place as a child stay keeps its id and is reported as a non-blocking ADOPTED_ID warning, under the conditions listed there, all lexical. Control: a heading line between the opening line and the marker. Under blank-line segmentation the block starts with the list, but the marker sits on a heading that ends it.",
+      "before": "- alpha\n## Other <!-- stay:i1 -->\n",
+      "after": "- alpha\n## Other <!-- stay:i1 subhash=sha256:1122 -->\n",
+      "findings": [
+        {
+          "level": "error",
+          "code": "DROPPED_ID",
+          "id": "i1"
+        }
+      ]
+    },
+    {
+      "name": "a-bare-stay-after-a-thematic-break-is-dropped",
+      "note": "SPEC.md §16 (v1.10): a block stay rewritten in place as a child stay keeps its id and is reported as a non-blocking ADOPTED_ID warning, under the conditions listed there, all lexical. Control: `- - -` is a thematic break, not a list item, so the opening line opens no item.",
+      "before": "- - -\nprose <!-- stay:i1 -->\n",
+      "after": "- - -\nprose <!-- stay:i1 subhash=sha256:1122 -->\n",
+      "findings": [
+        {
+          "level": "error",
+          "code": "DROPPED_ID",
+          "id": "i1"
+        }
+      ]
+    },
+    {
+      "name": "a-bare-stay-in-a-table-row-tight-under-its-item-is-dropped",
+      "note": "SPEC.md §16 (v1.10): a block stay rewritten in place as a child stay keeps its id and is reported as a non-blocking ADOPTED_ID warning, under the conditions listed there, all lexical. Control: the block opens with the item under both segmenters, so only the `|` line test refuses it; a child marker there would be a §5.6 row stay, not the item's.",
+      "before": "- item\n  | a | b |\n  |---|---|\n  | 1 | 2 <!-- stay:i1 --> |\n",
+      "after": "- item\n  | a | b |\n  |---|---|\n  | 1 | 2 <!-- stay:i1 subhash=sha256:1122 --> |\n",
+      "findings": [
+        {
+          "level": "error",
+          "code": "DROPPED_ID",
+          "id": "i1"
+        }
+      ]
+    },
+    {
+      "name": "a-bare-stay-moved-past-a-multi-line-marker-is-dropped",
+      "note": "SPEC.md §16 (v1.10): a block stay rewritten in place as a child stay keeps its id and is reported as a non-blocking ADOPTED_ID warning, under the conditions listed there, all lexical. Control: another marker in the block spans a line break, so removing every marker can give two different items the same offset; any multi-line marker in the block refuses the rule. Here i1 moves from alpha to the second item with the stripped text and offset unchanged.",
+      "before": "- alpha<!-- stay:i1 --><!-- stay:ctx quote=\"\n- beta\" --> continuation\n",
+      "after": "- alpha<!-- stay:ctx quote=\"\n- beta\" --><!-- stay:i1 subhash=sha256:1122 --> continuation\n",
+      "findings": [
+        {
+          "level": "error",
+          "code": "DROPPED_ID",
+          "id": "i1"
+        }
+      ]
+    },
+    {
+      "name": "a-bare-stay-below-a-heading-inside-an-item-is-dropped",
+      "note": "SPEC.md §16 (v1.10): a block stay rewritten in place as a child stay keeps its id and is reported as a non-blocking ADOPTED_ID warning, under the conditions listed there, all lexical. Control: the opening line's item holds an ATX heading, which ends it, so the paragraph below is not in the list; a heading after list markers refuses the rule.",
+      "before": "## Action\n- # Heading\nparagraph <!-- stay:i1 -->\n",
+      "after": "## Action\n- # Heading\nparagraph <!-- stay:i1 subhash=sha256:1122 -->\n",
+      "findings": [
+        {
+          "level": "error",
+          "code": "DROPPED_ID",
+          "id": "i1"
+        }
+      ]
+    },
+    {
+      "name": "a-bare-stay-below-a-deeply-indented-heading-is-dropped",
+      "note": "SPEC.md §16 (v1.10): a block stay rewritten in place as a child stay keeps its id and is reported as a non-blocking ADOPTED_ID warning, under the conditions listed there, all lexical. Control: a heading indented past three spaces still sits inside the item and ends it before the paragraph; heading-led lines refuse at any indentation.",
+      "before": "- item\n    # Heading\nparagraph <!-- stay:i1 -->\n",
+      "after": "- item\n    # Heading\nparagraph <!-- stay:i1 subhash=sha256:1122 -->\n",
+      "findings": [
+        {
+          "level": "error",
+          "code": "DROPPED_ID",
+          "id": "i1"
+        }
+      ]
+    },
+    {
+      "name": "a-bare-stay-after-an-empty-opening-item-is-dropped",
+      "note": "SPEC.md §16 (v1.10): a block stay rewritten in place as a child stay keeps its id and is reported as a non-blocking ADOPTED_ID warning, under the conditions listed there, all lexical. Control: the opening line is an empty item, and the paragraph after it is not part of the list.",
+      "before": "## Action\n<!-- stay:head -->\n-\nparagraph <!-- stay:i1 -->\n",
+      "after": "## Action\n<!-- stay:head -->\n-\nparagraph <!-- stay:i1 subhash=sha256:1122 -->\n",
+      "findings": [
+        {
+          "level": "error",
+          "code": "DROPPED_ID",
+          "id": "i1"
+        }
+      ]
+    },
+    {
+      "name": "a-bare-stay-after-a-later-empty-item-is-dropped",
+      "note": "SPEC.md §16 (v1.10): a block stay rewritten in place as a child stay keeps its id and is reported as a non-blocking ADOPTED_ID warning, under the conditions listed there, all lexical. Control: an empty item between the opening line and the marker ends the list before the paragraph.",
+      "before": "- alpha\n-\nparagraph <!-- stay:i1 -->\n",
+      "after": "- alpha\n-\nparagraph <!-- stay:i1 subhash=sha256:1122 -->\n",
+      "findings": [
+        {
+          "level": "error",
+          "code": "DROPPED_ID",
+          "id": "i1"
+        }
+      ]
+    },
+    {
+      "name": "a-bare-stay-below-an-open-script-block-is-dropped",
+      "note": "SPEC.md §16 (v1.10): a block stay rewritten in place as a child stay keeps its id and is reported as a non-blocking ADOPTED_ID warning, under the conditions listed there, all lexical. Control: a `<script>` block opened above runs on across the blank line, so the apparent heading and list are raw HTML; an opener of an HTML block that crosses blank lines anywhere above refuses the rule.",
+      "before": "<script>\n\n## Action\n- fake <!-- stay:i1 -->\n</script>\n",
+      "after": "<script>\n\n## Action\n- fake <!-- stay:i1 subhash=sha256:1122 -->\n</script>\n",
+      "findings": [
+        {
+          "level": "error",
+          "code": "DROPPED_ID",
+          "id": "i1"
+        }
+      ]
+    },
+    {
+      "name": "a-bare-stay-below-an-open-html-comment-is-dropped",
+      "note": "SPEC.md §16 (v1.10): a block stay rewritten in place as a child stay keeps its id and is reported as a non-blocking ADOPTED_ID warning, under the conditions listed there, all lexical. Control: an ordinary HTML comment opened above is still open, so the list is inside it.",
+      "before": "<!-- ordinary comment\n\n## Action\n- fake <!-- stay:i1 -->\n",
+      "after": "<!-- ordinary comment\n\n## Action\n- fake <!-- stay:i1 subhash=sha256:1122 -->\n",
+      "findings": [
+        {
+          "level": "error",
+          "code": "DROPPED_ID",
+          "id": "i1"
+        }
+      ]
+    },
+    {
+      "name": "a-bare-stay-adopted-under-a-heading-and-a-form-feed-marker-line-is-kept",
+      "note": "SPEC.md §16 (v1.10): a block stay rewritten in place as a child stay keeps its id and is reported as a non-blocking ADOPTED_ID warning, under the conditions listed there, all lexical. The lines skipped after a leading ATX heading are those holding only markers and whitespace, which is §5's ASCII set: a marker line ending in a form feed is skipped like one ending in a space.",
+      "before": "# Action\n<!-- stay:head -->\f\n- [ ] alpha <!-- stay:i1 -->\n- [ ] beta\n",
+      "after": "# Action\n<!-- stay:head -->\f\n- [ ] alpha <!-- stay:i1 subhash=sha256:1122 -->\n- [ ] beta\n",
+      "findings": [
+        {
+          "level": "warn",
+          "code": "ADOPTED_ID",
+          "id": "i1"
+        }
+      ]
+    },
+    {
+      "name": "a-bare-stay-whose-twin-list-sits-in-a-fence-with-a-line-separator-in-its-info-string-is-kept",
+      "note": "SPEC.md §16 (v1.10): a block stay rewritten in place as a child stay keeps its id and is reported as a non-blocking ADOPTED_ID warning, under the conditions listed there, all lexical. The identical list below is inside a fenced code block whose info string holds U+2028, so it is content (§3.3) and no second block has the same body. A reader whose fence opener stops at U+2028 sees two identical lists and drops the id.",
+      "before": "- item <!-- stay:i1 -->\n\n```info\u2028x\n\n- item <!-- stay:i2 -->\n\n```\n",
+      "after": "- item <!-- stay:i1 subhash=sha256:1122 -->\n\n```info\u2028x\n\n- item <!-- stay:i2 -->\n\n```\n",
+      "findings": [
+        {
+          "level": "warn",
+          "code": "ADOPTED_ID",
+          "id": "i1"
+        }
+      ]
     }
   ]
 }
