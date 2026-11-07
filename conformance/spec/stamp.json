@@ -1,7 +1,7 @@
 {
   "category": "stamp",
   "tier": "spec",
-  "note": "Write-path vectors hand-authored from SPEC.md prose, as opposed to gen/stamp.json, which is emitted from the reference for breadth. Every vector here is SPEC.md §3.3 (v1.5): text inside a fenced code block is content, so a writer must not put a marker there, must not rewrite a marker-shaped string already there, and must still let the fence itself carry a stay in the ordinary way. The read-path half of the rule is in spec/parse.json and spec/lint.json.",
+  "note": "Write-path vectors hand-authored from SPEC.md prose, as opposed to gen/stamp.json, which is emitted from the reference for breadth. The first nine are SPEC.md §3.3 (v1.5): text inside a fenced code block is content, so a writer must not put a marker there, must not rewrite a marker-shaped string already there, and must still let the fence itself carry a stay in the ordinary way. The read-path half of the rule is in spec/parse.json and spec/lint.json. The rest are SPEC.md §5.3's write refusal (v1.11): a leading `---` span that recognition rejects only because its YAML-ish payload holds a blank line is still YAML to a frontmatter reader, so a writer inserts no marker on its lines and mints no stay for a block that starts on them, while what follows the closer is stamped as usual and a marker already in the span is refreshed in place. Recognition is unchanged: spec/parse.json's frontmatter-payload-with-a-blank-line-is-content still reads that span as content.",
   "vectors": [
     {
       "name": "stamp-refuses-to-write-into-a-listing",
@@ -124,6 +124,257 @@
         "text": "```md\nExample.\n<!-- stay:demo -->\n```\n<!-- stay:live hash=sha256:768d2c5bf9dc -->\n",
         "refreshed": [
           "live"
+        ]
+      }
+    },
+    {
+      "name": "stamp-refuses-to-write-into-yaml-with-a-blank-line",
+      "op": "stamp",
+      "input": "---\nname: demo\n\ndescription: two\n---\n\nBody text.\n",
+      "options": {},
+      "ids": [
+        "n0"
+      ],
+      "expected": {
+        "text": "---\nname: demo\n\ndescription: two\n---\n\nBody text.\n<!-- stay:n0 hash=sha256:4319bbb0a28e -->\n",
+        "minted": [
+          {
+            "id": "n0",
+            "line": 7
+          }
+        ]
+      }
+    },
+    {
+      "name": "stamp-refuses-a-span-closed-by-the-yaml-end-marker-and-stamps-what-follows",
+      "op": "stamp",
+      "input": "---\nname: demo\n\ndescription: two\n...\n\n# After\n\nMore text.\n",
+      "options": {},
+      "ids": [
+        "n0",
+        "n1"
+      ],
+      "expected": {
+        "text": "---\nname: demo\n\ndescription: two\n...\n\n# After\n<!-- stay:n0 hash=sha256:dd587c638c2b -->\n\nMore text.\n<!-- stay:n1 hash=sha256:d07e64c08776 -->\n",
+        "minted": [
+          {
+            "id": "n0",
+            "line": 7
+          },
+          {
+            "id": "n1",
+            "line": 9
+          }
+        ]
+      }
+    },
+    {
+      "name": "stamp-still-stamps-prose-between-two-thematic-breaks",
+      "op": "stamp",
+      "input": "---\n\nIntro.\n\n---\n\nBody.\n",
+      "options": {},
+      "ids": [
+        "n0",
+        "n1",
+        "n2",
+        "n3"
+      ],
+      "expected": {
+        "text": "---\n<!-- stay:n0 hash=sha256:cb3f91d54eee -->\n\nIntro.\n<!-- stay:n1 hash=sha256:f5718c9c750d -->\n\n---\n<!-- stay:n2 hash=sha256:cb3f91d54eee -->\n\nBody.\n<!-- stay:n3 hash=sha256:521b25cc4586 -->\n",
+        "minted": [
+          {
+            "id": "n0",
+            "line": 1
+          },
+          {
+            "id": "n1",
+            "line": 3
+          },
+          {
+            "id": "n2",
+            "line": 5
+          },
+          {
+            "id": "n3",
+            "line": 7
+          }
+        ]
+      }
+    },
+    {
+      "name": "stamp-refuses-prose-that-reads-as-a-key-between-two-breaks",
+      "op": "stamp",
+      "input": "---\n\nNote: this.\n\n---\n\nBody.\n",
+      "options": {},
+      "ids": [
+        "n0"
+      ],
+      "expected": {
+        "text": "---\n\nNote: this.\n\n---\n\nBody.\n<!-- stay:n0 hash=sha256:521b25cc4586 -->\n",
+        "minted": [
+          {
+            "id": "n0",
+            "line": 7
+          }
+        ]
+      }
+    },
+    {
+      "name": "stamp-refuses-a-span-whose-only-yaml-is-a-sequence-item",
+      "op": "stamp",
+      "input": "---\n- a\n\n- b\n---\n\nBody.\n",
+      "options": {},
+      "ids": [
+        "n0"
+      ],
+      "expected": {
+        "text": "---\n- a\n\n- b\n---\n\nBody.\n<!-- stay:n0 hash=sha256:521b25cc4586 -->\n",
+        "minted": [
+          {
+            "id": "n0",
+            "line": 7
+          }
+        ]
+      }
+    },
+    {
+      "name": "stamp-refuses-only-up-to-the-first-closer",
+      "op": "stamp",
+      "input": "---\ntitle: a\n\n---\n\nmore: b\n---\n",
+      "options": {},
+      "ids": [
+        "n0"
+      ],
+      "expected": {
+        "text": "---\ntitle: a\n\n---\n\nmore: b\n---\n<!-- stay:n0 hash=sha256:2cd0469908c7 -->\n",
+        "minted": [
+          {
+            "id": "n0",
+            "line": 7
+          }
+        ]
+      }
+    },
+    {
+      "name": "stamp-a-later-closer-does-not-reopen-a-span-the-first-one-cleared",
+      "op": "stamp",
+      "input": "---\n\nIntro.\n\n---\n\nkey: v\n---\n",
+      "options": {},
+      "ids": [
+        "n0",
+        "n1",
+        "n2",
+        "n3"
+      ],
+      "expected": {
+        "text": "---\n<!-- stay:n0 hash=sha256:cb3f91d54eee -->\n\nIntro.\n<!-- stay:n1 hash=sha256:f5718c9c750d -->\n\n---\n<!-- stay:n2 hash=sha256:cb3f91d54eee -->\n\nkey: v\n---\n<!-- stay:n3 hash=sha256:f556ab104304 -->\n",
+        "minted": [
+          {
+            "id": "n0",
+            "line": 1
+          },
+          {
+            "id": "n1",
+            "line": 3
+          },
+          {
+            "id": "n2",
+            "line": 5
+          },
+          {
+            "id": "n3",
+            "line": 8
+          }
+        ]
+      }
+    },
+    {
+      "name": "stamp-refuses-a-chunk-that-runs-on-past-the-closer-whole",
+      "op": "stamp",
+      "input": "---\nname: demo\n\ndescription: two\n---\nBody right after.\n\nLater.\n",
+      "options": {},
+      "ids": [
+        "n0"
+      ],
+      "expected": {
+        "text": "---\nname: demo\n\ndescription: two\n---\nBody right after.\n\nLater.\n<!-- stay:n0 hash=sha256:2fa02eef51bd -->\n",
+        "minted": [
+          {
+            "id": "n0",
+            "line": 8
+          }
+        ]
+      }
+    },
+    {
+      "name": "stamp-leaves-a-marker-already-in-the-span-and-adds-none",
+      "op": "stamp",
+      "input": "---\nname: demo\n<!-- stay:keep hash=sha256:000000000000 -->\n\ndescription: two\n---\n\nBody.\n",
+      "options": {},
+      "ids": [
+        "n0"
+      ],
+      "expected": {
+        "text": "---\nname: demo\n<!-- stay:keep hash=sha256:000000000000 -->\n\ndescription: two\n---\n\nBody.\n<!-- stay:n0 hash=sha256:521b25cc4586 -->\n",
+        "minted": [
+          {
+            "id": "n0",
+            "line": 8
+          }
+        ]
+      }
+    },
+    {
+      "name": "restamp-refreshes-a-marker-already-in-the-span-in-place",
+      "op": "restamp",
+      "input": "---\nname: demo\n<!-- stay:keep hash=sha256:000000000000 -->\n\ndescription: two\n---\n\nBody.\n",
+      "options": {},
+      "expected": {
+        "text": "---\nname: demo\n<!-- stay:keep hash=sha256:0071616c8204 -->\n\ndescription: two\n---\n\nBody.\n",
+        "refreshed": [
+          "keep"
+        ]
+      }
+    },
+    {
+      "name": "stamp-refuses-a-span-whose-blank-line-is-a-form-feed",
+      "note": "SPEC.md §5.3 (v1.11): the write refusal's blank line is blank in §5's ASCII sense, so a payload line holding only a form-feed (U+000C) is blank and the span is refused like `stamp-refuses-to-write-into-yaml-with-a-blank-line`: only `Body.` is stamped. A writer that counted only spaces and tabs as blank would find no blank line here, take the span for something else, and insert markers on lines 2 and 5.",
+      "op": "stamp",
+      "input": "---\nname: demo\n\f\ndescription: two\n---\n\nBody.\n",
+      "options": {},
+      "ids": [
+        "n0",
+        "n1",
+        "n2"
+      ],
+      "expected": {
+        "text": "---\nname: demo\n\f\ndescription: two\n---\n\nBody.\n<!-- stay:n0 hash=sha256:521b25cc4586 -->\n",
+        "minted": [
+          {
+            "id": "n0",
+            "line": 7
+          }
+        ]
+      }
+    },
+    {
+      "name": "stamp-refuses-a-span-whose-blank-line-is-a-vertical-tab",
+      "note": "SPEC.md §5.3 (v1.11): the write refusal's blank line is blank in §5's ASCII sense, so a payload line holding only a vertical-tab (U+000B) is blank and the span is refused like `stamp-refuses-to-write-into-yaml-with-a-blank-line`: only `Body.` is stamped. A writer that counted only spaces and tabs as blank would find no blank line here, take the span for something else, and insert markers on lines 2 and 5.",
+      "op": "stamp",
+      "input": "---\nname: demo\n\u000b\ndescription: two\n---\n\nBody.\n",
+      "options": {},
+      "ids": [
+        "n0",
+        "n1",
+        "n2"
+      ],
+      "expected": {
+        "text": "---\nname: demo\n\u000b\ndescription: two\n---\n\nBody.\n<!-- stay:n0 hash=sha256:521b25cc4586 -->\n",
+        "minted": [
+          {
+            "id": "n0",
+            "line": 7
+          }
         ]
       }
     }

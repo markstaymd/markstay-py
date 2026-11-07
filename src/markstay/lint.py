@@ -25,9 +25,10 @@ reports drift merely because a freshly computed hash is longer than a short
 stored one.
 
 What it does NOT do: detect block split/merge relocations where content only
-partially moved. Exact-content marker swaps are caught (RELOCATED_ID); partial
-relocation is the domain of the attachment resolver (quote/selector recovery),
-not this deterministic linter.
+partially moved. Exact-content marker swaps are caught (RELOCATED_ID), and so is
+an id moved off its block when its old text survives on one free block directly
+above it (SPEC.md §11, v1.11, `_moved_off`); partial relocation is the domain of
+the attachment resolver (quote/selector recovery), not this deterministic linter.
 """
 
 from __future__ import annotations
@@ -35,7 +36,10 @@ from __future__ import annotations
 import bisect
 import hashlib
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
+
+from .quote import body_score_norm, normalize as _match_normalize
 
 # --- marker grammar -------------------------------------------------------
 
@@ -268,12 +272,101 @@ def _parse_marker_body(
     return marker_id, id_start, id_end, attributes
 
 
-def _malformed_key_first(body: str) -> bool:
-    """Whether §4 still requires a no-positional-id diagnostic for this body."""
-    if not body.startswith("stay:"):
+def _forward_finder(text: str, needle: str) -> Callable[[int], int]:
+    """``text.find(needle, query)``, reusing the last answer while it still holds.
+
+    Every marker searches forward for each host closer, and a closer that is far
+    away or absent would otherwise be rescanned to the end of the text per marker.
+    """
+    searched_from = len(text) + 1
+    at = -1
+
+    def find(query: int) -> int:
+        nonlocal searched_from, at
+        if query < searched_from or query > at >= 0:
+            searched_from = query
+            at = text.find(needle, query)
+        return at
+
+    return find
+
+
+def _marker_body_validator(text: str) -> Callable[[int, int], bool]:
+    """Memoize §4 suffix validity for candidates sharing a host closer.
+
+    The nine states distinguish id, separator, key, value start, bare value,
+    quoted value, escape and post-quote positions (plus the initial id start).
+    A state/position is visited at most once per closer. Each host's closer
+    advances through disjoint intervals, giving O(len(text)) validation work.
+    Attribute extraction and raw copies happen only for emitted records, whose
+    total size can itself be quadratic for valid nested markers.
+    """
+    cached_end = -1
+    cache: dict[int, bool] = {}
+
+    def validate(start: int, end: int) -> bool:
+        nonlocal cached_end
+        if end != cached_end:
+            cache.clear()
+            cached_end = end
+        pos, state = start, 0
+        path: list[int] = []
+        while pos < end:
+            slot = pos * 9 + state
+            known = cache.get(slot)
+            if known is not None:
+                valid = known
+                break
+            path.append(slot)
+            char = text[pos]
+            alpha = "A" <= char <= "Z" or "a" <= char <= "z"
+            id_char = alpha or "0" <= char <= "9" or char in "_-"
+            wsp = char in " \t"
+            printable = "!" <= char <= "~" and char != '"'
+            if state == 0:  # first id character
+                state = 1 if id_char else -1
+            elif state == 1:  # id
+                state = 1 if id_char else 2 if wsp else -1
+            elif state == 2:  # attribute separator (or trailing WSP)
+                state = 2 if wsp else 3 if alpha else -1
+            elif state == 3:  # key
+                state = 3 if id_char else 4 if char == "=" else -1
+            elif state == 4:  # first value character
+                state = 6 if char == '"' else 5 if printable else -1
+            elif state == 5:  # bare value
+                state = 2 if wsp else 5 if printable else -1
+            elif state == 6:  # quoted value, where LF is legal
+                if char == '"':
+                    state = 8
+                elif char == "\\":
+                    state = 7
+                else:
+                    state = 6 if char == "\n" or " " <= char <= "~" else -1
+            elif state == 7:  # quoted escape
+                state = 6 if char in '\\"' else -1
+            else:  # a closing quote must be followed by WSP or the host close
+                state = 2 if wsp else -1
+            if state < 0:
+                valid = False
+                break
+            pos += 1
+        else:
+            valid = state in (1, 2, 5, 8)
+        for slot in path:
+            cache[slot] = valid
+        return valid
+
+    return validate
+
+
+def _malformed_key_first(body: str, start: int = 0, end: int | None = None) -> bool:
+    """Check the required diagnostic without copying an overlapping body."""
+    if end is None:
+        end = len(body)
+    if not body.startswith("stay:", start, end):
         return False
-    key = _MARKER_KEY_RE.match(body, len("stay:"))
-    return key is not None and key.end() < len(body) and body[key.end()] == "="
+    key = _MARKER_KEY_RE.match(body, start + len("stay:"), end)
+    return key is not None and key.end() < end and body[key.end()] == "="
 
 
 def _scan_marker_records(text: str, line_offset: int = 0) -> list[_MarkerRecord]:
@@ -285,6 +378,15 @@ def _scan_marker_records(text: str, line_offset: int = 0) -> list[_MarkerRecord]
     """
     normalized, raw_boundaries = _normalize_lf_with_raw_boundaries(text)
     records: list[_MarkerRecord] = []
+    # Openers arrive in source order, so the line count advances with them.
+    newlines = 0
+    counted_to = 0
+    find_close = {
+        closer: _forward_finder(normalized, closer) for closer in ("-->", "--!>", "*/")
+    }
+    validate_body = {
+        syntax: _marker_body_validator(normalized) for syntax in ("html", "mdx")
+    }
     for opener in _MARKER_OPEN_RE.finditer(normalized):
         syntax = "html" if opener.group(0) == "<!--" else "mdx"
         pos = opener.end()
@@ -299,7 +401,7 @@ def _scan_marker_records(text: str, line_offset: int = 0) -> list[_MarkerRecord]
             closers = [
                 (at, closer)
                 for closer in ("-->", "--!>")
-                if (at := normalized.find(closer, search_start)) >= 0
+                if (at := find_close[closer](search_start)) >= 0
             ]
             if not closers:
                 continue
@@ -307,15 +409,23 @@ def _scan_marker_records(text: str, line_offset: int = 0) -> list[_MarkerRecord]
             host_valid = closer == "-->"
             normalized_end = close_start + len(closer)
         else:
-            close_start = normalized.find("*/", search_start)
+            close_start = find_close["*/"](search_start)
             if close_start < 0:
                 continue
             host_valid = normalized.startswith("}", close_start + 2)
             normalized_end = close_start + (3 if host_valid else 2)
 
-        body = normalized[body_start:close_start]
-        parsed = _parse_marker_body(body, syntax) if host_valid else None
-        malformed = parsed is None and _malformed_key_first(body)
+        body_valid = host_valid and validate_body[syntax](search_start, close_start)
+        # Check the one mandatory diagnostic without copying a rejected suffix.
+        malformed = not body_valid and _malformed_key_first(
+            normalized, body_start, close_start
+        )
+        if not body_valid and not malformed:
+            continue
+        parsed = (
+            _parse_marker_body(normalized[body_start:close_start], syntax)
+            if body_valid else None
+        )
         if parsed is None and not malformed:
             continue
 
@@ -331,6 +441,8 @@ def _scan_marker_records(text: str, line_offset: int = 0) -> list[_MarkerRecord]
             if attribute.key == "subhash" and digest is not None and child_hash is None:
                 child_hash = digest.group(1).lower()
 
+        newlines += normalized.count("\n", counted_to, opener.start())
+        counted_to = opener.start()
         raw_start = raw_boundaries[opener.start()]
         raw_end = raw_boundaries[normalized_end]
 
@@ -361,7 +473,7 @@ def _scan_marker_records(text: str, line_offset: int = 0) -> list[_MarkerRecord]
                     ),
                     raw=text[raw_start:raw_end],
                     syntax=syntax,
-                    line=line_offset + normalized.count("\n", 0, opener.start()) + 1,
+                    line=line_offset + (newlines + 1),
                     malformed=malformed,
                     _id_span=(
                         (
@@ -441,6 +553,32 @@ def _strip_record_ranges(
         previous = end
     out.append(text[previous - source_start :])
     return "".join(out)
+
+
+class _MarkerRangeIndex:
+    """Merge once, then strip only the ranges intersecting each source slice."""
+
+    def __init__(self, records: list[_MarkerRecord]) -> None:
+        self.ranges = _merged_record_ranges(records)
+        self.ends = [end for _, end in self.ranges]
+
+    def strip(self, text: str, *, source_start: int = 0) -> str:
+        limit = source_start + len(text)
+        index = bisect.bisect_right(self.ends, source_start)
+        out: list[str] = []
+        previous = source_start
+        while index < len(self.ranges):
+            start, end = self.ranges[index]
+            if start >= limit:
+                break
+            start, end = max(start, source_start), min(end, limit)
+            out.append(text[previous - source_start : start - source_start])
+            previous = end
+            index += 1
+        if not out:
+            return text
+        out.append(text[previous - source_start :])
+        return "".join(out)
 
 
 # --- fenced code blocks (SPEC.md §3.3, v1.5) ------------------------------
@@ -652,8 +790,13 @@ def _blank_frontmatter(text: str) -> str:
     setext heading under one. Both satisfy all four conditions and their content *is*
     excluded. Frontmatter wins, the same call every mainstream site generator makes.
     A document that fails any of the four conditions falls through to ordinary
-    Markdown, where the worst case is that frontmatter is not skipped (a hash-drift
-    warning) rather than content being silently discarded.
+    Markdown. For a reader the worst case is that frontmatter is not skipped (a
+    hash-drift warning) rather than content being silently discarded. For a writer
+    it is worse, and one shape is refused rather than written: a span that fails
+    condition 3 only for a blank line while condition 4 holds is still YAML to every
+    tool that reads frontmatter, and a marker stamped into it breaks that YAML. See
+    :func:`frontmatter_write_refusal`, which leaves this function, and so
+    recognition, unchanged.
 
     Lines are replaced one-for-one with empty lines, so every line number the caller
     reports is unchanged."""
@@ -669,6 +812,44 @@ def _blank_frontmatter(text: str) -> str:
                 return text
             return "\n".join([""] * (i + 1) + lines[i + 1 :])
     return text
+
+
+def frontmatter_write_refusal(text: str) -> int | None:
+    """The last line of a leading span a writer must not write into (SPEC.md §5.3,
+    v1.11), or ``None``. ``text`` is LF-normalized.
+
+    The span is one :func:`_blank_frontmatter` rejects, so readers segment it as
+    ordinary Markdown, and rejects **only** on condition 3 for a blank line: line 1
+    opens, the first later ``---`` or ``...`` line closes, the payload between them
+    holds a blank line, and at least one payload line is YAML-ish (condition 4).
+    That is the shape of real YAML with a blank line in it, which a static site
+    generator, a skill loader or an issue-template reader still parses as
+    frontmatter, and a marker stamped on lines 1 to *n* breaks it there. The
+    writer's half of the rule is therefore a refusal, in the manner of §3.4: no
+    marker is inserted on lines 1 to *n*, and a block that starts on those lines
+    gets no minted stay. Refreshing a marker already in the span is not an
+    insertion.
+
+    This reads the same three patterns as :func:`_blank_frontmatter` and nothing
+    reads its answer back: recognition, segmentation and every reader are
+    unchanged, and only ``stamp`` consults it. It fails safe in one direction on
+    purpose. Prose that looks like a key (``Note: this.``) between two thematic
+    breaks with blank lines around it is refused and stays unstamped, which costs a
+    stay and breaks nothing.
+
+    Returns the 1-based line number of the closing fence, *n*."""
+    lines = text.split("\n")
+    if not lines or not _FRONTMATTER_OPEN_RE.match(lines[0]):
+        return None
+    for i in range(1, len(lines)):
+        if _FRONTMATTER_CLOSE_RE.match(lines[i]):
+            payload = lines[1:i]
+            if not any(ln.strip(" \t\f\v") == "" for ln in payload):
+                return None
+            if not any(_YAMLISH_LINE_RE.match(ln) for ln in payload):
+                return None
+            return i + 1
+    return None
 
 
 def segment_blank_line(text: str) -> list[tuple[int, str]]:
@@ -893,21 +1074,24 @@ def _row_refused_marker_lines(text: str, code: set[int]) -> set[int]:
         for record in _scan_marker_records(text)
         if not record.marker.malformed and marker_outside_code(record.marker, code)
     ]
+    starts = _line_starts(text)
     refused: set[int] = set()
-    spans: list[tuple[int, int, int, int]] = []
-    for record in records:
-        first = text.count("\n", 0, record.start) + 1
-        last = text.count("\n", 0, max(record.start, record.end - 1)) + 1
-        spans.append((record.start, record.end, first, last))
-        if first != last:
-            refused.update(range(first, last + 1))
-    for index, (start, end, first, last) in enumerate(spans):
-        for other_start, other_end, other_first, other_last in spans[index + 1 :]:
-            if other_start >= end:
-                break
-            if other_end > start:
-                refused.update(range(first, last + 1))
-                refused.update(range(other_first, other_last + 1))
+    furthest_end = 0
+    covered_line = 0
+    for index, record in enumerate(records):
+        first = bisect.bisect_right(starts, record.start)
+        last = bisect.bisect_right(starts, max(record.start, record.end - 1))
+        # Sorted starts make overlap with any earlier span a prefix-maximum
+        # query, and overlap with any later span a next-start query.
+        overlaps = record.start < furthest_end or (
+            index + 1 < len(records) and records[index + 1].start < record.end
+        )
+        if first != last or overlaps:
+            # First lines are ordered too: emit each refused line only once,
+            # even when many overlapping multiline markers cover the same lines.
+            refused.update(range(max(first, covered_line + 1), last + 1))
+            covered_line = max(covered_line, last)
+        furthest_end = max(furthest_end, record.end)
     return refused
 
 
@@ -1233,23 +1417,53 @@ def _document_marker_records(md: str, text: str) -> list[_MarkerRecord]:
     ]
 
 
-def _record_line_bounds(text: str, record: _MarkerRecord) -> tuple[int, int]:
+def _record_line_bounds(
+    line_starts: list[int], record: _MarkerRecord
+) -> tuple[int, int]:
     """Inclusive source lines occupied by one complete marker record."""
     return (
         record.marker.line,
-        text.count("\n", 0, max(record.start, record.end - 1)) + 1,
+        bisect.bisect_right(line_starts, max(record.start, record.end - 1)),
     )
 
 
 def _record_belongs_to_child(
-    text: str, record: _MarkerRecord, span: _ChildSpan
+    line_starts: list[int], record: _MarkerRecord, span: _ChildSpan
 ) -> bool:
-    first, last = _record_line_bounds(text, record)
+    first, last = _record_line_bounds(line_starts, record)
     return (
         span.start_line <= first
         and last <= span.end_line
         and not any(line in span.excluded_lines for line in range(first, last + 1))
     )
+
+
+def _child_marker_owners(
+    line_starts: list[int], records: list[_MarkerRecord], spans: list[_ChildSpan]
+) -> list[list[Marker]]:
+    """Index disjoint direct items and disjoint rows, giving rows first refusal."""
+    by_kind: dict[str, list[tuple[int, int]]] = {"row": [], "list": []}
+    for index, span in enumerate(spans):
+        by_kind[span.kind].append((span.start_line, index))
+    owners: list[list[Marker]] = [[] for _ in spans]
+    for record in records:
+        if not record.marker.has_subhash:
+            continue
+        # Each kind is ordered and non-overlapping. Only the last span starting
+        # at or before the marker can contain it; complete bounds and nested-item
+        # exclusions still decide ownership. Rows win over enclosing list items.
+        for kind in ("row", "list"):
+            candidates = by_kind[kind]
+            position = bisect.bisect_right(
+                candidates, (record.marker.line, len(spans))
+            ) - 1
+            if position < 0:
+                continue
+            index = candidates[position][1]
+            if _record_belongs_to_child(line_starts, record, spans[index]):
+                owners[index].append(record.marker)
+                break
+    return owners
 
 
 def parse_document(
@@ -1290,6 +1504,8 @@ def parse_document(
         record for record in active_records if not record.marker.malformed
     ]
     line_starts = _line_starts(text)
+    active_starts = [record.start for record in active_records]
+    strip_index = _MarkerRangeIndex(removable_records)
 
     child_spans: dict[int, list[_ChildSpan]] = {}
     if child_blocks:
@@ -1325,16 +1541,12 @@ def parse_document(
     for start, chunk in chunks:
         chunk_start = line_starts[start - 1]
         chunk_end = chunk_start + len(chunk)
-        chunk_records = [
-            record
-            for record in active_records
-            if chunk_start <= record.start < chunk_end
+        chunk_records = active_records[
+            bisect.bisect_left(active_starts, chunk_start) :
+            bisect.bisect_left(active_starts, chunk_end)
         ]
         markers = [record.marker for record in chunk_records]
-        record_by_marker = {id(record.marker): record for record in chunk_records}
-        content = _strip_record_ranges(
-            chunk, removable_records, source_start=chunk_start
-        ).strip(
+        content = strip_index.strip(chunk, source_start=chunk_start).strip(
             " \t\n\r\f\v"
         )  # ASCII strip (SPEC.md §5/§8)
         if content == "":
@@ -1348,26 +1560,10 @@ def parse_document(
             child_marker_ids: set[int] = set()
             if child_blocks:
                 ordinals: dict[str, int] = {}
-                row_marker_ids = {
-                    id(mk)
-                    for span in child_spans.get(start, [])
-                    if span.kind == "row"
-                    for mk in markers
-                    if mk.has_subhash
-                    and _record_belongs_to_child(text, record_by_marker[id(mk)], span)
-                }
-                for span in child_spans.get(start, []):
+                spans = child_spans.get(start, [])
+                owners = _child_marker_owners(line_starts, chunk_records, spans)
+                for span, owned in zip(spans, owners):
                     ordinals[span.kind] = ordinals.get(span.kind, 0) + 1
-                    owned = [
-                        mk
-                        for mk in markers
-                        if mk.has_subhash
-                        and id(mk) not in child_marker_ids
-                        and (span.kind == "row" or id(mk) not in row_marker_ids)
-                        and _record_belongs_to_child(
-                            text, record_by_marker[id(mk)], span
-                        )
-                    ]
                     child_marker_ids.update(id(mk) for mk in owned)
                     span_text = span.text
                     if span.kind == "list":
@@ -1375,9 +1571,8 @@ def parse_document(
                         # markers leaving dangling halves in list child hashes.
                         # Rows keep the opaque marker tokens while fixing pipe
                         # boundaries, since a token breaks a backslash run.
-                        span_text = _strip_record_ranges(
+                        span_text = strip_index.strip(
                             span_text,
-                            removable_records,
                             source_start=line_starts[span.start_line - 1],
                         )
                     children.append(
@@ -1997,6 +2192,88 @@ def _adopted_ids(before_md: str, after_md: str, mode: str, ids) -> set[str]:
     return out
 
 
+# SPEC.md §11 (v1.11): a kept id has moved off its block when its current block
+# scores under RELOCATED_BELOW against its old text and exactly one block in the
+# run of free blocks directly above it scores RELOCATED_AT or more against that
+# text. A block is free when it carries no block stay id present in both
+# documents.
+RELOCATED_BELOW = 0.5
+RELOCATED_AT = 0.8
+
+
+class _Window:
+    """The after-edit content blocks, each marked free or owned. A block carrying
+    a kept id is that id's, so it is never another id's surviving text, and it
+    ends the window above any block below it. Every block stay id on an
+    after-edit content block is in the after index, so "present in both"
+    reduces to "present in the baseline". Bodies are hashed and normalized on
+    first use."""
+
+    def __init__(self, before_blocks: list[Block], after_blocks: list[Block]):
+        baseline = set(_id_index(before_blocks))
+        self.blocks = [b for b in after_blocks if b.index >= 0]
+        self.at = {id(b): i for i, b in enumerate(self.blocks)}
+        self.owned = [
+            any(
+                mk.id in baseline
+                for mk in b.markers
+                if mk.id and not mk.malformed and not mk.has_subhash
+            )
+            for b in self.blocks
+        ]
+        # How many baseline content blocks have each body hash.
+        self.before_hashes: dict[str, int] = {}
+        for b in before_blocks:
+            if b.index >= 0 and b.content:
+                h = body_hash(b.content)
+                self.before_hashes[h] = self.before_hashes.get(h, 0) + 1
+        self.hashes: dict[int, str] = {}
+        self.norms: dict[int, str] = {}
+
+    def candidates(self, block: Block, old: str):
+        """Normalized bodies of the free blocks directly above ``block``, nearest
+        first, up to the nearest block carrying a kept id, leaving out any block
+        unchanged from a baseline block other than the one ``old`` names: that
+        block was there before the edit, so the edit did not strand it."""
+        own = body_hash(old)
+        i = self.at[id(block)] - 1
+        while i >= 0 and not self.owned[i]:
+            if self.blocks[i].content:
+                if i not in self.hashes:
+                    self.hashes[i] = body_hash(self.blocks[i].content)
+                h = self.hashes[i]
+                if self.before_hashes.get(h, 0) - (h == own) <= 0:
+                    if i not in self.norms:
+                        self.norms[i] = _match_normalize(self.blocks[i].content)
+                    yield self.norms[i]
+            i -= 1
+
+
+def _moved_off(old: str, block: Block, window: _Window) -> bool:
+    """SPEC.md §11's relocation test for a kept id whose block changed: (1) its
+    current block scores under RELOCATED_BELOW against the old text, by §9's body
+    score without context; (2) exactly one candidate in the run of free blocks
+    directly above the current block scores RELOCATED_AT or more against the old
+    text, where a block unchanged from another baseline block is not a candidate;
+    (3) the current block's normalized text is not inside the old text, so typing
+    a blank line into a paragraph (the marker stays on a short tail) is drift,
+    not relocation. The window is the shape the rule names, a block inserted
+    between another block and its trailing marker. Each free block sits in the
+    run above at most one block, so the scan costs at most the free blocks times
+    the most kept ids any one block carries: linear while ids sit one to a block,
+    and quadratic when an edit piles every marker onto one block."""
+    q, c = _match_normalize(old), _match_normalize(block.content)
+    if body_score_norm(q, c) >= RELOCATED_BELOW or c in q:
+        return False
+    hits = 0
+    for f in window.candidates(block, old):
+        if body_score_norm(q, f) >= RELOCATED_AT:
+            hits += 1
+            if hits > 1:
+                return False
+    return hits == 1
+
+
 def lint_diff(
     before_md: str,
     after_md: str,
@@ -2005,7 +2282,8 @@ def lint_diff(
     child_blocks: bool = False,
 ) -> list[Finding]:
     """Regeneration diff: what an edit did to the ids. Catches the AI-rewrite
-    failure mode (dropped markers) plus duplication and exact-content relocation.
+    failure mode (dropped markers) plus duplication and relocation: an exact
+    swap, or an id moved off its block (v1.11).
 
     With ``check_collections=True`` it additionally reports a blocking
     COLLECTION_SHRANK when a kept stay's block lost table rows or list bullets
@@ -2072,6 +2350,7 @@ def lint_diff(
     for mid, b in before.items():
         if b.content:
             before_by_content.setdefault(body_hash(b.content), mid)
+    window = _Window(before_blocks, after_blocks)
 
     for mid, blks in after.items():
         if mid not in before or len(blks) != 1:
@@ -2089,6 +2368,17 @@ def lint_diff(
                     "RELOCATED_ID",
                     f"id {mid} now sits on content that previously carried id "
                     f"{moved_from} (markers look swapped or relocated)",
+                    id=mid,
+                )
+            )
+        elif _moved_off(b0.content, a, window):
+            findings.append(
+                Finding(
+                    "error",
+                    "RELOCATED_ID",
+                    f"id {mid} now sits on different content, and its old text "
+                    f"survives on another block that carries no kept id "
+                    f"(a block inserted above its marker?)",
                     id=mid,
                 )
             )

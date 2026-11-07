@@ -635,6 +635,291 @@
           "id": "i1"
         }
       ]
+    },
+    {
+      "name": "relocation-paragraph-inserted-above-a-trailing-marker",
+      "note": "SPEC.md §11 (v1.11): a kept id carried by one block before and after, whose body hash changed and which is not an exact swap, is RELOCATED_ID (error) when (1) §9's body score, without context, of its old text against its current block is under 0.5, (2) exactly one candidate scores 0.8 or more against the old text, the candidates being the blocks in the run of free blocks directly above the current block, back to the nearest block carrying an id present in both documents, less any block whose body is unchanged from a baseline block other than the id's own, and (3) the current block's normalized text is not inside the old text. Otherwise it is HASH_DRIFT. The shape the rule exists for: a paragraph typed between a block and its trailing marker takes the marker, so the id now names the new paragraph (scoring 0.26 against the old text) while the old text survives unmarked directly above it. The stranded block's body equals the id's own baseline body, which does not exclude it.",
+      "before": "The orchard keeps forty apple trees along the southern fence.\n<!-- stay:orch -->\n\nThe barn holds the tractor.\n<!-- stay:barn -->\n",
+      "after": "The orchard keeps forty apple trees along the southern fence.\n\nA note on pruning, added later.\n<!-- stay:orch -->\n\nThe barn holds the tractor.\n<!-- stay:barn -->\n",
+      "findings": [
+        {
+          "level": "error",
+          "code": "RELOCATED_ID",
+          "id": "orch"
+        }
+      ]
+    },
+    {
+      "name": "relocation-with-the-old-text-edited-still-fires",
+      "note": "SPEC.md §11 (v1.11): a kept id carried by one block before and after, whose body hash changed and which is not an exact swap, is RELOCATED_ID (error) when (1) §9's body score, without context, of its old text against its current block is under 0.5, (2) exactly one candidate scores 0.8 or more against the old text, the candidates being the blocks in the run of free blocks directly above the current block, back to the nearest block carrying an id present in both documents, less any block whose body is unchanged from a baseline block other than the id's own, and (3) the current block's normalized text is not inside the old text. Otherwise it is HASH_DRIFT. The stranded block was edited too, and still scores 0.94 against the old text, so clause 2 holds without an exact copy.",
+      "before": "The orchard keeps forty apple trees along the southern fence.\n<!-- stay:orch -->\n\nThe barn holds the tractor.\n<!-- stay:barn -->\n",
+      "after": "The orchard keeps forty-two apple trees along the south fence.\n\nA note on pruning, added later.\n<!-- stay:orch -->\n\nThe barn holds the tractor.\n<!-- stay:barn -->\n",
+      "findings": [
+        {
+          "level": "error",
+          "code": "RELOCATED_ID",
+          "id": "orch"
+        }
+      ]
+    },
+    {
+      "name": "relocation-onto-a-block-with-a-new-id-still-fires",
+      "note": "SPEC.md §11 (v1.11): a kept id carried by one block before and after, whose body hash changed and which is not an exact swap, is RELOCATED_ID (error) when (1) §9's body score, without context, of its old text against its current block is under 0.5, (2) exactly one candidate scores 0.8 or more against the old text, the candidates being the blocks in the run of free blocks directly above the current block, back to the nearest block carrying an id present in both documents, less any block whose body is unchanged from a baseline block other than the id's own, and (3) the current block's normalized text is not inside the old text. Otherwise it is HASH_DRIFT. The stranded block was given a fresh id. Only an id present in both documents makes a block owned and ends the window, so a new id does not hide the old text, and the new id is reported as NEW_ID as well.",
+      "before": "The orchard keeps forty apple trees along the southern fence.\n<!-- stay:orch -->\n\nThe barn holds the tractor.\n<!-- stay:barn -->\n",
+      "after": "The orchard keeps forty apple trees along the southern fence.\n<!-- stay:fresh -->\n\nA note on pruning, added later.\n<!-- stay:orch -->\n\nThe barn holds the tractor.\n<!-- stay:barn -->\n",
+      "findings": [
+        {
+          "level": "error",
+          "code": "RELOCATED_ID",
+          "id": "orch"
+        },
+        {
+          "level": "info",
+          "code": "NEW_ID",
+          "id": "fresh"
+        }
+      ]
+    },
+    {
+      "name": "relocation-two-free-blocks-up-still-fires",
+      "note": "SPEC.md §11 (v1.11): a kept id carried by one block before and after, whose body hash changed and which is not an exact swap, is RELOCATED_ID (error) when (1) §9's body score, without context, of its old text against its current block is under 0.5, (2) exactly one candidate scores 0.8 or more against the old text, the candidates being the blocks in the run of free blocks directly above the current block, back to the nearest block carrying an id present in both documents, less any block whose body is unchanged from a baseline block other than the id's own, and (3) the current block's normalized text is not inside the old text. Otherwise it is HASH_DRIFT. Two paragraphs were typed above the marker, so the old text sits two free blocks up. The window runs to the nearest owned block, not to the nearest block, so it still holds the old text.",
+      "before": "The orchard keeps forty apple trees along the southern fence.\n<!-- stay:orch -->\n\nThe barn holds the tractor.\n<!-- stay:barn -->\n",
+      "after": "The orchard keeps forty apple trees along the southern fence.\n\nAnother note, on grafting.\n\nA note on pruning, added later.\n<!-- stay:orch -->\n\nThe barn holds the tractor.\n<!-- stay:barn -->\n",
+      "findings": [
+        {
+          "level": "error",
+          "code": "RELOCATED_ID",
+          "id": "orch"
+        }
+      ]
+    },
+    {
+      "name": "rewrite-with-the-old-text-gone-is-drift",
+      "note": "SPEC.md §11 (v1.11): a kept id carried by one block before and after, whose body hash changed and which is not an exact swap, is RELOCATED_ID (error) when (1) §9's body score, without context, of its old text against its current block is under 0.5, (2) exactly one candidate scores 0.8 or more against the old text, the candidates being the blocks in the run of free blocks directly above the current block, back to the nearest block carrying an id present in both documents, less any block whose body is unchanged from a baseline block other than the id's own, and (3) the current block's normalized text is not inside the old text. Otherwise it is HASH_DRIFT. The block was rewritten and nothing else holds its old text, so clause 2 fails: an edit in place, not a relocation.",
+      "before": "The orchard keeps forty apple trees along the southern fence.\n<!-- stay:orch -->\n\nThe barn holds the tractor.\n<!-- stay:barn -->\n",
+      "after": "A note on pruning, added later.\n<!-- stay:orch -->\n\nThe barn holds the tractor.\n<!-- stay:barn -->\n",
+      "findings": [
+        {
+          "level": "warn",
+          "code": "HASH_DRIFT",
+          "id": "orch"
+        }
+      ]
+    },
+    {
+      "name": "two-blocks-holding-the-old-text-is-drift",
+      "note": "SPEC.md §11 (v1.11): a kept id carried by one block before and after, whose body hash changed and which is not an exact swap, is RELOCATED_ID (error) when (1) §9's body score, without context, of its old text against its current block is under 0.5, (2) exactly one candidate scores 0.8 or more against the old text, the candidates being the blocks in the run of free blocks directly above the current block, back to the nearest block carrying an id present in both documents, less any block whose body is unchanged from a baseline block other than the id's own, and (3) the current block's normalized text is not inside the old text. Otherwise it is HASH_DRIFT. Two candidates score 0.8 or more against the old text (1.0 and 0.94), so clause 2's 'exactly one' fails and the linter does not guess which one the id meant.",
+      "before": "The orchard keeps forty apple trees along the southern fence.\n<!-- stay:orch -->\n\nThe barn holds the tractor.\n<!-- stay:barn -->\n",
+      "after": "The orchard keeps forty apple trees along the southern fence.\n\nThe orchard keeps forty-two apple trees along the south fence.\n\nA note on pruning, added later.\n<!-- stay:orch -->\n\nThe barn holds the tractor.\n<!-- stay:barn -->\n",
+      "findings": [
+        {
+          "level": "warn",
+          "code": "HASH_DRIFT",
+          "id": "orch"
+        }
+      ]
+    },
+    {
+      "name": "a-second-candidate-outside-the-window-does-not-count",
+      "note": "SPEC.md §11 (v1.11): a kept id carried by one block before and after, whose body hash changed and which is not an exact swap, is RELOCATED_ID (error) when (1) §9's body score, without context, of its old text against its current block is under 0.5, (2) exactly one candidate scores 0.8 or more against the old text, the candidates being the blocks in the run of free blocks directly above the current block, back to the nearest block carrying an id present in both documents, less any block whose body is unchanged from a baseline block other than the id's own, and (3) the current block's normalized text is not inside the old text. Otherwise it is HASH_DRIFT. The old text survives twice, once directly above the marker and once at the end of the document. Clause 2 counts only the window, so the copy below does not make the case ambiguous.",
+      "before": "The orchard keeps forty apple trees along the southern fence.\n<!-- stay:orch -->\n\nThe barn holds the tractor.\n<!-- stay:barn -->\n",
+      "after": "The orchard keeps forty apple trees along the southern fence.\n\nA note on pruning, added later.\n<!-- stay:orch -->\n\nThe barn holds the tractor.\n<!-- stay:barn -->\n\nThe orchard keeps forty-two apple trees along the south fence.\n",
+      "findings": [
+        {
+          "level": "error",
+          "code": "RELOCATED_ID",
+          "id": "orch"
+        }
+      ]
+    },
+    {
+      "name": "old-text-below-the-current-block-is-drift",
+      "note": "SPEC.md §11 (v1.11): a kept id carried by one block before and after, whose body hash changed and which is not an exact swap, is RELOCATED_ID (error) when (1) §9's body score, without context, of its old text against its current block is under 0.5, (2) exactly one candidate scores 0.8 or more against the old text, the candidates being the blocks in the run of free blocks directly above the current block, back to the nearest block carrying an id present in both documents, less any block whose body is unchanged from a baseline block other than the id's own, and (3) the current block's normalized text is not inside the old text. Otherwise it is HASH_DRIFT. The old text survives unmarked, but below the id's current block, which is not the shape of a block inserted above a trailing marker. The window is empty, so this is drift. A document-wide search would have reported it.",
+      "before": "The orchard keeps forty apple trees along the southern fence.\n<!-- stay:orch -->\n\nThe barn holds the tractor.\n<!-- stay:barn -->\n",
+      "after": "A note on pruning, added later.\n<!-- stay:orch -->\n\nThe orchard keeps forty apple trees along the southern fence.\n\nThe barn holds the tractor.\n<!-- stay:barn -->\n",
+      "findings": [
+        {
+          "level": "warn",
+          "code": "HASH_DRIFT",
+          "id": "orch"
+        }
+      ]
+    },
+    {
+      "name": "old-text-beyond-a-kept-id-is-drift",
+      "note": "SPEC.md §11 (v1.11): a kept id carried by one block before and after, whose body hash changed and which is not an exact swap, is RELOCATED_ID (error) when (1) §9's body score, without context, of its old text against its current block is under 0.5, (2) exactly one candidate scores 0.8 or more against the old text, the candidates being the blocks in the run of free blocks directly above the current block, back to the nearest block carrying an id present in both documents, less any block whose body is unchanged from a baseline block other than the id's own, and (3) the current block's normalized text is not inside the old text. Otherwise it is HASH_DRIFT. The old text survives unmarked above the id's current block, but `barn`'s block lies between them. A block carrying a kept id ends the window, so the old text is outside it and this is drift.",
+      "before": "The orchard keeps forty apple trees along the southern fence.\n<!-- stay:orch -->\n\nThe barn holds the tractor.\n<!-- stay:barn -->\n",
+      "after": "The orchard keeps forty apple trees along the southern fence.\n\nThe barn holds the tractor.\n<!-- stay:barn -->\n\nA note on pruning, added later.\n<!-- stay:orch -->\n",
+      "findings": [
+        {
+          "level": "warn",
+          "code": "HASH_DRIFT",
+          "id": "orch"
+        }
+      ]
+    },
+    {
+      "name": "old-text-on-a-block-with-a-kept-id-is-drift",
+      "note": "SPEC.md §11 (v1.11): a kept id carried by one block before and after, whose body hash changed and which is not an exact swap, is RELOCATED_ID (error) when (1) §9's body score, without context, of its old text against its current block is under 0.5, (2) exactly one candidate scores 0.8 or more against the old text, the candidates being the blocks in the run of free blocks directly above the current block, back to the nearest block carrying an id present in both documents, less any block whose body is unchanged from a baseline block other than the id's own, and (3) the current block's normalized text is not inside the old text. Otherwise it is HASH_DRIFT. The old text of `orch` now opens the block `barn` keeps, below `orch`'s current block, scoring 0.81 against it, but a block carrying a kept id is that id's and is never a candidate. `barn` scores 0.47 against its own old text, which its current block contains, and has an owned block directly above it, so both drift.",
+      "before": "The orchard keeps forty apple trees along the southern fence.\n<!-- stay:orch -->\n\nThe barn holds the tractor.\n<!-- stay:barn -->\n",
+      "after": "A note on pruning, added later.\n<!-- stay:orch -->\n\nThe orchard keeps forty apple trees along the southern fence. The barn holds the tractor.\n<!-- stay:barn -->\n",
+      "findings": [
+        {
+          "level": "warn",
+          "code": "HASH_DRIFT",
+          "id": "orch"
+        },
+        {
+          "level": "warn",
+          "code": "HASH_DRIFT",
+          "id": "barn"
+        }
+      ]
+    },
+    {
+      "name": "old-text-on-the-kept-id-block-ending-the-window-is-drift",
+      "note": "SPEC.md §11 (v1.11): a kept id carried by one block before and after, whose body hash changed and which is not an exact swap, is RELOCATED_ID (error) when (1) §9's body score, without context, of its old text against its current block is under 0.5, (2) exactly one candidate scores 0.8 or more against the old text, the candidates being the blocks in the run of free blocks directly above the current block, back to the nearest block carrying an id present in both documents, less any block whose body is unchanged from a baseline block other than the id's own, and (3) the current block's normalized text is not inside the old text. Otherwise it is HASH_DRIFT. The block `barn` keeps sits directly above `orch`'s current block and opens with `orch`'s old text, scoring 0.81 against it. The owned block ends the window and is not itself in it, so `orch` has no candidate and drifts; `barn` scores 0.47 against its own old text, which its current block contains, and has nothing above it.",
+      "before": "The orchard keeps forty apple trees along the southern fence.\n<!-- stay:orch -->\n\nThe barn holds the tractor.\n<!-- stay:barn -->\n",
+      "after": "The orchard keeps forty apple trees along the southern fence. The barn holds the tractor.\n<!-- stay:barn -->\n\nA note on pruning, added later.\n<!-- stay:orch -->\n",
+      "findings": [
+        {
+          "level": "warn",
+          "code": "HASH_DRIFT",
+          "id": "barn"
+        },
+        {
+          "level": "warn",
+          "code": "HASH_DRIFT",
+          "id": "orch"
+        }
+      ]
+    },
+    {
+      "name": "an-unchanged-heading-echoing-the-old-text-is-not-a-candidate",
+      "note": "SPEC.md §11 (v1.11): a kept id carried by one block before and after, whose body hash changed and which is not an exact swap, is RELOCATED_ID (error) when (1) §9's body score, without context, of its old text against its current block is under 0.5, (2) exactly one candidate scores 0.8 or more against the old text, the candidates being the blocks in the run of free blocks directly above the current block, back to the nearest block carrying an id present in both documents, less any block whose body is unchanged from a baseline block other than the id's own, and (3) the current block's normalized text is not inside the old text. Otherwise it is HASH_DRIFT. A short paragraph under a heading that restates it gains a second sentence, which takes its score against the old text to 0.43. The unmarked heading directly above scores 0.82 against the old text, but its body is unchanged from a baseline block other than the id's own: it was there before the edit, so the edit did not strand it, and this is drift.",
+      "before": "# Use TLS\n\nUse TLS.\n<!-- stay:transport -->\n",
+      "after": "# Use TLS\n\nUse TLS. It encrypts traffic.\n<!-- stay:transport -->\n",
+      "findings": [
+        {
+          "level": "warn",
+          "code": "HASH_DRIFT",
+          "id": "transport"
+        }
+      ]
+    },
+    {
+      "name": "rewording-under-an-unchanged-heading-is-drift",
+      "note": "SPEC.md §11 (v1.11): a kept id carried by one block before and after, whose body hash changed and which is not an exact swap, is RELOCATED_ID (error) when (1) §9's body score, without context, of its old text against its current block is under 0.5, (2) exactly one candidate scores 0.8 or more against the old text, the candidates being the blocks in the run of free blocks directly above the current block, back to the nearest block carrying an id present in both documents, less any block whose body is unchanged from a baseline block other than the id's own, and (3) the current block's normalized text is not inside the old text. Otherwise it is HASH_DRIFT. A paragraph that restates its heading is reworded, scoring 0.43 against its old text, while the unchanged heading above scores 0.92 against it. The heading was there before the edit, so it is not a candidate and the reword is drift.",
+      "before": "# Do not run as root\n\nDo not run as root.\n<!-- stay:privileges -->\n",
+      "after": "# Do not run as root\n\nUse an unprivileged account.\n<!-- stay:privileges -->\n",
+      "findings": [
+        {
+          "level": "warn",
+          "code": "HASH_DRIFT",
+          "id": "privileges"
+        }
+      ]
+    },
+    {
+      "name": "old-text-duplicated-in-the-baseline-is-drift",
+      "note": "SPEC.md §11 (v1.11): a kept id carried by one block before and after, whose body hash changed and which is not an exact swap, is RELOCATED_ID (error) when (1) §9's body score, without context, of its old text against its current block is under 0.5, (2) exactly one candidate scores 0.8 or more against the old text, the candidates being the blocks in the run of free blocks directly above the current block, back to the nearest block carrying an id present in both documents, less any block whose body is unchanged from a baseline block other than the id's own, and (3) the current block's normalized text is not inside the old text. Otherwise it is HASH_DRIFT. The insertion shape, but the baseline already held an unmarked copy of the old text, at the end of the document and outside the window. The stranded block's body matches a baseline block other than the id's own, so it is not a candidate: the linter cannot tell the stranded block from the copy, and it fails closed to drift.",
+      "before": "The orchard keeps forty apple trees along the southern fence.\n<!-- stay:orch -->\n\nThe barn holds the tractor.\n<!-- stay:barn -->\n\nThe orchard keeps forty apple trees along the southern fence.\n",
+      "after": "The orchard keeps forty apple trees along the southern fence.\n\nA note on pruning, added later.\n<!-- stay:orch -->\n\nThe barn holds the tractor.\n<!-- stay:barn -->\n\nThe orchard keeps forty apple trees along the southern fence.\n",
+      "findings": [
+        {
+          "level": "warn",
+          "code": "HASH_DRIFT",
+          "id": "orch"
+        }
+      ]
+    },
+    {
+      "name": "a-short-tail-split-is-drift",
+      "note": "SPEC.md §11 (v1.11): a kept id carried by one block before and after, whose body hash changed and which is not an exact swap, is RELOCATED_ID (error) when (1) §9's body score, without context, of its old text against its current block is under 0.5, (2) exactly one candidate scores 0.8 or more against the old text, the candidates being the blocks in the run of free blocks directly above the current block, back to the nearest block carrying an id present in both documents, less any block whose body is unchanged from a baseline block other than the id's own, and (3) the current block's normalized text is not inside the old text. Otherwise it is HASH_DRIFT. A blank line typed before a paragraph's last sentence leaves the marker on the short tail, which scores 0.13 against the old text while the head, directly above, scores 0.96. Clauses 1 and 2 hold; clause 3 does not, because the tail is inside the old text, so a split is drift. Either child is an acceptable home for the id.",
+      "before": "Planting starts in early spring. Each row gets compost first. The seedlings go in after the last frost. Water them every second morning. Then wait.\n<!-- stay:plant -->\n",
+      "after": "Planting starts in early spring. Each row gets compost first. The seedlings go in after the last frost. Water them every second morning.\n\nThen wait.\n<!-- stay:plant -->\n",
+      "findings": [
+        {
+          "level": "warn",
+          "code": "HASH_DRIFT",
+          "id": "plant"
+        }
+      ]
+    },
+    {
+      "name": "a-current-block-scoring-exactly-0.5-is-drift",
+      "note": "SPEC.md §11 (v1.11): a kept id carried by one block before and after, whose body hash changed and which is not an exact swap, is RELOCATED_ID (error) when (1) §9's body score, without context, of its old text against its current block is under 0.5, (2) exactly one candidate scores 0.8 or more against the old text, the candidates being the blocks in the run of free blocks directly above the current block, back to the nearest block carrying an id present in both documents, less any block whose body is unchanged from a baseline block other than the id's own, and (3) the current block's normalized text is not inside the old text. Otherwise it is HASH_DRIFT. Clause 1 is strict: `abxy` scores exactly 0.5 against `abcd` (two of eight characters matched, doubled), so the id has not moved off its block even though `abcd` survives unmarked directly above.",
+      "before": "abcd\n<!-- stay:a -->\n",
+      "after": "abcd\n\nabxy\n<!-- stay:a -->\n",
+      "findings": [
+        {
+          "level": "warn",
+          "code": "HASH_DRIFT",
+          "id": "a"
+        }
+      ]
+    },
+    {
+      "name": "a-free-block-scoring-exactly-0.8-counts",
+      "note": "SPEC.md §11 (v1.11): a kept id carried by one block before and after, whose body hash changed and which is not an exact swap, is RELOCATED_ID (error) when (1) §9's body score, without context, of its old text against its current block is under 0.5, (2) exactly one candidate scores 0.8 or more against the old text, the candidates being the blocks in the run of free blocks directly above the current block, back to the nearest block carrying an id present in both documents, less any block whose body is unchanged from a baseline block other than the id's own, and (3) the current block's normalized text is not inside the old text. Otherwise it is HASH_DRIFT. Clause 2 is inclusive: `abcdx`, directly above, scores exactly 0.8 against `abcde`, so it is the old text's one surviving block and the id has moved off it.",
+      "before": "abcde\n<!-- stay:a -->\n",
+      "after": "abcdx\n\nzzzzz\n<!-- stay:a -->\n",
+      "findings": [
+        {
+          "level": "error",
+          "code": "RELOCATED_ID",
+          "id": "a"
+        }
+      ]
+    },
+    {
+      "name": "an-id-on-two-markers-of-one-block-is-not-tested-for-relocation",
+      "note": "SPEC.md §11 (v1.11): the relocation tests apply to an id that exactly one marker carries before the edit and exactly one after, and two markers on one block carry it twice. Here `a`'s two markers sit on the barn sentence, `b`'s old text, which the swap test would report for an id carried once. `a` is reported duplicated and `b` dropped, and nothing is relocated. A linter that counts blocks rather than markers also reports RELOCATED_ID for `a`.",
+      "before": "Old orchard notes about the apple trees.\n<!-- stay:a -->\n\nThe barn holds the tractor.\n<!-- stay:b -->\n",
+      "after": "The barn holds the tractor.\n<!-- stay:a -->\n<!-- stay:a -->\n",
+      "findings": [
+        {
+          "level": "error",
+          "code": "DROPPED_ID",
+          "id": "b"
+        },
+        {
+          "level": "error",
+          "code": "DUPLICATED_ID",
+          "id": "a"
+        }
+      ]
+    },
+    {
+      "name": "old-text-duplicated-in-the-baseline-fires-when-the-stranded-copy-is-edited",
+      "note": "SPEC.md §11 (v1.11): the counterpart of `old-text-duplicated-in-the-baseline-is-drift`. The baseline holds the orchard sentence twice, and the stranded copy above the new note is then edited (`southern` to `northern`). Its body now matches no baseline block, so the unchanged-copy exclusion no longer removes it; it scores about 0.97 against the old text, the only candidate in the window, and `orch` is RELOCATED_ID. The exclusion covers an unchanged survivor only, not every baseline duplicate.",
+      "before": "The orchard keeps forty apple trees along the southern fence.\n<!-- stay:orch -->\n\nThe barn holds the tractor.\n<!-- stay:barn -->\n\nThe orchard keeps forty apple trees along the southern fence.\n",
+      "after": "The orchard keeps forty apple trees along the northern fence.\n\nA note on pruning, added later.\n<!-- stay:orch -->\n\nThe barn holds the tractor.\n<!-- stay:barn -->\n\nThe orchard keeps forty apple trees along the southern fence.\n",
+      "findings": [
+        {
+          "level": "error",
+          "code": "RELOCATED_ID",
+          "id": "orch"
+        }
+      ]
+    },
+    {
+      "name": "a-child-marker-does-not-end-the-relocation-window",
+      "note": "SPEC.md §11 (v1.11): the window runs back to the nearest block carrying a kept id, and a child (`subhash`) marker does not count, even one whose id the baseline carried as a block stay. The list's bare stay `lst` was rewritten as a child marker, and the orchard sentence, stranded above the list, is the only candidate: `orch` is RELOCATED_ID. A linter that let the child marker end the window reports `orch` as HASH_DRIFT.",
+      "before": "- Prune the apple trees <!-- stay:lst -->\n- Mend the fence\n\nThe orchard keeps forty apple trees along the southern fence.\n<!-- stay:orch -->\n",
+      "after": "The orchard keeps forty apple trees along the southern fence.\n\n- Prune the apple trees <!-- stay:lst subhash=sha256:000000000000 -->\n- Mend the fence\n\nA note on pruning, added later.\n<!-- stay:orch -->\n",
+      "findings": [
+        {
+          "level": "error",
+          "code": "RELOCATED_ID",
+          "id": "orch"
+        },
+        {
+          "level": "warn",
+          "code": "ADOPTED_ID",
+          "id": "lst"
+        }
+      ]
     }
   ]
 }

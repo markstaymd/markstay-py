@@ -3,11 +3,11 @@
 [![PyPI](https://img.shields.io/pypi/v/markstay)](https://pypi.org/project/markstay/)
 [![Python versions](https://img.shields.io/pypi/pyversions/markstay)](https://pypi.org/project/markstay/)
 [![tests](https://img.shields.io/github/actions/workflow/status/markstaymd/markstay-py/test.yml?label=tests)](https://github.com/markstaymd/markstay-py/actions/workflows/test.yml)
-[![spec](https://img.shields.io/badge/spec-v1.10-blue)](https://markstay.org)
+[![spec](https://img.shields.io/badge/spec-v1.11-blue)](https://markstay.org)
 ![License](https://img.shields.io/pypi/l/markstay)
 
 The Python reference implementation of the [markstay spec](https://markstay.org)
-(v1.10). markstay is a source-level identity primitive for Markdown blocks: an id
+(v1.11). markstay is a source-level identity primitive for Markdown blocks: an id
 token that **stays** bound to its block across edits (marker `stay:`), so a
 reference to a block survives the document being rewritten, including by an LLM.
 
@@ -40,6 +40,29 @@ writable children can still receive stays. Table marker
 relocations must also pass the removal and insertion checks. Inline recovery
 evidence belongs in a side index, because a new child marker carries only an id
 and a digest.
+
+**Frontmatter-shaped spans (§5.3, v1.11).** A leading `---` span that recognition
+rejects only because its payload holds a blank line, while a payload line still
+reads as YAML, is content to every reader here and is still YAML to a static site
+generator, a skill loader or an issue-template reader, so a marker stamped into it
+breaks that file. `stamp` inserts no marker on lines 1 to *n* (*n* is the first
+`---` or `...` after line 1) and mints no stay for a block that starts on them.
+Everything after the span is stamped as usual, and `restamp` still refreshes a
+marker already inside it, since a refresh is not an insertion. Recognition does not
+change: readers, lint and parse see the span as content exactly as before. The result carries `StampResult.refused_frontmatter == {"start": 1, "end": n}`
+when the span withheld a stay (`None` otherwise; `refused` stays `None`, since the
+rest of the document is stamped), and the CLI adds a `frontmatter-shaped span
+L1-Ln refused` line on stderr and still exits 0. With `child_blocks=True` a list
+item or row that starts in the span, or whose marker would land there, is withheld
+too. Both consequences fail safe: prose that reads as a key (`Note: this.`) between
+two thematic breaks with blank lines around it stays unstamped, and under blank-line
+segmentation a block that runs straight on from the closer with no blank line
+starts inside the span and is refused whole, where `mode="commonmark"` stamps what
+follows the closer as its own block. One case refuses the whole write instead: with
+`child_blocks=True`, a §5.6 row preparation that would move a table's legacy
+same-line container marker inside the span returns the source unchanged with
+`refused == "frontmatter-span"`, and the CLI exits 1 as for any whole-operation
+refusal. It needs a GFM table inside the YAML-shaped payload.
 
 These checks preserve the specification's byte-level contract; they do not
 promise identical rendering for arbitrary Markdown. With the CommonMark extra
@@ -233,7 +256,13 @@ failed threshold and margin context, structured evidence codes, optional human
 labels, and candidate provenance. The candidate set is diagnostic and is not an
 attachment recommendation. `unmatched` omits sub-threshold candidates by design.
 
-Block detachments use `ambiguous` or `unmatched`. The child path can also report
+Block detachments use `ambiguous`, `unmatched`, or `contested` (§9.1): stays that
+select one block at the quote tier and whose quotes cannot sit at disjoint places
+in it all detach, each carrying the proposed target and the other stays' ids with
+`candidates` empty. A block claimed at a stronger tier is never a quote target, so
+a stay with no unclaimed block left is `unmatched` with score 0. An id whose
+marker is on several blocks resolves among those carriers only, and if it
+detaches, its candidates are carriers. The child path can also report
 `unscored` when no match was attempted, `unaddressed` for a surviving child marker
 that owns no direct child, and `contested` when multiple stays propose the same
 tier-start candidate. A contest carries the proposed target and the ids of the
@@ -257,7 +286,7 @@ and finds each document's baseline itself, which is what a hook actually wants.
 # .pre-commit-config.yaml
 repos:
   - repo: https://github.com/markstaymd/markstay-py
-    rev: v0.14.0
+    rev: v0.15.0
     hooks:
       - id: markstay                  # or markstay-collections, to include table
                                       # rows and list bullets
@@ -295,8 +324,11 @@ reported as a move rather than a loss, so reorganising documents does not block.
   and their content is excluded. **Frontmatter wins**, the same call every mainstream
   Markdown site generator makes on the same bytes. A document that fails any of the
   four conditions (no opening `---`, no closing fence, a blank line in the payload,
-  no payload line that reads as YAML) falls through to ordinary Markdown, where the
-  worst case is a spurious block and a stray hash-drift warning. A marker an older version stamped onto
+  no payload line that reads as YAML) falls through to ordinary Markdown, where for a
+  reader the worst case is a spurious block and a stray hash-drift warning. For a
+  writer one of those shapes is worse, a blank line in a payload that still reads as
+  YAML, and `stamp` refuses to write into it (see **Frontmatter-shaped spans** under
+  write safety above). A marker an older version stamped onto
   frontmatter usually raises `ORPHAN_MARKER`, and deleting that one marker is the
   whole migration. **Lint before deleting**: with no blank line between the marker
   and the content below it, blank-line segmentation reads one run and binds the
@@ -306,8 +338,9 @@ reported as a move rather than a loss, so reorganising documents does not block.
 ## The conformance corpus (the actual deliverable)
 
 The corpus under [`conformance/`](conformance) is shared with the JavaScript
-reference. **469 core vectors** across two tiers, plus a 32-vector optional
-profile this package advertises, so its own runner reports **501**. The `check`
+reference. **531 core vectors** across two tiers, plus two optional profiles
+this package advertises (32 `rows` and 9 `items` vectors), so its own runner
+reports **572**. The `check`
 category supplies 20 commit-shaped cases with paths, statuses, before/after text,
 expected baseline pairings, findings, move/deletion/tracking-departure notes, and
 scope behavior.
@@ -316,10 +349,12 @@ scope behavior.
   require. These are authority; a `spec/` vector the reference fails is a
   reference bug, not a corpus error.
 - **`gen/`** , emitted from the reference for breadth/regression.
-- **`rows/`** , the optional `rows` profile (SPEC.md §5.6 table-row identity).
-  §16 keeps child segmentation optional, so a conforming runner MAY decline this
-  profile; the JavaScript and Rust references do, and run the 469 core vectors
-  alone. This package implements §5.6, so it advertises `rows` and runs all 501.
+- **`rows/`** , the optional profiles: `rows` (SPEC.md §5.6 table-row identity)
+  and `items` (SPEC.md §5.5 list-item recovery, §9.2 tier 0, and the §5.3 write refusal per
+  item). §16 keeps child segmentation optional, so a conforming runner MAY
+  decline them; the JavaScript and Rust references do, and run the 531 core
+  vectors alone. This package implements §5.5 and §5.6, so it advertises both
+  and runs all 572.
   A runner that meets a profile it has never heard of fails rather than skipping
   it, which is what stops a new category going missing quietly.
 

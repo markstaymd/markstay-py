@@ -35,6 +35,43 @@ def codes(findings):
 # --- well-formedness + intra-doc (linter/test_lint.py) --------------------
 
 
+
+def test_overlapping_rejected_candidates_remain_independent():
+    for opener, closer in (("<!--", "-->"), ("{/*", "*/}")):
+        text = (opener + "stay:x a=") * 4000 + "\n" + closer
+        assert L.find_markers(text) == []
+        raw = opener + 'stay:good quote="one\r\ntwo\\\"three\\\\four" ' + closer
+        markers = L.find_markers(text + "\r\n" + raw, 10)
+        assert [(m.id, m.line, m.raw) for m in markers] == [("good", 13, raw)]
+
+
+def test_overlapping_candidates_preserve_quote_state_and_host_boundaries():
+    # The inner opener begins in the outer quoted value. Its bare-value LF
+    # rejection must not poison the outer candidate's legal quoted LF.
+    raw = '<!--stay:outer quote="<!--stay:inner a=one\r\ntwo" -->'
+    assert [(m.id, m.raw) for m in L.find_markers(raw)] == [("outer", raw)]
+    text = ('<!--stay:x a={/*stay:mdx quote="one\ntwo" */}\n-->'
+            '<!--stay:no=positional --!><!--stay:last -->')
+    markers = L.find_markers(text, 4)
+    assert [(m.id, m.malformed, m.line) for m in markers] == [
+        ("mdx", False, 5), (None, True, 7), ("last", False, 7)
+    ]
+
+
+def test_marker_suffix_validation_visits_each_state_position_at_most_once():
+    class CountedText(str):
+        reads = 0
+
+        def __getitem__(self, item):
+            self.reads += 1
+            return super().__getitem__(item)
+
+    text = CountedText("x a=" + "<!--stay:x a=" * 4000 + "\n")
+    validate = L._marker_body_validator(text)
+    for match in L._MARKER_OPEN_RE.finditer(text):
+        assert not validate(match.end() + 5, len(text))
+    assert text.reads <= 9 * len(text)
+
 def test_clean_doc_with_correct_hash():
     body = "The order pipeline ingests messages and normalizes them."
     h = M.body_hash(body, 4)
@@ -54,6 +91,15 @@ def test_hash_uppercase_hex_no_drift():
     _, findings = M.lint_document(md)
     assert codes(findings) == []
     assert not M.has_errors(findings)
+
+
+def test_marker_line_count_runs_across_skipped_openers_crlf_and_offset():
+    # Skipped: a non-marker comment, an unclosed MDX opener, a `--!>` close.
+    text = (
+        "a\r\n<!-- note -->\r\n<!-- stay:x -->\r\n{/* stay:bad\r\n\r"
+        "<!-- stay:y --!>\n<!-- stay:z -->"
+    )
+    assert [(m.id, m.line) for m in L.find_markers(text, 10)] == [("x", 13), ("z", 17)]
 
 
 def test_marker_no_blank_line_attaches_to_block():
@@ -442,6 +488,90 @@ def test_detached_reasons_split_ambiguity_from_no_match():
     unmatched = M.resolve(anchors, "xxxxxxxxxxxxxxxxxxxxxxxx\n")["a"]
     assert unmatched.reason == "unmatched"
     assert unmatched.candidates == []
+
+
+TWINS_BEFORE = (
+    "Same body here.\n<!-- stay:a -->\n\nDifferent middle block.\n<!-- stay:m -->\n\n"
+    "Same body here.\n<!-- stay:b -->\n"
+)
+TWINS_AFTER = "Same body here.\n\nDifferent middle block.\n<!-- stay:m -->\n"
+
+
+def test_block_contest_is_reported_as_contested_whatever_the_anchor_order():
+    # SPEC.md §9.1 (v1.11): two stays selecting one block at the QUOTE tier whose
+    # quotes cannot be placed disjointly in it both detach. §10 names the reason
+    # `contested` for a resolver that exposes one, which this one does.
+    anchors = M.build_anchors(TWINS_BEFORE)
+    for order in (anchors, list(reversed(anchors))):
+        resolved = M.resolve(order, TWINS_AFTER)
+        assert resolved["m"].method == "marker"
+        for sid, other in (("a", "b"), ("b", "a")):
+            result = resolved[sid]
+            assert (result.method, result.target, result.reason) == (
+                "detached",
+                None,
+                "contested",
+            )
+            assert result.score == 1.0
+            assert result.proposed_target == 0
+            assert result.contested_with == [other]
+            assert result.candidates == []
+            assert result.proposal_provenance == "independent-per-anchor"
+
+
+def test_cli_resolve_explains_a_block_contest(tmp_path):
+    before = tmp_path / "before.md"
+    after = tmp_path / "after.md"
+    before.write_text(TWINS_BEFORE)
+    after.write_text(TWINS_AFTER)
+    text = subprocess.run(
+        [sys.executable, "-m", "markstay.cli", "resolve", "--before", str(before),
+         str(after)],
+        capture_output=True, text=True,
+    )
+    assert "a: detached (contested;" in text.stdout
+    assert "contested proposal: block[0]" in text.stdout
+    assert "also proposed by b; assigned to no stay" in text.stdout
+    payload = json.loads(subprocess.run(
+        [sys.executable, "-m", "markstay.cli", "resolve", "--json", "--before",
+         str(before), str(after)],
+        capture_output=True, text=True,
+    ).stdout)
+    a = next(r for r in payload["resolutions"] if r["id"] == "a")
+    assert a["reason"] == "contested"
+    assert a["diagnostics"]["contest"]["contested_with"] == ["b"]
+
+
+def test_duplicated_marker_resolves_among_carriers_only():
+    # SPEC.md §9.1 tier 1 (v1.11): a pasted copy carrying the same marker. The
+    # carriers tie, so the id detaches as ambiguous, and its diagnostic
+    # candidates are the carriers only, never the unmarked block in between.
+    before = "Retry budget per partner.\n<!-- stay:r -->\n"
+    after = (
+        "Retry budget per partner.\n<!-- stay:r -->\n\nRetry budget per partner.\n\n"
+        "Retry budget per partner.\n<!-- stay:r -->\n"
+    )
+    result = M.resolve(M.build_anchors(before), after)["r"]
+    assert (result.method, result.reason, result.score) == ("detached", "ambiguous", 1.0)
+    assert sorted(c.target for c in result.candidates) == [0, 2]
+
+
+def test_merge_test_edges():
+    from markstay.resolve import MERGE_CONTENDER_CAP, disjoint_in
+
+    assert MERGE_CONTENDER_CAP == 16
+    # An empty quote scores 0 under §9 and never reaches the test as a vector
+    # can; the test itself still refuses it rather than placing it anywhere.
+    assert not disjoint_in("abc", ["", "abc"])
+    assert disjoint_in("abcdef abcd", ["abcd", "bcde"])  # greedy trap
+    assert disjoint_in("abcdef", ["abc", "def"])  # half-open spans touch
+    assert not disjoint_in("abcdef", ["abcd", "cdef"])  # overlap
+    assert disjoint_in("abc abc", ["abc", "abc"])  # two occurrences
+    assert not disjoint_in("abc", ["abc", "abc"])  # one occurrence
+    assert not disjoint_in("ab", ["abc"])  # the length check
+    assert disjoint_in("a" * 16, ["a"] * 16)
+    assert not disjoint_in("a" * 17, ["a"] * 17)  # the cap, checked first
+    assert disjoint_in("\U0001f600\U0001f600 x \U0001f600y", ["\U0001f600\U0001f600 x", "\U0001f600y"])
 
 
 def test_attached_resolutions_keep_empty_diagnostics():

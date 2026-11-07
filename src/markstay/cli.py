@@ -454,6 +454,16 @@ def _cmd_stamp(args, ap) -> int:
         else:
             sys.stdout.write(res.text)
         sys.stderr.write(f"{f}: {len(res.minted)} id(s) minted\n")
+        if res.refused_frontmatter is not None:
+            # SPEC.md §5.3: a leading `---` span that recognition read as Markdown
+            # but a frontmatter reader still parses as YAML. Like §3.4, the rest of
+            # the document is stamped and the exit status stays 0; the line is what
+            # makes the declined span visible and countable.
+            span = res.refused_frontmatter
+            sys.stderr.write(
+                f"{f}: frontmatter-shaped span L{span['start']}-L{span['end']} "
+                "refused under §5.3, left unstamped\n"
+            )
         if res.refused_carriers:
             # SPEC.md §3.4 skips one child rather than the operation, so the rest
             # of the document is stamped and the exit status stays 0. Say which

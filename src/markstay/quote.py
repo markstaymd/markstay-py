@@ -113,7 +113,11 @@ def body_score(sel: Selector, candidate: str) -> float:
     versa, the split / merge case) floors the score at the length ratio of the
     shorter to the longer, so a surviving half of a split paragraph cannot score
     arbitrarily low just because half its text went elsewhere."""
-    q, c = sel.nquote, normalize(candidate)
+    return body_score_norm(sel.nquote, normalize(candidate))
+
+
+def body_score_norm(q: str, c: str) -> float:
+    """`body_score` over two bodies already passed through `normalize`."""
     if not q or not c:
         return 0.0
     if q == c:

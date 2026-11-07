@@ -11,14 +11,26 @@ The resolution model is the three-field split from SPEC.md §2.1:
     hash   drift detection (answers *did the body change*)
     quote  recovery evidence (answers *where did it go* when the marker is lost)
 
-The resolver applies them as a priority ladder, strongest evidence first:
+The resolver applies them as a priority ladder, strongest evidence first, and
+assigns exclusively (SPEC.md §9.1 from v1.11). Every stay still unresolved is
+evaluated at a tier before any commit at that tier takes effect, and a block
+committed at a tier is *claimed* for the weaker tiers:
 
     1. MARKER  the id's marker is still present in the edited doc -> trust it.
-    2. HASH    no marker, but exactly one block's body hash equals the stored
-               hash -> the content survived verbatim, just lost its marker.
-    3. QUOTE   no marker and no hash hit -> fuzzy-recover via the quote selector,
-               but only commit to a *clear* winner (score over threshold AND a
-               margin over the runner-up). Otherwise report DETACHED.
+               On two or more blocks, resolve among those carriers only: the
+               one whose body hash is the stored hash if exactly one is, else
+               §9's commit rule over the carriers, else DETACHED. A duplicated
+               id never reaches the weaker tiers.
+    2. HASH    no marker; the stored hash was recorded by exactly one stay and
+               exactly one unclaimed block has it -> the content survived
+               verbatim, just lost its marker.
+    3. QUOTE   rank every block, claimed or not. The target is the best
+               unclaimed block, the runner-up the best other block, claimed or
+               not, and only a *clear* winner commits (score over threshold AND
+               a margin over the runner-up). Stays selecting one target all
+               commit if their quotes occupy disjoint places in it (a clean
+               merge), and all go DETACHED (``contested``) otherwise, or when
+               there are more than 16 of them.
 
 DETACHED is a first-class, correct outcome: the spec says a marker that cannot
 be confidently placed must be surfaced as outdated, never silently reattached to
@@ -33,7 +45,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from . import lint as L
-from .quote import Candidate, Selector, rank_candidates, window_prefix, window_suffix
+from .quote import (
+    Candidate,
+    Selector,
+    normalize,
+    rank_candidates,
+    window_prefix,
+    window_suffix,
+)
 
 # Default thresholds for the QUOTE tier. A recovery is committed only when the
 # best candidate clears `threshold` AND beats the runner-up by `margin`.
@@ -57,7 +76,7 @@ class Resolution:
     method: str  # 'marker' | 'hash' | 'quote' | 'detached'
     target: int | None  # content-block index in the after-doc, or None
     score: float  # confidence in [0, 1] (1.0 for marker/hash)
-    reason: str | None = None
+    reason: str | None = None  # detached only: ambiguous | unmatched | contested
     candidates: list[Candidate] = field(default_factory=list)
     runner_up_score: float = 0.0
     proposed_target: int | None = None
@@ -137,6 +156,79 @@ def build_anchors(before_md: str, mode: str = "blank-line") -> list[Anchor]:
     return anchors
 
 
+# SPEC.md §9.1: a merge exemption with more contenders than this fails. The
+# subset search below is exponential in the count; at the defaults no more than
+# four contenders can reach it (each needs a quote at least a quarter of the
+# block's length), so the cap only binds at a caller's lower threshold, where it
+# fails closed and lets every implementation agree without a big-integer mask.
+MERGE_CONTENDER_CAP = 16
+
+
+def disjoint_in(body: str, quotes: list[str]) -> bool:
+    """SPEC.md §9.1's merge test: can every quote be placed verbatim inside
+    ``body`` at its own half-open span, no two spans overlapping? Both sides are
+    already normalized by §9. Two equal quotes need two occurrences.
+
+    The cap and the length check come first. Then a dynamic programme over
+    subsets of the contenders: ``end[S]`` is the smallest offset by which every
+    quote in S fits, pairwise disjoint, inside ``body[:end[S]]``; ``end[{}]`` is 0
+    and ``end[S]`` is the minimum over i in S of ``find(q_i, end[S - {i}]) +
+    len(q_i)``. Any disjoint placement reads left to right, and the earliest
+    occurrence after the previous end never ends later than another choice, so
+    the programme is exact, where a greedy first match depends on the order the
+    contenders arrive in. Offsets are code points."""
+    if len(quotes) > MERGE_CONTENDER_CAP:
+        return False
+    if not all(quotes):
+        return False
+    if sum(map(len, quotes)) > len(body):
+        return False
+    k = len(quotes)
+    end: dict[int, int] = {0: 0}
+    for mask in range(1, 1 << k):
+        best = -1
+        for i in range(k):
+            if not mask & (1 << i):
+                continue
+            before = end.get(mask & ~(1 << i), -1)
+            if before < 0:
+                continue
+            at = body.find(quotes[i], before)
+            if at >= 0 and (best < 0 or at + len(quotes[i]) < best):
+                best = at + len(quotes[i])
+        end[mask] = best
+    return end[(1 << k) - 1] >= 0
+
+
+def _commit_rule(
+    a_id: str,
+    ranked: list[Candidate],
+    threshold: float,
+    margin: float,
+    method: str,
+) -> Resolution:
+    """§9's commit rule on a ranking whose first entry is the target and whose
+    second is the runner-up. ``method`` names the tier a commit is reported under."""
+    idx = ranked[0].target if ranked else -1
+    score = ranked[0].score if ranked else 0.0
+    runner = ranked[1].score if len(ranked) > 1 else 0.0
+    if idx >= 0 and score >= threshold and (score - runner) >= margin:
+        return Resolution(a_id, method, idx, score, runner_up_score=runner)
+    if idx >= 0 and score >= threshold:
+        return Resolution(
+            a_id,
+            "detached",
+            None,
+            score,
+            reason="ambiguous",
+            candidates=_ambiguous_candidates(ranked, margin),
+            runner_up_score=runner,
+        )
+    return Resolution(
+        a_id, "detached", None, score, reason="unmatched", runner_up_score=runner
+    )
+
+
 def resolve(
     anchors: list[Anchor],
     after_md: str,
@@ -145,60 +237,110 @@ def resolve(
     mode: str = "blank-line",
 ) -> dict[str, Resolution]:
     """Resolve every anchor id against the edited document via the evidence
-    ladder. Returns id -> Resolution. ``mode`` selects the block segmenter and
-    MUST match the mode ``build_anchors`` used (SPEC.md §5)."""
+    ladder, assigning exclusively (SPEC.md §9.1). Returns id -> Resolution.
+    ``mode`` selects the block segmenter and MUST match the mode
+    ``build_anchors`` used (SPEC.md §5).
+
+    Before tier 1 the anchors collapse to one per id, the last one read, so a
+    baseline that repeats an id (a §7 error) resolves that anchor at every tier
+    and "recorded by exactly one stay" counts distinct ids."""
+    # One anchor per id before any tier, the last read, kept at the id's first
+    # position. A baseline that repeats an id is a §7 error; without this, tier 2
+    # would count one stay's hash twice and could commit an earlier anchor that
+    # tier 1 and tier 3 never see.
+    anchors = list({a.id: a for a in anchors}.values())
     after_blocks = [b for b in L.parse_document(after_md, mode=mode) if b.index >= 0]
     bodies = [b.content for b in after_blocks]
 
-    # Tier 1 lookup: ids whose marker is still attached, mapped to block index.
-    surviving: dict[str, int] = {}
+    # Tier 1 lookup: every block carrying each id's marker, in document order.
+    carriers: dict[str, list[int]] = {}
     for idx, b in enumerate(after_blocks):
         for mk in b.markers:
             if mk.id and not mk.malformed and not mk.has_subhash:
-                surviving.setdefault(mk.id, idx)
+                on = carriers.setdefault(mk.id, [])
+                if idx not in on:
+                    on.append(idx)
 
-    # Tier 2 lookup: full-body hash -> block indices (list, to detect ambiguity).
+    out: dict[str, Resolution] = {}
+
+    # Tier 1: the marker. A commit among several carriers is still tier 1: the
+    # marker limits the pool, hash and quote only choose within it. Claims do not
+    # apply here, since §5 lets one block carry several stays.
+    for a in anchors:
+        on = carriers.get(a.id)
+        if not on:
+            continue
+        if len(on) == 1:
+            out[a.id] = Resolution(a.id, "marker", on[0], 1.0)
+            continue
+        hits = [i for i in on if L.body_hash(bodies[i]) == a.hash]
+        if len(hits) == 1:
+            out[a.id] = Resolution(a.id, "marker", hits[0], 1.0)
+            continue
+        among = set(on)
+        ranked = [c for c in rank_candidates(a.selector, bodies) if c.target in among]
+        out[a.id] = _commit_rule(a.id, ranked, threshold, margin, "marker")
+    claimed = {r.target for r in out.values() if r.target is not None}
+
+    # Tier 2: a hash recorded by one stay, carried by one unclaimed block. Two
+    # stays can never propose one block here, because both would have recorded
+    # its hash, so this tier needs no contest.
     hash_to_idx: dict[str, list[int]] = {}
     for idx, body in enumerate(bodies):
         hash_to_idx.setdefault(L.body_hash(body), []).append(idx)
-
-    out: dict[str, Resolution] = {}
+    recorded: dict[str, int] = {}
     for a in anchors:
-        # Tier 1: marker survived.
-        if a.id in surviving:
-            out[a.id] = Resolution(a.id, "marker", surviving[a.id], 1.0)
+        recorded[a.hash] = recorded.get(a.hash, 0) + 1
+    hash_commits: dict[str, int] = {}
+    for a in anchors:
+        if a.id in out or recorded[a.hash] != 1:
             continue
-        # Tier 2: body hash uniquely identifies a surviving block.
-        hits = hash_to_idx.get(a.hash, [])
+        hits = [h for h in hash_to_idx.get(a.hash, []) if h not in claimed]
         if len(hits) == 1:
-            out[a.id] = Resolution(a.id, "hash", hits[0], 1.0)
+            hash_commits[a.id] = hits[0]
+    for aid, t in hash_commits.items():
+        out[aid] = Resolution(aid, "hash", t, 1.0)
+        claimed.add(t)
+
+    # Tier 3: quote recovery. The target must be unclaimed; a claimed block still
+    # counts as the runner-up, so claiming a rival cannot open a margin. Context
+    # compares each block with its physical neighbours whatever is claimed.
+    pending: dict[str, Resolution] = {}
+    proposals: dict[str, Candidate] = {}
+    for a in anchors:
+        if a.id in out:
             continue
-        # Tier 3: quote recovery, committed only on a clear winner.
         ranked = rank_candidates(a.selector, bodies)
-        idx = ranked[0].target if ranked else -1
-        score = ranked[0].score if ranked else 0.0
-        runner = ranked[1].score if len(ranked) > 1 else 0.0
-        if idx >= 0 and score >= threshold and (score - runner) >= margin:
-            out[a.id] = Resolution(a.id, "quote", idx, score, runner_up_score=runner)
-        elif idx >= 0 and score >= threshold:
-            out[a.id] = Resolution(
-                a.id,
+        free = next((c for c in ranked if c.target not in claimed), None)
+        if free is None:
+            pending[a.id] = Resolution(a.id, "detached", None, 0.0, reason="unmatched")
+            continue
+        ranked = [free] + [c for c in ranked if c.target != free.target]
+        pending[a.id] = _commit_rule(a.id, ranked, threshold, margin, "quote")
+        if pending[a.id].method == "quote":
+            proposals[a.id] = free
+
+    by_target: dict[int, list[str]] = {}
+    for aid, candidate in proposals.items():
+        by_target.setdefault(candidate.target, []).append(aid)
+    quotes = {a.id: a.selector.nquote for a in anchors}
+    for t, aids in by_target.items():
+        if len(aids) == 1 or disjoint_in(normalize(bodies[t]), [quotes[i] for i in aids]):
+            continue
+        for aid in aids:
+            r = pending[aid]
+            pending[aid] = Resolution(
+                aid,
                 "detached",
                 None,
-                score,
-                reason="ambiguous",
-                candidates=_ambiguous_candidates(ranked, margin),
-                runner_up_score=runner,
+                r.score,
+                reason="contested",
+                runner_up_score=r.runner_up_score,
+                proposed_target=t,
+                contested_with=[other for other in aids if other != aid],
+                proposal_provenance=proposals[aid].provenance,
             )
-        else:
-            out[a.id] = Resolution(
-                a.id,
-                "detached",
-                None,
-                score,
-                reason="unmatched",
-                runner_up_score=runner,
-            )
+    out.update(pending)
     return out
 
 

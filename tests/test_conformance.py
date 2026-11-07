@@ -307,19 +307,39 @@ def v_rows(v) -> tuple[bool, str]:
                 for b in blocks for c in b.children if c.kind == "row"
             ],
         }
-    elif op == "stamp":
-        ids = iter(v["ids"])
-        r = M.stamp(v["doc"], child_blocks=True, new_id=lambda: next(ids))
-        got = {"text": r.text, "minted": r.minted, "drifted": list(r.drifted)}
-    elif op == "resolve":
-        mode = v.get("mode", "blank-line")
-        resolved = M.resolve_children(
-            M.build_child_anchors(v["before"], mode=mode), v["after"], mode=mode
-        )
-        got = {k: {"method": r.method, "target": r.target}
-               for k, r in sorted(resolved.items())}
+    elif op in ("stamp", "resolve"):
+        got = _child_op(v)
     else:
         return False, f"unknown rows op: {op!r}"
+    return approx(got, v["expected"]), f"got={got}"
+
+
+def _child_op(v) -> dict:
+    """The two child operations `rows` and `items` share: the write path with
+    child blocks on, and §9.2 child recovery."""
+    if v["op"] == "stamp":
+        ids = iter(v["ids"])
+        r = M.stamp(v["doc"], child_blocks=True, new_id=lambda: next(ids))
+        return {"text": r.text, "minted": r.minted, "drifted": list(r.drifted)}
+    mode = v.get("mode", "blank-line")
+    resolved = M.resolve_children(
+        M.build_child_anchors(v["before"], mode=mode), v["after"], mode=mode
+    )
+    return {k: {"method": r.method, "target": r.target}
+            for k, r in sorted(resolved.items())}
+
+
+def v_items(v) -> tuple[bool, str]:
+    """SPEC.md §5.5 list-item identity: the optional `items` profile.
+
+    The corpus's first list-item vectors, kept out of `rows` because they are
+    not rows, and out of the core because §16 keeps §5.5 optional and the
+    JavaScript and Rust cores decline it. `resolve` reaches §9.2's child quote
+    tier with claimed siblings; `stamp` pins §5.3's write refusal per child.
+    """
+    if v["op"] not in ("stamp", "resolve"):
+        return False, f"unknown items op: {v['op']!r}"
+    got = _child_op(v)
     return approx(got, v["expected"]), f"got={got}"
 
 
@@ -327,22 +347,23 @@ VERIFIERS = {
     "hash": v_hash, "markers": v_markers, "parse": v_parse, "lint": v_lint,
     "diff": v_diff, "seqmatch": v_seqmatch, "score": v_score, "resolve": v_resolve,
     "stamp": v_stamp, "mint": v_mint, "preserve": v_preserve, "check": v_check,
-    "anchors": v_anchors, "rows": v_rows,
+    "anchors": v_anchors, "rows": v_rows, "items": v_items,
 }
 
 # Optional profiles a corpus file may declare with a top-level `profile` key.
 # Every full runner knows the whole set; each advertises only what it
 # implements. A profile this runner has never HEARD of is a failure rather than
 # a skip, so a category added to the corpus without touching the runners cannot
-# pass as silence. This package implements SPEC.md §5.6, so it advertises
-# `rows`; the JavaScript and Rust references decline it and run the core alone.
-KNOWN_PROFILES = {"rows"}
-ADVERTISED_PROFILES = {"rows"}
-PROFILE_CATEGORIES = {"rows": "rows"}
-CORE_VECTORS = 469
+# pass as silence. This package implements SPEC.md §5.5 and §5.6, so it
+# advertises `items` and `rows`; the JavaScript and Rust references decline both
+# and run the core alone.
+KNOWN_PROFILES = {"rows", "items"}
+ADVERTISED_PROFILES = {"rows", "items"}
+PROFILE_CATEGORIES = {"rows": "rows", "items": "items"}
+CORE_VECTORS = 531
 # Advertised profiles are pinned too. A count that is only reported cannot
 # catch a vector going missing, because the denominator shrinks with it.
-PROFILE_VECTORS = {"rows": 32}
+PROFILE_VECTORS = {"rows": 32, "items": 9}
 
 
 # --- discover every vector at collection time -----------------------------

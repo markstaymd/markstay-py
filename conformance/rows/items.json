@@ -1,0 +1,276 @@
+{
+  "category": "items",
+  "tier": "rows",
+  "profile": "items",
+  "vectors": [
+    {
+      "name": "in-place-edit-among-near-duplicate-siblings-commits-by-quote-past-claimed-siblings",
+      "note": "SPEC.md §9.2, from item_eval's `in-place-edit @ near-duplicate-siblings` cell. Every marker is gone and the middle bullet of the first list is edited. Its two siblings differ from it by one token and keep their text, so §9.2's sibling-hash tier commits them first and claims them. At the quote tier the edited bullet is then the only unclaimed candidate and commits. §9.2 REMOVES a claimed sibling from the quote pool, deliberately unlike §9.1's tier 3, which keeps claimed blocks as rivals: kept as rivals here, `Deploy alpha service` and `Deploy gamma service` hold the margin under 0.05 and the edited bullet detaches. The second list is unchanged and recovers by ordinal under its exact container hash.",
+      "op": "resolve",
+      "before": "## Checklist 1\n<!-- stay:s000 hash=sha256:17af2093fe45 -->\n\n- Deploy alpha service <!-- stay:s001 subhash=sha256:c7b625d8c0e5 -->\n- Deploy beta service <!-- stay:s002 subhash=sha256:540830e2557f -->\n- Deploy gamma service <!-- stay:s003 subhash=sha256:f5ed0acb7ba6 -->\n<!-- stay:s004 hash=sha256:80f5d6f36920 -->\n\n## Checklist 2\n<!-- stay:s005 hash=sha256:e21ed39979a0 -->\n\n- Verify alpha service <!-- stay:s006 subhash=sha256:9947db6112fd -->\n- Verify beta service <!-- stay:s007 subhash=sha256:4c87e9721fb9 -->\n- Verify gamma service <!-- stay:s008 subhash=sha256:e1c80a68a7d6 -->\n<!-- stay:s009 hash=sha256:6907cf37056f -->\n",
+      "after": "## Checklist 1\n\n- Deploy alpha service\n- Deploy beta service (revised wording)\n- Deploy gamma service\n\n## Checklist 2\n\n- Verify alpha service\n- Verify beta service\n- Verify gamma service\n",
+      "expected": {
+        "s001": {
+          "method": "hash",
+          "target": 0
+        },
+        "s002": {
+          "method": "quote",
+          "target": 1
+        },
+        "s003": {
+          "method": "hash",
+          "target": 2
+        },
+        "s006": {
+          "method": "parent-hash",
+          "target": 3
+        },
+        "s007": {
+          "method": "parent-hash",
+          "target": 4
+        },
+        "s008": {
+          "method": "parent-hash",
+          "target": 5
+        }
+      }
+    },
+    {
+      "name": "in-place-edit-under-near-duplicate-parents-commits-by-quote-past-claimed-siblings",
+      "note": "SPEC.md §9.2, from item_eval's `in-place-edit @ near-duplicate-parents` cell. Two lists that differ by one token per bullet, every marker gone, and the middle bullet of the first edited. The edited list's container hash changed, so its children cannot use the ordinal tier; the two unedited siblings commit by sibling hash and are claimed, and the edited bullet commits at the quote tier as the only unclaimed candidate. Keeping the claimed siblings as rivals, as §9.1's tier 3 does for blocks, detaches it. The near-identical second list is unchanged and its items are claimed by ordinal before the quote tier runs, so this vector does not test that §9.2 scopes quote candidates to the resolved parent.",
+      "op": "resolve",
+      "before": "## Checklist 1\n<!-- stay:p000 hash=sha256:17af2093fe45 -->\n\n- Deploy alpha service <!-- stay:p001 subhash=sha256:c7b625d8c0e5 -->\n- Verify alpha service <!-- stay:p002 subhash=sha256:9947db6112fd -->\n- Retire alpha node <!-- stay:p003 subhash=sha256:b9bd700a170e -->\n<!-- stay:p004 hash=sha256:0d2e32ec5721 -->\n\n## Checklist 2\n<!-- stay:p005 hash=sha256:e21ed39979a0 -->\n\n- Deploy beta service <!-- stay:p006 subhash=sha256:540830e2557f -->\n- Verify beta service <!-- stay:p007 subhash=sha256:4c87e9721fb9 -->\n- Retire beta node <!-- stay:p008 subhash=sha256:65d5daa71eaf -->\n<!-- stay:p009 hash=sha256:db00f4ebf7ba -->\n",
+      "after": "## Checklist 1\n\n- Deploy alpha service\n- Verify alpha service (revised wording)\n- Retire alpha node\n\n## Checklist 2\n\n- Deploy beta service\n- Verify beta service\n- Retire beta node\n",
+      "expected": {
+        "p001": {
+          "method": "hash",
+          "target": 0
+        },
+        "p002": {
+          "method": "quote",
+          "target": 1
+        },
+        "p003": {
+          "method": "hash",
+          "target": 2
+        },
+        "p006": {
+          "method": "parent-hash",
+          "target": 3
+        },
+        "p007": {
+          "method": "parent-hash",
+          "target": 4
+        },
+        "p008": {
+          "method": "parent-hash",
+          "target": 5
+        }
+      }
+    },
+    {
+      "name": "a-list-item-inside-a-refused-frontmatter-span-is-not-stamped",
+      "note": "SPEC.md §5.3 (v1.11), the write refusal at child granularity. Lines 1 to 7 open with `---`, close at the first `---`, hold a blank line and a YAML-ish `title:` line, so §5.3 recognition rejects them as frontmatter while a frontmatter reader would take them as YAML. The list between them is a block of its own with two §5.5 items, and a writer mints nothing in the span: not the list, which starts there, and not either item. The container's refusal does not carry its items with it, because a child-capable writer checks each child on its own. Drop that check and a writer stamps `- ship the build` and `- tag the release` inside the YAML; the Python reference's backstop, which requires lines 1 to 7 to come out byte-identical, then refuses the whole write instead, so the body paragraph goes unstamped. Either way this vector fails. Pinned here for any child-capable core; the block-level half is core, in `spec/stamp.json`.",
+      "op": "stamp",
+      "doc": "---\ntitle: release checklist\n\n- ship the build\n- tag the release\n\n---\n\nBody paragraph.\n",
+      "ids": [
+        "c1",
+        "c2",
+        "c3"
+      ],
+      "expected": {
+        "text": "---\ntitle: release checklist\n\n- ship the build\n- tag the release\n\n---\n\nBody paragraph.\n<!-- stay:c1 hash=sha256:020236b45777 -->\n",
+        "minted": [
+          {
+            "id": "c1",
+            "line": 9
+          }
+        ],
+        "drifted": []
+      }
+    },
+    {
+      "name": "a-container-id-on-two-carriers-resolves-to-the-first",
+      "note": "SPEC.md §9.2 tier 0 (v1.11): a pasted copy of a list keeps the list's own marker, so `P` sits on two containers and every item marker is gone. Tier 0 takes the first carrier in document order, so the items map by ordinal under the exact container hash into the first list. This is deliberately not §9.1 tier 1's rule for a duplicated block id, which would resolve among the two carriers and, with both verbatim, detach `P` and with it every item. Taking the last carrier puts the items in the second list.",
+      "op": "resolve",
+      "before": "- Deploy the alpha service <!-- stay:a1 subhash=sha256:9ef321d58d55 -->\n- Verify the alpha service <!-- stay:a2 subhash=sha256:059374b21299 -->\n- Retire the alpha node <!-- stay:a3 subhash=sha256:a564566b8062 -->\n<!-- stay:P hash=sha256:2ac6f649c3dc -->\n",
+      "after": "- Deploy the alpha service\n- Verify the alpha service\n- Retire the alpha node\n<!-- stay:P hash=sha256:2ac6f649c3dc -->\n\nA pasted note.\n\n- Deploy the alpha service\n- Verify the alpha service\n- Retire the alpha node\n<!-- stay:P hash=sha256:2ac6f649c3dc -->\n",
+      "expected": {
+        "a1": {
+          "method": "parent-hash",
+          "target": 0
+        },
+        "a2": {
+          "method": "parent-hash",
+          "target": 1
+        },
+        "a3": {
+          "method": "parent-hash",
+          "target": 2
+        }
+      }
+    },
+    {
+      "name": "a-container-id-repeated-in-the-baseline-keeps-the-first-anchor-read",
+      "note": "SPEC.md §9.2 tier 0 (v1.11): the baseline repeats container id `P` on two lists (a §7 error) and every marker is stripped. Tier 0 keeps the first anchor read for `P`, the Deploy list's, so `P` commits by hash to that list and its items map by ordinal (`parent-hash`); the other list's items find their own bodies by document-scoped child hash. Keeping the last anchor read, as §9.1 does for a block id, swaps the two methods.",
+      "op": "resolve",
+      "before": "- Deploy the alpha service <!-- stay:a1 subhash=sha256:9ef321d58d55 -->\n- Verify the alpha service <!-- stay:a2 subhash=sha256:059374b21299 -->\n- Retire the alpha node <!-- stay:a3 subhash=sha256:a564566b8062 -->\n<!-- stay:P hash=sha256:2ac6f649c3dc -->\n\nA separating paragraph.\n<!-- stay:s hash=sha256:0ab44bd5ad3a -->\n\n- Book the venue for March <!-- stay:b1 subhash=sha256:47740aa7b2d1 -->\n- Send the invitations out <!-- stay:b2 subhash=sha256:5a1bbf4a0a5b -->\n- Order catering for forty <!-- stay:b3 subhash=sha256:8b28e6dd66c6 -->\n<!-- stay:P hash=sha256:90ff28acbe31 -->\n",
+      "after": "- Deploy the alpha service\n- Verify the alpha service\n- Retire the alpha node\n\nA separating paragraph.\n\n- Book the venue for March\n- Send the invitations out\n- Order catering for forty\n\n",
+      "expected": {
+        "a1": {
+          "method": "parent-hash",
+          "target": 0
+        },
+        "a2": {
+          "method": "parent-hash",
+          "target": 1
+        },
+        "a3": {
+          "method": "parent-hash",
+          "target": 2
+        },
+        "b1": {
+          "method": "document-hash",
+          "target": 3
+        },
+        "b2": {
+          "method": "document-hash",
+          "target": 4
+        },
+        "b3": {
+          "method": "document-hash",
+          "target": 5
+        }
+      }
+    },
+    {
+      "name": "a-container-hash-recorded-twice-still-commits-to-its-one-unclaimed-block",
+      "note": "SPEC.md §9.2 tier 0 (v1.11): two identical lists `P` and `Q`, so the container hash was recorded by two stays. `P` keeps its marker and claims the first copy; `Q`'s markers are gone, and exactly one unclaimed block still has that hash, so tier 0 commits `Q` to it and its items map by ordinal. Tier 0 has no historical uniqueness: §9.1 tier 2's rule would refuse the hash, and at the quote tier the verbatim copy and a near twin below it (`nodes`) fail the margin, detaching all three items.",
+      "op": "resolve",
+      "before": "- Deploy the alpha service <!-- stay:a1 subhash=sha256:9ef321d58d55 -->\n- Verify the alpha service <!-- stay:a2 subhash=sha256:059374b21299 -->\n- Retire the alpha node <!-- stay:a3 subhash=sha256:a564566b8062 -->\n<!-- stay:P hash=sha256:2ac6f649c3dc -->\n\nA separating paragraph.\n<!-- stay:s hash=sha256:0ab44bd5ad3a -->\n\n- Deploy the alpha service <!-- stay:b1 subhash=sha256:9ef321d58d55 -->\n- Verify the alpha service <!-- stay:b2 subhash=sha256:059374b21299 -->\n- Retire the alpha node <!-- stay:b3 subhash=sha256:a564566b8062 -->\n<!-- stay:Q hash=sha256:2ac6f649c3dc -->\n",
+      "after": "- Deploy the alpha service\n- Verify the alpha service\n- Retire the alpha node\n<!-- stay:P hash=sha256:2ac6f649c3dc -->\n\nA separating paragraph.\n\n- Deploy the alpha service\n- Verify the alpha service\n- Retire the alpha node\n\nAnother paragraph.\n\n- Deploy the alpha service\n- Verify the alpha service\n- Retire the alpha nodes\n",
+      "expected": {
+        "a1": {
+          "method": "parent-hash",
+          "target": 0
+        },
+        "a2": {
+          "method": "parent-hash",
+          "target": 1
+        },
+        "a3": {
+          "method": "parent-hash",
+          "target": 2
+        },
+        "b1": {
+          "method": "parent-hash",
+          "target": 3
+        },
+        "b2": {
+          "method": "parent-hash",
+          "target": 4
+        },
+        "b3": {
+          "method": "parent-hash",
+          "target": 5
+        }
+      }
+    },
+    {
+      "name": "a-claimed-container-is-not-a-rival-at-the-quote-tier",
+      "note": "SPEC.md §9.2 tier 0 (v1.11): `P` keeps its marker and claims its list. `Q`, a near twin of it, loses every marker and its last item is reworded, so `Q` reaches the quote tier. A claimed block leaves tier 0's pool, so `Q`'s edited list is the only close candidate and commits; its two unchanged items attach by child hash and the edited one by child quote. Kept as a rival, as §9.1 tier 3 keeps claimed blocks, `P`'s list holds the margin under 0.05 and `Q` and all three items detach.",
+      "op": "resolve",
+      "before": "- Deploy the alpha service <!-- stay:a1 subhash=sha256:9ef321d58d55 -->\n- Verify the alpha service <!-- stay:a2 subhash=sha256:059374b21299 -->\n- Retire the alpha node <!-- stay:a3 subhash=sha256:a564566b8062 -->\n<!-- stay:P hash=sha256:2ac6f649c3dc -->\n\nA separating paragraph.\n<!-- stay:s hash=sha256:0ab44bd5ad3a -->\n\n- Deploy the alpha service <!-- stay:b1 subhash=sha256:9ef321d58d55 -->\n- Verify the alpha service <!-- stay:b2 subhash=sha256:059374b21299 -->\n- Retire the alpha node now <!-- stay:b3 subhash=sha256:6ddf32d7624e -->\n<!-- stay:Q hash=sha256:b8020300cf72 -->\n",
+      "after": "- Deploy the alpha service\n- Verify the alpha service\n- Retire the alpha node\n<!-- stay:P hash=sha256:2ac6f649c3dc -->\n\nA separating paragraph.\n\n- Deploy the alpha service\n- Verify the alpha service\n- Retire the alpha node today\n",
+      "expected": {
+        "a1": {
+          "method": "parent-hash",
+          "target": 0
+        },
+        "a2": {
+          "method": "parent-hash",
+          "target": 1
+        },
+        "a3": {
+          "method": "parent-hash",
+          "target": 2
+        },
+        "b1": {
+          "method": "hash",
+          "target": 3
+        },
+        "b2": {
+          "method": "hash",
+          "target": 4
+        },
+        "b3": {
+          "method": "quote",
+          "target": 5
+        }
+      }
+    },
+    {
+      "name": "two-containers-merged-into-one-block-both-detach",
+      "note": "SPEC.md §9.2 tier 0 (v1.11): two lists `P` and `Q` are merged into one and every marker is gone. Both containers select the merged list at the quote tier, and tier 0 has no merge exemption, so the block goes to neither and every item detaches. §9.1's exemption would commit both, since their quotes occupy disjoint places in the merged body, and each item would then attach by child hash.",
+      "op": "resolve",
+      "before": "- Deploy the alpha service <!-- stay:a1 subhash=sha256:9ef321d58d55 -->\n- Verify the alpha service <!-- stay:a2 subhash=sha256:059374b21299 -->\n- Retire the alpha node <!-- stay:a3 subhash=sha256:a564566b8062 -->\n<!-- stay:P hash=sha256:2ac6f649c3dc -->\n\nA separating paragraph.\n<!-- stay:s hash=sha256:0ab44bd5ad3a -->\n\n- Book the venue for March <!-- stay:b1 subhash=sha256:47740aa7b2d1 -->\n- Send the invitations out <!-- stay:b2 subhash=sha256:5a1bbf4a0a5b -->\n- Order catering for forty <!-- stay:b3 subhash=sha256:8b28e6dd66c6 -->\n<!-- stay:Q hash=sha256:90ff28acbe31 -->\n",
+      "after": "- Deploy the alpha service\n- Verify the alpha service\n- Retire the alpha node\n- Book the venue for March\n- Send the invitations out\n- Order catering for forty\n\nA separating paragraph.\n",
+      "expected": {
+        "a1": {
+          "method": "detached",
+          "target": null
+        },
+        "a2": {
+          "method": "detached",
+          "target": null
+        },
+        "a3": {
+          "method": "detached",
+          "target": null
+        },
+        "b1": {
+          "method": "detached",
+          "target": null
+        },
+        "b2": {
+          "method": "detached",
+          "target": null
+        },
+        "b3": {
+          "method": "detached",
+          "target": null
+        }
+      }
+    },
+    {
+      "name": "container-context-is-read-among-the-unclaimed-blocks",
+      "note": "SPEC.md §9.2 tier 0 (v1.11): `P`'s stored prefix is the intro paragraph above it. After the edit a table whose own marker survives (`Q`, claimed) sits between the intro and `P`'s reworded list, and a slightly more reworded copy sits further down. Tier 0 scores the unclaimed blocks as if the claimed ones were gone, so the intro is the edited list's neighbour, its prefix bonus opens the margin (about 0.058), and the list commits. Scored against physical neighbours, as §9.1 tier 3 does, the table is the neighbour, the margin is about 0.037, and `P` and its items detach.",
+      "op": "resolve",
+      "before": "| Step | Owner |\n|---|---|\n| Plan | Ana<!-- stay:t1 subhash=sha256:73a976d142b8 --> |\n| Ship | Ben<!-- stay:t2 subhash=sha256:fc1e38407291 --> |\n<!-- stay:Q hash=sha256:7cc6a36eeb99 -->\n\nThe rollout plan for the quarter is below.\n<!-- stay:i hash=sha256:cef04c0c8d9b -->\n\n- Deploy the alpha service <!-- stay:a1 subhash=sha256:9ef321d58d55 -->\n- Verify the alpha service <!-- stay:a2 subhash=sha256:059374b21299 -->\n- Retire the alpha node <!-- stay:a3 subhash=sha256:a564566b8062 -->\n<!-- stay:P hash=sha256:2ac6f649c3dc -->\n",
+      "after": "The rollout plan for the quarter is below.\n\n| Step | Owner |\n|---|---|\n| Plan | Ana |\n| Ship | Ben |\n<!-- stay:Q hash=sha256:7cc6a36eeb99 -->\n\n- Deploy the alpha service\n- Verify the alpha service\n- Retire the alpha node today\n\nAn unrelated paragraph.\n\n- Deploy the alpha service\n- Verify the alpha service\n- Retire the alpha node at once now\n",
+      "expected": {
+        "a1": {
+          "method": "hash",
+          "target": 2
+        },
+        "a2": {
+          "method": "hash",
+          "target": 3
+        },
+        "a3": {
+          "method": "quote",
+          "target": 4
+        },
+        "t1": {
+          "method": "parent-hash",
+          "target": 0
+        },
+        "t2": {
+          "method": "parent-hash",
+          "target": 1
+        }
+      }
+    }
+  ]
+}

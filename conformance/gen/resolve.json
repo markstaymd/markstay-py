@@ -41,7 +41,7 @@
       }
     },
     {
-      "name": "deleted-block-detaches-below-threshold",
+      "name": "deleted-block-detaches-when-its-dissimilar-survivor-is-claimed",
       "before": "The order pipeline ingests partner messages.\n<!-- stay:keep -->\n\nInvalid payloads route to a dead-letter queue.\n<!-- stay:gone -->\n",
       "after": "The order pipeline ingests partner messages.\n",
       "threshold": 0.5,
@@ -55,12 +55,12 @@
         "gone": {
           "method": "detached",
           "target": null,
-          "score": 0.3111111111111111
+          "score": 0.0
         }
       }
     },
     {
-      "name": "deleted-block-quote-attaches-to-similar-survivor",
+      "name": "deleted-block-detaches-when-its-similar-survivor-is-claimed",
       "before": "First paragraph here.\n<!-- stay:p1 -->\n\nSecond paragraph here.\n<!-- stay:p2 -->\n",
       "after": "First paragraph here.\n",
       "threshold": 0.5,
@@ -72,9 +72,9 @@
           "score": 1.0
         },
         "p2": {
-          "method": "quote",
-          "target": 0,
-          "score": 0.7906976744186046
+          "method": "detached",
+          "target": null,
+          "score": 0.0
         }
       }
     },

@@ -28,6 +28,7 @@ from .lint import (
     code_lines,
     fence_state,
     find_markers,
+    frontmatter_write_refusal,
     parse_document,
     rewrite_markers,
     segment_blank_line,
@@ -72,6 +73,14 @@ class StampResult:
     # with nothing to address, and the whole error direction of §3.4 rests on a
     # refusal being visible and countable.
     refused_carriers: list[dict] = field(default_factory=list)
+    # SPEC.md §5.3 (v1.11): the leading frontmatter-shaped span this pass declined
+    # to write into, as ``{"start": 1, "end": n}``, or ``None``. Set only when
+    # the span withheld a stay that would otherwise have been minted. It is a
+    # third kind of refusal because neither of the others fits: the rest of the
+    # document is stamped (so ``refused`` stays ``None``) and the span is not a
+    # §3.4 child carrier. Like those, it exists so the refusal is countable
+    # rather than silent.
+    refused_frontmatter: dict | None = None
 
 
 @dataclass
@@ -1519,6 +1528,11 @@ def stamp(
 
     original_norm = md.replace("\r\n", "\n").replace("\r", "\n")
     norm = original_norm
+    # SPEC.md §5.3 (v1.11): lines 1 to ``frontmatter_end`` are YAML to a
+    # frontmatter reader even though §5.3 recognition rejected them, so nothing
+    # is inserted there. Decided on the source as it arrived; the check after the
+    # proposal is built holds any row preparation below to the same span.
+    frontmatter_end = frontmatter_write_refusal(original_norm)
     snapshot = _WriteSnapshot(norm, mode) if child_blocks else None
     if child_blocks:
         prepared, drifted, _declined = _prepare_row_containers(norm, mode, syntax, snapshot)
@@ -1579,6 +1593,7 @@ def stamp(
                     children.append(
                         {
                             "content": child.content,
+                            "line": child.line,
                             "marker_line0": child.marker_line - 1,
                             "has_id": any(
                                 mk.id and not mk.malformed for mk in child.markers
@@ -1624,6 +1639,11 @@ def stamp(
     refused_carriers: list[dict] = snapshot.refusals(norm) if snapshot else []
     expected_children: list[tuple[str, str]] = []
     expected_parents: list[str] = []
+    frontmatter_withheld = False
+
+    def in_frontmatter_span(line: int) -> bool:
+        return frontmatter_end is not None and line <= frontmatter_end
+
     for blk in needs_stamp:
         for child in blk["children"]:
             if child["has_id"] or (child["marker_line0"] + 1) in code:
@@ -1632,6 +1652,13 @@ def stamp(
                 # A list paragraph and a nested row can nominate the same source
                 # line. The row carrier is inside its last cell; appending the list
                 # marker after the closing pipe would invalidate the table.
+                continue
+            if in_frontmatter_span(child["line"]) or in_frontmatter_span(
+                child["marker_line0"] + 1
+            ):
+                # SPEC.md §5.3: a child that starts in the span, or whose marker
+                # would land there, is withheld like the container around it.
+                frontmatter_withheld = True
                 continue
             # SPEC.md §3.4: the carrier text and the marker's own bytes can each
             # capture the marker at these two positions, and a writer that hits
@@ -1683,6 +1710,13 @@ def stamp(
             expected_children.append((new, child["kind"]))
         if blk["has_id"] or blk["in_fence"]:
             continue
+        if in_frontmatter_span(blk["first_line0"] + 1):
+            # SPEC.md §5.3: a block that starts in the span gets no minted stay.
+            # Its last line may lie past the closer (a §5.1 chunk that runs on
+            # into the body), and the whole block is withheld anyway: a marker
+            # after it would bind to a block whose body is half YAML.
+            frontmatter_withheld = True
+            continue
         new = next_id()
         hex_ = body_hash(blk["content"], hash_length) if hash else None
         carrier_line0 = (
@@ -1711,13 +1745,20 @@ def stamp(
         key=lambda item: (item["line"], item["kind"]),
     )
 
+    frontmatter_report = (
+        {"start": 1, "end": frontmatter_end} if frontmatter_withheld else None
+    )
+
     if not insert_after and not append_inline and not row_inline:
         # Nothing was minted, so nothing justifies the provisional relocation a
         # §5.6 preparation may have made: the document goes back as it arrived,
         # line endings aside. Reachable only through §3.4, since a container is
         # prepared exactly when it has a row to stamp.
         return StampResult(
-            text=original_norm, minted=[], refused_carriers=original_refusals
+            text=original_norm,
+            minted=[],
+            refused_carriers=original_refusals,
+            refused_frontmatter=frontmatter_report,
         )
 
     out: list[str] = []
@@ -1730,6 +1771,7 @@ def stamp(
                 minted=[],
                 refused="no-row-carrier",
                 refused_carriers=original_refusals,
+                refused_frontmatter=frontmatter_report,
             )
             line = line[:position] + row_inline[i] + line[position:]
         if i in append_inline:
@@ -1741,6 +1783,22 @@ def stamp(
         if i in insert_after:
             out.append(insert_after[i])
     proposal = "\n".join(out)
+
+    # SPEC.md §5.3: the span leaves byte for byte. The loop above inserts nothing
+    # there, so this holds by construction unless a §5.6 row preparation moved a
+    # marker inside it, which only a table inside YAML can provoke. Refuse the
+    # whole write then rather than reason about which move was safe.
+    if frontmatter_end is not None and (
+        proposal.split("\n")[:frontmatter_end]
+        != original_norm.split("\n")[:frontmatter_end]
+    ):
+        return StampResult(
+            text=md,
+            minted=[],
+            refused="frontmatter-span",
+            refused_carriers=original_refusals,
+            refused_frontmatter={"start": 1, "end": frontmatter_end},
+        )
 
     # Row writes and any provisional container relocation commit only after the
     # complete proposed document passes the selected segmenter and §5.6 scan.
@@ -1764,6 +1822,7 @@ def stamp(
                     minted=[],
                     refused="child-not-addressable",
                     refused_carriers=original_refusals,
+                    refused_frontmatter=frontmatter_report,
                 )
         for parent_id in expected_parents:
             hits = [
@@ -1778,6 +1837,7 @@ def stamp(
                     minted=[],
                     refused="parent-not-addressable",
                     refused_carriers=original_refusals,
+                    refused_frontmatter=frontmatter_report,
                 )
             block, marker = hits[0]
             if (
@@ -1789,9 +1849,13 @@ def stamp(
                     minted=[],
                     refused="proposal-drifts",
                     refused_carriers=original_refusals,
+                    refused_frontmatter=frontmatter_report,
                 )
     return StampResult(
-        text=proposal, minted=minted, refused_carriers=returned_refusals
+        text=proposal,
+        minted=minted,
+        refused_carriers=returned_refusals,
+        refused_frontmatter=frontmatter_report,
     )
 
 

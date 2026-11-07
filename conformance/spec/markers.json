@@ -240,6 +240,222 @@
           "malformed": false
         }
       ]
+    },
+    {
+      "name": "an-html-candidate-rejected-in-its-quoted-value-keeps-a-valid-inner-and-the-trailing-marker",
+      "note": "SPEC.md §4: every opener is an independent candidate. `bad` opens a quoted value that is still open at the first `-->`, so it is rejected; `recovered` begins inside that value and is a complete marker of its own, and `last` follows. A scanner that memoizes the attribute grammar by position alone carries `bad`'s rejection, taken in the quoted-value state, onto `recovered`'s id characters and loses it. The memo must key the grammar state as well as the position.",
+      "text": "Para.\n<!--stay:bad a=\"<!--stay:recovered -->\n<!-- stay:last hash=sha256:abcd -->",
+      "markers": [
+        {
+          "id": "recovered",
+          "hash": null,
+          "raw": "<!--stay:recovered -->",
+          "syntax": "html",
+          "line": 2,
+          "malformed": false
+        },
+        {
+          "id": "last",
+          "hash": "abcd",
+          "raw": "<!-- stay:last hash=sha256:abcd -->",
+          "syntax": "html",
+          "line": 3,
+          "malformed": false
+        }
+      ]
+    },
+    {
+      "name": "an-mdx-candidate-rejected-in-its-quoted-value-keeps-a-valid-inner-and-the-trailing-marker",
+      "note": "SPEC.md §4, the MDX host: `bad`'s quoted value is open at the first `*/`, so it is rejected, while `recovered`, which begins inside it, is complete, and `last` follows. The memo-key fault the HTML vector above catches, in the other host's scanner.",
+      "text": "Para.\n{/*stay:bad a=\"{/*stay:recovered */}\n{/* stay:last hash=sha256:abcd */}",
+      "markers": [
+        {
+          "id": "recovered",
+          "hash": null,
+          "raw": "{/*stay:recovered */}",
+          "syntax": "mdx",
+          "line": 2,
+          "malformed": false
+        },
+        {
+          "id": "last",
+          "hash": "abcd",
+          "raw": "{/* stay:last hash=sha256:abcd */}",
+          "syntax": "mdx",
+          "line": 3,
+          "malformed": false
+        }
+      ]
+    },
+    {
+      "name": "a-valid-html-candidate-keeps-the-diagnostic-of-a-malformed-inner-and-the-trailing-marker",
+      "note": "SPEC.md §4: `outer` is valid, its bare value running through `<!--stay:hash=abc`, and the inner candidate, which starts inside that value, has a key where its id belongs: not a marker, but the one invalid shape §4 still requires a diagnostic for, so it is reported malformed. The two share the first `-->`. A memo keyed on position alone hands `outer`'s accepting verdict to the inner candidate. The full parse that follows still refuses it as a marker, but a scanner that decides the diagnostic from the validator's verdict, before that parse, has already ruled it out, and the diagnostic is lost. This is the false-accept direction of the memo fault, and the only place it shows.",
+      "text": "Para.\n<!--stay:outer a=<!--stay:hash=abc -->\n<!-- stay:last hash=sha256:abcd -->",
+      "markers": [
+        {
+          "id": "outer",
+          "hash": null,
+          "raw": "<!--stay:outer a=<!--stay:hash=abc -->",
+          "syntax": "html",
+          "line": 2,
+          "malformed": false
+        },
+        {
+          "id": null,
+          "hash": null,
+          "raw": "<!--stay:hash=abc -->",
+          "syntax": "html",
+          "line": 2,
+          "malformed": true
+        },
+        {
+          "id": "last",
+          "hash": "abcd",
+          "raw": "<!-- stay:last hash=sha256:abcd -->",
+          "syntax": "html",
+          "line": 3,
+          "malformed": false
+        }
+      ]
+    },
+    {
+      "name": "a-valid-mdx-candidate-keeps-the-diagnostic-of-a-malformed-inner-and-the-trailing-marker",
+      "note": "SPEC.md §4, the MDX host: the vector above, `outer` valid over a key-first inner candidate that must still be reported malformed.",
+      "text": "Para.\n{/*stay:outer a={/*stay:hash=abc */}\n{/* stay:last hash=sha256:abcd */}",
+      "markers": [
+        {
+          "id": "outer",
+          "hash": null,
+          "raw": "{/*stay:outer a={/*stay:hash=abc */}",
+          "syntax": "mdx",
+          "line": 2,
+          "malformed": false
+        },
+        {
+          "id": null,
+          "hash": null,
+          "raw": "{/*stay:hash=abc */}",
+          "syntax": "mdx",
+          "line": 2,
+          "malformed": true
+        },
+        {
+          "id": "last",
+          "hash": "abcd",
+          "raw": "{/* stay:last hash=sha256:abcd */}",
+          "syntax": "mdx",
+          "line": 3,
+          "malformed": false
+        }
+      ]
+    },
+    {
+      "name": "a-malformed-html-candidate-does-not-consume-a-valid-inner-or-the-trailing-marker",
+      "note": "SPEC.md §4: the outer candidate puts a key where its id belongs, so it is not a marker but is reported malformed, the one invalid shape §4 still requires a diagnostic for. It is still only a candidate: `inner`, which opens inside it and shares its `-->`, is a complete marker and is reported too, and `last` follows. A scanner that resumes after the close of anything it emitted, the diagnostic included, loses `inner`. `a-rejected-mdx-opener-does-not-consume-a-later-one` pins the rejected case, which emits nothing; this pins the case that emits a record.",
+      "text": "Para.\n<!--stay:hash=abc a=<!--stay:inner -->\n<!-- stay:last hash=sha256:abcd -->",
+      "markers": [
+        {
+          "id": null,
+          "hash": null,
+          "raw": "<!--stay:hash=abc a=<!--stay:inner -->",
+          "syntax": "html",
+          "line": 2,
+          "malformed": true
+        },
+        {
+          "id": "inner",
+          "hash": null,
+          "raw": "<!--stay:inner -->",
+          "syntax": "html",
+          "line": 2,
+          "malformed": false
+        },
+        {
+          "id": "last",
+          "hash": "abcd",
+          "raw": "<!-- stay:last hash=sha256:abcd -->",
+          "syntax": "html",
+          "line": 3,
+          "malformed": false
+        }
+      ]
+    },
+    {
+      "name": "a-malformed-mdx-candidate-does-not-consume-a-valid-inner-or-the-trailing-marker",
+      "note": "SPEC.md §4, the MDX host: the vector above, a malformed outer diagnostic that must not consume the complete `inner` sharing its `*/}`.",
+      "text": "Para.\n{/*stay:hash=abc a={/*stay:inner */}\n{/* stay:last hash=sha256:abcd */}",
+      "markers": [
+        {
+          "id": null,
+          "hash": null,
+          "raw": "{/*stay:hash=abc a={/*stay:inner */}",
+          "syntax": "mdx",
+          "line": 2,
+          "malformed": true
+        },
+        {
+          "id": "inner",
+          "hash": null,
+          "raw": "{/*stay:inner */}",
+          "syntax": "mdx",
+          "line": 2,
+          "malformed": false
+        },
+        {
+          "id": "last",
+          "hash": "abcd",
+          "raw": "{/* stay:last hash=sha256:abcd */}",
+          "syntax": "mdx",
+          "line": 3,
+          "malformed": false
+        }
+      ]
+    },
+    {
+      "name": "an-html-candidate-over-an-mdx-marker-is-validated-against-its-own-close",
+      "note": "SPEC.md §4: each host reads to its own close. `h` reads `{/*stay:m` and `b=1*/}` as bare values, then meets `\"x` after a space and is rejected at `-->`; `m` is a complete MDX marker ending at its own `*/}`. The two candidates reach the same positions in the same grammar states, with different closes. A scanner that shares one grammar memo between the hosts without the close in its key replays `h`'s rejection onto `m` and loses it.",
+      "text": "Para.\n<!--stay:h a={/*stay:m b=1*/} \"x -->\n<!-- stay:last hash=sha256:abcd -->",
+      "markers": [
+        {
+          "id": "m",
+          "hash": null,
+          "raw": "{/*stay:m b=1*/}",
+          "syntax": "mdx",
+          "line": 2,
+          "malformed": false
+        },
+        {
+          "id": "last",
+          "hash": "abcd",
+          "raw": "<!-- stay:last hash=sha256:abcd -->",
+          "syntax": "html",
+          "line": 3,
+          "malformed": false
+        }
+      ]
+    },
+    {
+      "name": "an-mdx-candidate-over-an-html-marker-is-validated-against-its-own-close",
+      "note": "SPEC.md §4: the vector above with the hosts swapped. `m` is read first and rejected at `*/}`; `h` is a complete HTML marker ending at its own `-->`, over positions `m` already visited in the same states.",
+      "text": "Para.\n{/*stay:m a=<!--stay:h b=1--> \"x */}\n{/* stay:last hash=sha256:abcd */}",
+      "markers": [
+        {
+          "id": "h",
+          "hash": null,
+          "raw": "<!--stay:h b=1-->",
+          "syntax": "html",
+          "line": 2,
+          "malformed": false
+        },
+        {
+          "id": "last",
+          "hash": "abcd",
+          "raw": "{/* stay:last hash=sha256:abcd */}",
+          "syntax": "mdx",
+          "line": 3,
+          "malformed": false
+        }
+      ]
     }
   ]
 }

@@ -396,6 +396,616 @@
           "score": 0.7521367521367521
         }
       }
+    },
+    {
+      "name": "marker-duplicated-verbatim-paste-detaches-among-its-carriers",
+      "note": "SPEC.md §9.1 tier 1 (v1.11): an id whose marker sits on two or more blocks resolves among those carriers only. `r`'s block was pasted above itself with its marker, so both carriers hash to the stored hash, the hash rule finds two and decides nothing, and §9's commit rule over the two carriers sees 1.0 against 1.0 and refuses on the margin. The v1.10 ladder took the first carrier in document order (marker, target 0). `lint_diff` reports DUPLICATED_ID here whichever way resolution goes.",
+      "before": "The retry budget is per partner and resets nightly.\n<!-- stay:r -->\n\nInvalid payloads route to a dead-letter queue for replay.\n<!-- stay:d -->\n",
+      "after": "The retry budget is per partner and resets nightly.\n<!-- stay:r -->\n\nThe retry budget is per partner and resets nightly.\n<!-- stay:r -->\n\nInvalid payloads route to a dead-letter queue for replay.\n<!-- stay:d -->\n",
+      "threshold": 0.5,
+      "margin": 0.05,
+      "resolutions": {
+        "r": {
+          "method": "detached",
+          "target": null,
+          "score": 1.0
+        },
+        "d": {
+          "method": "marker",
+          "target": 2,
+          "score": 1.0
+        }
+      }
+    },
+    {
+      "name": "marker-duplicated-edited-copy-leaves-the-id-on-the-verbatim-original",
+      "note": "SPEC.md §9.1 tier 1 (v1.11): the copy pasted above was edited, the original was not, so exactly one carrier's body hash equals the stored hash and the id commits to it (method `marker`, score 1.0, target 1). First-carrier-wins gives target 0, the edited copy.",
+      "before": "The retry budget is per partner and resets nightly.\n<!-- stay:r -->\n\nInvalid payloads route to a dead-letter queue for replay.\n<!-- stay:d -->\n",
+      "after": "The retry budget is per-partner and resets nightly.\n<!-- stay:r -->\n\nThe retry budget is per partner and resets nightly.\n<!-- stay:r -->\n\nInvalid payloads route to a dead-letter queue for replay.\n<!-- stay:d -->\n",
+      "threshold": 0.5,
+      "margin": 0.05,
+      "resolutions": {
+        "r": {
+          "method": "marker",
+          "target": 1,
+          "score": 1.0
+        },
+        "d": {
+          "method": "marker",
+          "target": 2,
+          "score": 1.0
+        }
+      }
+    },
+    {
+      "name": "marker-duplicated-edited-original-gives-the-id-to-the-verbatim-copy",
+      "note": "SPEC.md §9.1 tier 1 (v1.11), pinned as a known wrong answer. The original stayed in place and was edited after a verbatim copy was pasted at the end, so the only carrier whose hash equals the stored hash is the copy, and the id goes to it (target 2). No content rule can tell this from the edited-copy case, which has the same carriers in a different history; §9.1 says so and `lint_diff` reports DUPLICATED_ID either way. The v1.10 ladder gave target 0, which here happened to be the original.",
+      "before": "The retry budget is per partner and resets nightly.\n<!-- stay:r -->\n\nInvalid payloads route to a dead-letter queue for replay.\n<!-- stay:d -->\n",
+      "after": "The retry budget is per-partner and resets nightly.\n<!-- stay:r -->\n\nInvalid payloads route to a dead-letter queue for replay.\n<!-- stay:d -->\n\nThe retry budget is per partner and resets nightly.\n<!-- stay:r -->\n",
+      "threshold": 0.5,
+      "margin": 0.05,
+      "resolutions": {
+        "r": {
+          "method": "marker",
+          "target": 2,
+          "score": 1.0
+        },
+        "d": {
+          "method": "marker",
+          "target": 1,
+          "score": 1.0
+        }
+      }
+    },
+    {
+      "name": "marker-duplicated-both-carriers-drifted-quote-chooses-among-carriers-only",
+      "note": "SPEC.md §9.1 tier 1 (v1.11): neither carrier still hashes to the stored hash, so §9's commit rule runs with the carriers as the only candidates. The lightly edited carrier (target 1) clears the far one by the margin and commits, reported as method `marker` with its quote score, under 1.0. An unmarked verbatim copy of the original sits at target 2: it is not a carrier, so neither its hash nor its 1.0 quote score is considered, as a target or as the runner-up. Treating the duplicated marker as absent would fall through to the HASH tier and commit to that copy; first-carrier-wins gives target 0 at 1.0.",
+      "before": "The retry budget is per partner and resets nightly.\n<!-- stay:r -->\n\nInvalid payloads route to a dead-letter queue for replay.\n<!-- stay:d -->\n",
+      "after": "The retry budget, which used to be global, is now set per partner.\n<!-- stay:r -->\n\nThe retry budget is per partner and resets every night.\n<!-- stay:r -->\n\nThe retry budget is per partner and resets nightly.\n\nInvalid payloads route to a dead-letter queue for replay.\n<!-- stay:d -->\n",
+      "threshold": 0.5,
+      "margin": 0.05,
+      "resolutions": {
+        "r": {
+          "method": "marker",
+          "target": 1,
+          "score": 0.9370283018867924
+        },
+        "d": {
+          "method": "marker",
+          "target": 3,
+          "score": 1.0
+        }
+      }
+    },
+    {
+      "name": "hash-tier-ignores-a-block-claimed-by-a-marker",
+      "note": "SPEC.md §9.1 tier 2 (v1.11): a block claimed at a stronger tier has left the pool. `a`'s block was rewritten into `b`'s exact text and kept `a`'s marker; `b` lost its marker and survived verbatim. Two blocks now carry `b`'s hash, but one is claimed by `a` at tier 1, so exactly one unclaimed block has it and `b` commits there (hash, target 1). Counting the claimed block makes the hit ambiguous, and tier 3 then detaches `b` on the margin, which is also what the v1.10 ladder did.",
+      "before": "Alpha block text one.\n<!-- stay:a -->\n\nBravo block text two.\n<!-- stay:b -->\n",
+      "after": "Bravo block text two.\n<!-- stay:a -->\n\nBravo block text two.\n",
+      "threshold": 0.5,
+      "margin": 0.05,
+      "resolutions": {
+        "a": {
+          "method": "marker",
+          "target": 0,
+          "score": 1.0
+        },
+        "b": {
+          "method": "hash",
+          "target": 1,
+          "score": 1.0
+        }
+      }
+    },
+    {
+      "name": "hash-tier-needs-the-hash-recorded-by-one-stay",
+      "note": "SPEC.md §9.1 tier 2 (v1.11): the stored hash must have been recorded by exactly one stay. One block carried both `a` and `b`, so both recorded one hash; with the markers stripped the block survives verbatim and is the only one with that hash, which the v1.10 ladder committed both ids to by HASH. Tier 3 then finds both selecting that block with identical quotes, which one copy of the text cannot hold disjointly, so both detach (`contested`, each reporting its own score). This is the cost finding A in eval/attachment/FINDINGS.md describes: two anchors on one block cannot be told from two twins, and it fails closed.",
+      "before": "Shared block text for two stays.\n<!-- stay:a -->\n<!-- stay:b -->\n\nOther block text.\n<!-- stay:c -->\n",
+      "after": "Shared block text for two stays.\n\nOther block text.\n<!-- stay:c -->\n",
+      "threshold": 0.5,
+      "margin": 0.05,
+      "resolutions": {
+        "c": {
+          "method": "marker",
+          "target": 1,
+          "score": 1.0
+        },
+        "a": {
+          "method": "detached",
+          "target": null,
+          "score": 1.0
+        },
+        "b": {
+          "method": "detached",
+          "target": null,
+          "score": 1.0
+        }
+      }
+    },
+    {
+      "name": "quote-claimed-rival-holds-the-margin",
+      "note": "SPEC.md §9.1 tier 3 (v1.11): the target is the best unclaimed block, and the runner-up is the best other block, claimed or not. `a` keeps its marker, so block 0 is claimed. `b` lost its marker and was rewritten; its best unclaimed block is its rewrite (target 1, 0.85), but claimed block 0 scores higher (0.951), so the margin fails and `b` detaches as ambiguous. Removing claimed blocks from the ranking commits `b` to block 1; the v1.10 ladder committed it to block 0, binding two ids to `a`'s block.",
+      "before": "The ingest stage retries failed operations three times before giving up.\n<!-- stay:a -->\n\nThe ingest stage retries failed operations four times before giving up.\n<!-- stay:b -->\n",
+      "after": "The ingest stage retries failed operations three times before giving up.\n<!-- stay:a -->\n\nIngest retries failed operations four times before it gives up and alerts.\n",
+      "threshold": 0.5,
+      "margin": 0.05,
+      "resolutions": {
+        "a": {
+          "method": "marker",
+          "target": 0,
+          "score": 1.0
+        },
+        "b": {
+          "method": "detached",
+          "target": null,
+          "score": 0.8500000000000001
+        }
+      }
+    },
+    {
+      "name": "quote-withdrawn-statement-detaches-against-its-claimed-near-twin",
+      "note": "SPEC.md §9.1 tier 3 (v1.11), the smallest case of eval/attachment/perturb.py's `replace_related`: `b`'s paragraph was replaced by a same-topic statement withdrawing it, keeping half its words. Every other block survives verbatim and is claimed by HASH, including `b`'s near-twin `a`. `b`'s best unclaimed block is the withdrawal (0.70) and claimed `a` is the runner-up (0.98), so `b` detaches as ambiguous. With claimed blocks removed from the ranking it commits to the withdrawal, a false attachment; the v1.10 ladder committed it to `a`'s block.",
+      "before": "Retry policy overview.\n<!-- stay:i -->\n\nThe ingest stage retries failed operations three times before giving up.\n<!-- stay:a -->\n\nThe ingest stage retries failed operations four times before giving up.\n<!-- stay:b -->\n\nEscalation contacts are listed below.\n<!-- stay:t -->\n",
+      "after": "Retry policy overview.\n\nThe ingest stage retries failed operations three times before giving up.\n\nThe ingest stage retries failed is no longer true and has been withdrawn entirely.\n\nEscalation contacts are listed below.\n",
+      "threshold": 0.5,
+      "margin": 0.05,
+      "resolutions": {
+        "i": {
+          "method": "hash",
+          "target": 0,
+          "score": 1.0
+        },
+        "a": {
+          "method": "hash",
+          "target": 1,
+          "score": 1.0
+        },
+        "t": {
+          "method": "hash",
+          "target": 3,
+          "score": 1.0
+        },
+        "b": {
+          "method": "detached",
+          "target": null,
+          "score": 0.7013071895424836
+        }
+      }
+    },
+    {
+      "name": "quote-every-block-claimed-detaches-with-score-zero",
+      "note": "SPEC.md §9.1 tier 3 (v1.11): with no unclaimed block the stay is DETACHED with score 0. `b` was deleted and its near-twin keeps `a`'s marker, so the only block is claimed. The claimed block scores 0.951 against `b`'s quote; reporting that would make a detached stay look like a near miss. The v1.10 ladder committed `b` to `a`'s block.",
+      "before": "The ingest stage retries failed operations three times before giving up.\n<!-- stay:a -->\n\nThe ingest stage retries failed operations four times before giving up.\n<!-- stay:b -->\n",
+      "after": "The ingest stage retries failed operations three times before giving up.\n<!-- stay:a -->\n",
+      "threshold": 0.5,
+      "margin": 0.05,
+      "resolutions": {
+        "a": {
+          "method": "marker",
+          "target": 0,
+          "score": 1.0
+        },
+        "b": {
+          "method": "detached",
+          "target": null,
+          "score": 0.0
+        }
+      }
+    },
+    {
+      "name": "merge-clean-commits-both-stays-to-the-merged-block",
+      "note": "SPEC.md §9.1 tier 3 (v1.11): stays selecting the same target all commit if their quotes occupy disjoint places in it. Two paragraphs were joined into one block and the markers stripped; each quote is verbatim in the merged block (normalized by §9) at its own span, so both commit to block 0 by QUOTE. Without the exemption both detach as contested; committing one stay at a time claims the block for the first and leaves the second nothing.",
+      "before": "The ingest stage validates each record.\n<!-- stay:a -->\n\nThe dispatch stage batches valid records.\n<!-- stay:b -->\n\nUnrelated appendix note about billing exports.\n<!-- stay:c -->\n",
+      "after": "The ingest stage validates each record.\nThe dispatch stage batches valid records.\n\nUnrelated appendix note about billing exports.\n",
+      "threshold": 0.5,
+      "margin": 0.05,
+      "resolutions": {
+        "c": {
+          "method": "hash",
+          "target": 1,
+          "score": 1.0
+        },
+        "a": {
+          "method": "quote",
+          "target": 0,
+          "score": 0.6672413793103449
+        },
+        "b": {
+          "method": "quote",
+          "target": 0,
+          "score": 0.7221311475409836
+        }
+      }
+    },
+    {
+      "name": "merge-twins-collapsed-into-one-block-detach-as-contested",
+      "note": "SPEC.md §9.1 tier 3 (v1.11): two byte-identical blocks with their own ids were collapsed into one copy. Their hash was recorded twice, so tier 2 does not apply. At tier 3 both select block 0, and two equal quotes need two occurrences, which one copy does not have, so both detach (`contested`, each with its own score of 1.0). Plain containment hands both ids to the one block, which is the collapse exclusivity exists to stop; the v1.10 ladder committed both by HASH.",
+      "before": "Same body here.\n<!-- stay:a -->\n\nDifferent middle block.\n<!-- stay:m -->\n\nSame body here.\n<!-- stay:b -->\n",
+      "after": "Same body here.\n\nDifferent middle block.\n<!-- stay:m -->\n",
+      "threshold": 0.5,
+      "margin": 0.05,
+      "resolutions": {
+        "m": {
+          "method": "marker",
+          "target": 1,
+          "score": 1.0
+        },
+        "a": {
+          "method": "detached",
+          "target": null,
+          "score": 1.0
+        },
+        "b": {
+          "method": "detached",
+          "target": null,
+          "score": 1.0
+        }
+      }
+    },
+    {
+      "name": "merge-identical-quotes-commit-when-the-block-holds-two-copies",
+      "note": "SPEC.md §9.1 tier 3 (v1.11), the counterpart of the collapsed twins: here both copies of the twin text were joined into one block, so each of the two equal quotes has its own occurrence and both commit to block 0 by QUOTE. A rule that de-duplicates equal quotes, or that compares the quotes as a set, cannot tell this from the collapse.",
+      "before": "Same body here.\n<!-- stay:a -->\n\nDifferent middle block.\n<!-- stay:m -->\n\nSame body here.\n<!-- stay:b -->\n",
+      "after": "Same body here.\nSame body here.\n\nDifferent middle block.\n<!-- stay:m -->\n",
+      "threshold": 0.5,
+      "margin": 0.05,
+      "resolutions": {
+        "m": {
+          "method": "marker",
+          "target": 1,
+          "score": 1.0
+        },
+        "a": {
+          "method": "quote",
+          "target": 0,
+          "score": 0.7021739130434783
+        },
+        "b": {
+          "method": "quote",
+          "target": 0,
+          "score": 0.6521739130434783
+        }
+      }
+    },
+    {
+      "name": "merge-disjoint-needs-a-later-occurrence-of-the-first-quote",
+      "note": "SPEC.md §9.1's disjoint test, the greedy trap. Quotes `abcd` and `bcde` in block `abcdef abcd`: placing `abcd` at its first occurrence (offset 0) leaves no room for `bcde`, but `bcde` at 1 to 5 and `abcd` at 7 to 11 are disjoint, so both commit. A greedy first-match search in document order detaches both.",
+      "before": "abcd\n<!-- stay:a -->\n\nbcde\n<!-- stay:b -->\n",
+      "after": "abcdef abcd\n",
+      "threshold": 0.5,
+      "margin": 0.05,
+      "resolutions": {
+        "a": {
+          "method": "quote",
+          "target": 0,
+          "score": 0.5333333333333333
+        },
+        "b": {
+          "method": "quote",
+          "target": 0,
+          "score": 0.5333333333333333
+        }
+      }
+    },
+    {
+      "name": "merge-disjoint-spans-may-touch",
+      "note": "SPEC.md §9.1's disjoint test uses half-open spans: `abc` at [0, 3) and `def` at [3, 6) in `abcdef` touch without overlapping, so both commit. Closed spans would make them share offset 3 and detach both.",
+      "before": "abc\n<!-- stay:a -->\n\ndef\n<!-- stay:b -->\n",
+      "after": "abcdef\n",
+      "threshold": 0.5,
+      "margin": 0.05,
+      "resolutions": {
+        "a": {
+          "method": "quote",
+          "target": 0,
+          "score": 0.6666666666666666
+        },
+        "b": {
+          "method": "quote",
+          "target": 0,
+          "score": 0.6666666666666666
+        }
+      }
+    },
+    {
+      "name": "merge-overlapping-quotes-detach-as-contested",
+      "note": "SPEC.md §9.1's disjoint test: `abcd` and `cdef` are each verbatim in `abcdef xx` but only at overlapping spans, so the exemption fails and both detach (`contested`, 8/13 each). The ` xx` pads the block to 9 code points so the quotes' total of 8 passes the length check and the refusal comes from the placement itself: plain containment, with or without the length check, commits both.",
+      "before": "abcd\n<!-- stay:a -->\n\ncdef\n<!-- stay:b -->\n",
+      "after": "abcdef xx\n",
+      "threshold": 0.5,
+      "margin": 0.05,
+      "resolutions": {
+        "a": {
+          "method": "detached",
+          "target": null,
+          "score": 0.6153846153846154
+        },
+        "b": {
+          "method": "detached",
+          "target": null,
+          "score": 0.6153846153846154
+        }
+      }
+    },
+    {
+      "name": "merge-disjoint-counts-code-points",
+      "note": "SPEC.md §9.1's disjoint test measures offsets and lengths in code points, as §9's normalization and similarity do. Each quote carries two U+1F600 characters; the two quotes are 15 code points together and the merged block is 16, so both commit. Counting the quotes in UTF-16 code units (19) against the block in code points makes the length check refuse and detaches both.",
+      "before": "😀😀 alpha\n<!-- stay:a -->\n\n😀😀 beta\n<!-- stay:b -->\n",
+      "after": "😀😀 alpha 😀😀 beta\n",
+      "threshold": 0.5,
+      "margin": 0.05,
+      "resolutions": {
+        "a": {
+          "method": "quote",
+          "target": 0,
+          "score": 0.6666666666666666
+        },
+        "b": {
+          "method": "quote",
+          "target": 0,
+          "score": 0.6086956521739131
+        }
+      }
+    },
+    {
+      "name": "merge-exemption-holds-at-16-contenders",
+      "note": "SPEC.md §9.1: more than 16 stays selecting one target fail the merge exemption, so 16 is the most that can pass it. Sixteen blocks `a`, one block of sixteen `a`s, threshold and margin 0.05: each quote scores 2/17 with no runner-up, all sixteen select block 0, and they fit disjointly, so all commit. A cap of 15, or a strict reading of 16, detaches them.",
+      "before": "a\n<!-- stay:k01 -->\n\na\n<!-- stay:k02 -->\n\na\n<!-- stay:k03 -->\n\na\n<!-- stay:k04 -->\n\na\n<!-- stay:k05 -->\n\na\n<!-- stay:k06 -->\n\na\n<!-- stay:k07 -->\n\na\n<!-- stay:k08 -->\n\na\n<!-- stay:k09 -->\n\na\n<!-- stay:k10 -->\n\na\n<!-- stay:k11 -->\n\na\n<!-- stay:k12 -->\n\na\n<!-- stay:k13 -->\n\na\n<!-- stay:k14 -->\n\na\n<!-- stay:k15 -->\n\na\n<!-- stay:k16 -->\n",
+      "after": "aaaaaaaaaaaaaaaa\n",
+      "threshold": 0.05,
+      "margin": 0.05,
+      "resolutions": {
+        "k01": {
+          "method": "quote",
+          "target": 0,
+          "score": 0.11764705882352941
+        },
+        "k02": {
+          "method": "quote",
+          "target": 0,
+          "score": 0.11764705882352941
+        },
+        "k03": {
+          "method": "quote",
+          "target": 0,
+          "score": 0.11764705882352941
+        },
+        "k04": {
+          "method": "quote",
+          "target": 0,
+          "score": 0.11764705882352941
+        },
+        "k05": {
+          "method": "quote",
+          "target": 0,
+          "score": 0.11764705882352941
+        },
+        "k06": {
+          "method": "quote",
+          "target": 0,
+          "score": 0.11764705882352941
+        },
+        "k07": {
+          "method": "quote",
+          "target": 0,
+          "score": 0.11764705882352941
+        },
+        "k08": {
+          "method": "quote",
+          "target": 0,
+          "score": 0.11764705882352941
+        },
+        "k09": {
+          "method": "quote",
+          "target": 0,
+          "score": 0.11764705882352941
+        },
+        "k10": {
+          "method": "quote",
+          "target": 0,
+          "score": 0.11764705882352941
+        },
+        "k11": {
+          "method": "quote",
+          "target": 0,
+          "score": 0.11764705882352941
+        },
+        "k12": {
+          "method": "quote",
+          "target": 0,
+          "score": 0.11764705882352941
+        },
+        "k13": {
+          "method": "quote",
+          "target": 0,
+          "score": 0.11764705882352941
+        },
+        "k14": {
+          "method": "quote",
+          "target": 0,
+          "score": 0.11764705882352941
+        },
+        "k15": {
+          "method": "quote",
+          "target": 0,
+          "score": 0.11764705882352941
+        },
+        "k16": {
+          "method": "quote",
+          "target": 0,
+          "score": 0.11764705882352941
+        }
+      }
+    },
+    {
+      "name": "merge-exemption-fails-above-16-contenders",
+      "note": "SPEC.md §9.1: more than 16 stays selecting one target fail the merge exemption. Seventeen blocks `a`, one block of seventeen `a`s, threshold and margin 0.05: each quote scores 2/18 with no runner-up, all seventeen select block 0, and they would fit disjointly, but the cap is checked first and all seventeen detach (`contested`). The cap exists so that every implementation agrees without a search over 2^k subsets for large k, which a low caller threshold makes reachable; at §9's defaults a contender needs a quote at least a quarter of the block's length, so no more than four can reach the test.",
+      "before": "a\n<!-- stay:k01 -->\n\na\n<!-- stay:k02 -->\n\na\n<!-- stay:k03 -->\n\na\n<!-- stay:k04 -->\n\na\n<!-- stay:k05 -->\n\na\n<!-- stay:k06 -->\n\na\n<!-- stay:k07 -->\n\na\n<!-- stay:k08 -->\n\na\n<!-- stay:k09 -->\n\na\n<!-- stay:k10 -->\n\na\n<!-- stay:k11 -->\n\na\n<!-- stay:k12 -->\n\na\n<!-- stay:k13 -->\n\na\n<!-- stay:k14 -->\n\na\n<!-- stay:k15 -->\n\na\n<!-- stay:k16 -->\n\na\n<!-- stay:k17 -->\n",
+      "after": "aaaaaaaaaaaaaaaaa\n",
+      "threshold": 0.05,
+      "margin": 0.05,
+      "resolutions": {
+        "k01": {
+          "method": "detached",
+          "target": null,
+          "score": 0.1111111111111111
+        },
+        "k02": {
+          "method": "detached",
+          "target": null,
+          "score": 0.1111111111111111
+        },
+        "k03": {
+          "method": "detached",
+          "target": null,
+          "score": 0.1111111111111111
+        },
+        "k04": {
+          "method": "detached",
+          "target": null,
+          "score": 0.1111111111111111
+        },
+        "k05": {
+          "method": "detached",
+          "target": null,
+          "score": 0.1111111111111111
+        },
+        "k06": {
+          "method": "detached",
+          "target": null,
+          "score": 0.1111111111111111
+        },
+        "k07": {
+          "method": "detached",
+          "target": null,
+          "score": 0.1111111111111111
+        },
+        "k08": {
+          "method": "detached",
+          "target": null,
+          "score": 0.1111111111111111
+        },
+        "k09": {
+          "method": "detached",
+          "target": null,
+          "score": 0.1111111111111111
+        },
+        "k10": {
+          "method": "detached",
+          "target": null,
+          "score": 0.1111111111111111
+        },
+        "k11": {
+          "method": "detached",
+          "target": null,
+          "score": 0.1111111111111111
+        },
+        "k12": {
+          "method": "detached",
+          "target": null,
+          "score": 0.1111111111111111
+        },
+        "k13": {
+          "method": "detached",
+          "target": null,
+          "score": 0.1111111111111111
+        },
+        "k14": {
+          "method": "detached",
+          "target": null,
+          "score": 0.1111111111111111
+        },
+        "k15": {
+          "method": "detached",
+          "target": null,
+          "score": 0.1111111111111111
+        },
+        "k16": {
+          "method": "detached",
+          "target": null,
+          "score": 0.1111111111111111
+        },
+        "k17": {
+          "method": "detached",
+          "target": null,
+          "score": 0.1111111111111111
+        }
+      }
+    },
+    {
+      "name": "merge-with-one-surviving-marker-detaches-the-other-stay",
+      "note": "SPEC.md §9.1 (v1.11), finding B in eval/attachment/FINDINGS.md. Two paragraphs were merged and only `a`'s marker survived, so the merged block is claimed by `a` at tier 1. The merge exemption compares tier-3 contenders only, so `b` has no unclaimed target and detaches with score 0, although §5 would let the merged block carry both ids. It fails closed; the v1.10 ladder committed `b` to the merged block by QUOTE.",
+      "before": "The ingest stage validates each record before the queue accepts it.\n<!-- stay:a -->\n\nThe dispatch stage batches valid records for each downstream partner.\n<!-- stay:b -->\n\nUnrelated appendix note about billing exports.\n<!-- stay:c -->\n",
+      "after": "The ingest stage validates each record before the queue accepts it.\nThe dispatch stage batches valid records for each downstream partner.\n<!-- stay:a -->\n\nUnrelated appendix note about billing exports.\n<!-- stay:c -->\n",
+      "threshold": 0.5,
+      "margin": 0.05,
+      "resolutions": {
+        "a": {
+          "method": "marker",
+          "target": 0,
+          "score": 1.0
+        },
+        "c": {
+          "method": "marker",
+          "target": 1,
+          "score": 1.0
+        },
+        "b": {
+          "method": "detached",
+          "target": null,
+          "score": 0.0
+        }
+      }
+    },
+    {
+      "name": "repeated-id-resolves-the-last-anchor-read-at-every-tier",
+      "note": "SPEC.md §9.1 (v1.11): before tier 1 the anchors collapse to one per id, the last one read. The baseline repeats `x` (a §7 error) on two blocks with different hashes, the markers are stripped and the second block is edited. The last anchor read is the second block's, whose hash no block carries, so tier 2 does not apply and tier 3 commits `x` to the edited block by QUOTE (target 1). Trying each anchor's hash at tier 2 commits the first anchor's verbatim block instead (hash, target 0), which tier 1 and tier 3 would never have chosen for the anchor they resolve; that is what the Python reference did until the rule was written.",
+      "before": "Alpha block text.\n<!-- stay:x -->\n\nBravo block text here.\n<!-- stay:x -->\n",
+      "after": "Alpha block text.\n\nBravo block text here, edited.\n",
+      "threshold": 0.5,
+      "margin": 0.05,
+      "resolutions": {
+        "x": {
+          "method": "quote",
+          "target": 1,
+          "score": 0.8961538461538462
+        }
+      }
+    },
+    {
+      "name": "repeated-id-counts-once-toward-hash-uniqueness",
+      "note": "SPEC.md §9.1 (v1.11): tier 2's \"recorded by exactly one stay\" counts distinct ids. The baseline repeats `x` (a §7 error) on two byte-identical blocks, so one id recorded one hash twice; it still counts once, and with the twins collapsed into one copy and `y`'s block deleted, `x` commits by HASH (target 0) and claims that block. `y` then has no unclaimed block and detaches with score 0. Counting each recording makes the hash look shared: `x` falls to tier 3 (quote, target 0) and `y`, scored against an unclaimed block, detaches at 0.36.",
+      "before": "Same.\n<!-- stay:x -->\n\nOther.\n<!-- stay:y -->\n\nSame.\n<!-- stay:x -->\n",
+      "after": "Same.\n",
+      "threshold": 0.5,
+      "margin": 0.05,
+      "resolutions": {
+        "x": {
+          "method": "hash",
+          "target": 0,
+          "score": 1.0
+        },
+        "y": {
+          "method": "detached",
+          "target": null,
+          "score": 0.0
+        }
+      }
+    },
+    {
+      "name": "repeated-id-resolves-the-last-anchor-read-among-its-carriers",
+      "note": "SPEC.md §9.1 (v1.11), the tier-1 counterpart of `repeated-id-resolves-the-last-anchor-read-at-every-tier`: the same baseline repeating `x` (a §7 error), but both markers survive and the second block is edited, so `x` sits on two carriers. The anchor resolved is the last one read, whose hash no carrier still has, so tier 1 applies §9's commit rule over the two carriers with that anchor's quote and commits the edited block (method `marker`, target 1, its quote score under 1.0). Using the first anchor read at tier 1 finds the verbatim Alpha block by its hash instead (marker, target 0, 1.0); the other two repeated-id vectors strip every marker and cannot see that.",
+      "before": "Alpha block text.\n<!-- stay:x -->\n\nBravo block text here.\n<!-- stay:x -->\n",
+      "after": "Alpha block text.\n<!-- stay:x -->\n\nBravo block text here, edited.\n<!-- stay:x -->\n",
+      "threshold": 0.5,
+      "margin": 0.05,
+      "resolutions": {
+        "x": {
+          "method": "marker",
+          "target": 1,
+          "score": 0.8961538461538462
+        }
+      }
     }
   ]
 }
