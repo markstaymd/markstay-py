@@ -102,13 +102,13 @@ def test_a_marker_in_an_opening_fence_info_string_is_not_a_marker():
     assert [b.markers for b in blocks] == [[], []]
 
 
-def test_an_inline_code_span_still_carries_a_marker():
-    # §3.3 declines inline spans on purpose: that is the shape pandoc's native
-    # markdown writer produces when it mangles a trailing marker, and a mangled
-    # marker a tool can still see beats one that has silently stopped existing.
+def test_an_inline_code_span_is_content_since_v1_12():
+    # §3.3 leaves inline spans to §3.5, which makes a closed one content too.
+    # pandoc's mangled form, a span followed by `{=html}`, stays a marker; both
+    # halves are pinned in test_code_spans.py.
     md = "A line showing `<!-- stay:demo -->` inline.\n"
     (block,) = M.parse_document(md)
-    assert [mk.id for mk in block.markers] == ["demo"]
+    assert block.markers == []
 
 
 # --- writing (§3.3 writer rules) ------------------------------------------

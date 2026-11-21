@@ -87,6 +87,9 @@ class Marker:
     subhash: str | None = None
     # §16 routes on exact parsed key presence, not on digest validity.
     has_subhash: bool = False
+    # 0-based column of the opener in its LF-normalized line, which §3.5's
+    # span mask reads. Positional, so off the marker projection and equality.
+    column: int = field(default=0, repr=False, compare=False)
     # Private scanner-retained spans used by writer surgery. They deliberately
     # stay off the language-neutral marker projection.
     _id_span: tuple[int, int] | None = field(default=None, repr=False, compare=False)
@@ -474,6 +477,8 @@ def _scan_marker_records(text: str, line_offset: int = 0) -> list[_MarkerRecord]
                     raw=text[raw_start:raw_end],
                     syntax=syntax,
                     line=line_offset + (newlines + 1),
+                    column=opener.start()
+                    - (normalized.rfind("\n", 0, opener.start()) + 1),
                     malformed=malformed,
                     _id_span=(
                         (
@@ -649,11 +654,284 @@ def fence_state(text: str) -> tuple[set[int], set[int]]:
     return inside, open_after
 
 
-def code_lines(text: str) -> set[int]:
-    """The 1-based line numbers inside a fenced code block (SPEC.md §3.3). Text
-    there is content: a marker-shaped string on one of these lines identifies no
-    block, is hashed with the body (§8), and does not make its block stamped."""
-    return fence_state(text)[0]
+# --- closed inline code spans (SPEC.md §3.5, v1.12) -------------------------
+
+_BACKTICK_RUN_RE = re.compile(r"`+")
+_RAW_HTML_ATTRIBUTE = "{=html}"
+# What a link destination, title or reference label must not hold for §3.5 to pass
+# over it: anything that can open a title, nest, escape or reach a span or a tag.
+_LINK_UNSAFE = frozenset("`<{([\\\"'")
+# A container prefix in front of a line's content: a blockquote `>` or a list
+# marker. Stripped repeatedly, so `> - <div>` reads as starting with `<`.
+_SPAN_CONTAINER_RE = re.compile(r"[ \t]*(?:>[ \t]?|[-+*][ \t]+|[0-9]{1,9}[.)][ \t]+)")
+# CommonMark's HTML block types 1 to 5, the ones that run on across blank lines,
+# each with its end condition. Any other line whose content starts with `<` is
+# treated as types 6 and 7 are, running to the next blank line.
+_SPAN_HTML_BLOCKS = (
+    (
+        # Any of the four names not continued by a tag-name character: CommonMark
+        # wants a space, tab, `>` or line end there, and markdown-it-py accepts any
+        # Unicode whitespace, so recognising more than either is the safe side.
+        # markdown-it-py also folds case by Unicode, under which U+017F matches `s`
+        # and U+0130 and U+0131 match `i`; those are spelled out, so every
+        # implementation matches the same strings without a Unicode case table.
+        re.compile(
+            "<(?:[s\u017f]cr[i\u0130\u0131]pt|pre|[s\u017f]tyle|textarea)(?![A-Za-z0-9-])",
+            re.IGNORECASE | re.ASCII,
+        ),
+        re.compile(r"</(?:script|pre|style|textarea)>", re.IGNORECASE | re.ASCII),
+    ),
+    (re.compile(r"<!--"), re.compile(r"-->")),
+    (re.compile(r"<\?"), re.compile(r"\?>")),
+    (re.compile(r"<![A-Za-z]"), re.compile(r">")),
+    (re.compile(r"<!\[CDATA\["), re.compile(r"\]\]>")),
+)
+
+
+class CodeMask(set):
+    """The code mask for one document. As a set it holds the 1-based line numbers
+    inside a fenced code block (SPEC.md §3.3), which is the question every
+    ``line in code`` test asks, so those seams are unchanged. ``spans`` adds the
+    closed inline code spans §3.5 makes content: 1-based line number to the
+    ``[start, end)`` columns of each span's content, in LF-normalized text. Only
+    the marker test reads it.
+
+    Truthiness counts both halves, because ``if not code`` is how callers skip
+    the mask, and a document with no fence can still have a span to honour."""
+
+    def __init__(self, lines=(), spans: dict[int, list[tuple[int, int]]] | None = None):
+        super().__init__(lines)
+        self.spans: dict[int, list[tuple[int, int]]] = spans or {}
+
+    def __bool__(self) -> bool:
+        return len(self) > 0 or bool(self.spans)
+
+    def __eq__(self, other: object) -> bool:
+        # Two masks are equal only if their spans are, so a test comparing two
+        # masks sees a span regression too. Against a plain set, as the fence
+        # tests compare, only the fence half can be compared.
+        if isinstance(other, CodeMask):
+            return set.__eq__(self, other) and self.spans == other.spans
+        return set.__eq__(self, other)
+
+    def __ne__(self, other: object) -> bool:
+        equal = self.__eq__(other)
+        return equal if equal is NotImplemented else not equal
+
+    __hash__ = None  # type: ignore[assignment]  # mutable, as a set is
+
+
+def _inline_code_spans(text: str, fence: set[int]) -> dict[int, list[tuple[int, int]]]:
+    """The closed inline code spans whose content SPEC.md §3.5 makes content.
+
+    A left-to-right scan of each line, over stretches of lines that are neither
+    blank nor inside a §3.3 fence, since a code span crosses neither. A backtick
+    run opens a span that the next run of the same length on the same line
+    closes, and the scan resumes after the closer. Wherever the scan meets
+    something CommonMark could read before a backtick, it stops for the rest of
+    the stretch, and the spans it already closed stand:
+
+    * a run with no closer on its line, which CommonMark may close from a later
+      line, re-pairing everything after it;
+    * a ``<`` outside a span and outside a marker-shaped string, which can open
+      an HTML tag or an autolink, and those outrank a code span by opening first
+      (CommonMark 6.1), across lines for a tag;
+    * a ``{`` there, which opens an MDX expression, an MDX comment included, whose
+      backticks are no delimiters to an MDX parser;
+    * a ``]`` there followed by ``(``, ``[`` or ``:``, where a link or image
+      destination, a title, a reference label or a link reference definition
+      consumes raw text, backticks included, before any span is looked for,
+      unless the part up to the first ``)`` or ``]`` closes before the next run
+      and holds none of ``_LINK_UNSAFE``, so an ordinary link is passed over;
+    * a ``[`` there with no ``]`` after it before the next run, a link label
+      still open, which markdown-it-py scans ahead in a way that can leave a span
+      unclosed where CommonMark closes it;
+    * a backtick run inside a marker-shaped string, as an opener, a closer or
+      anything between them, which is a delimiter or not depending on whether a
+      renderer accepts that string as a comment, and on which renderer;
+    * a backtick run directly behind a backslash, which CommonMark escapes;
+    * a line whose content, after any `>` or list-marker prefix, starts with
+      ``<``: an HTML block, which has no inline content at all. Types 1 to 5 run
+      to their end condition, across blank lines, and the rest to a blank line.
+      The scan resumes only after a blank line, even past an end condition,
+      because a block inside a list item ends with the item, and the line holding
+      the end condition is then paragraph text that runs on into the next. For
+      the same reason every type 1 to 5 opener met while a block is open is
+      tracked as well: the container may have ended and a new block begun.
+
+    A span whose content holds a ``|`` stops the scan as well, because GFM splits
+    a table row's cells before any inline scan, so neither it nor any pairing
+    after it is one a renderer makes. A span followed by ``{=html}`` is left
+    live, since pandoc's raw-inline syntax declares its content HTML. That is the shape pandoc's native writer gives a trailing
+    marker, kept visible as a marker rather than lost.
+
+    Every rule here can only leave a marker live, never mask one CommonMark
+    reads as a comment. A conforming writer puts a marker last on its line, so
+    no closer follows it there."""
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    if "`" not in normalized:
+        return {}
+    records = _scan_marker_records(normalized)
+    shaped = _merged_record_ranges(records)
+    shaped_starts = [start for start, _ in shaped]
+    # What `opens_before` may pass over unread: an HTML-form string whose body
+    # holds nothing that could open a construct if a renderer declined it as a
+    # comment. An MDX-form string is ordinary text to CommonMark, so a `<` or
+    # `[` in its quoted value is live there; it is read like any other text, and
+    # its own `{` stops the scan.
+    skippable = _merged_record_ranges(
+        [
+            record
+            for record in records
+            if record.marker.syntax == "html"
+            and not any(c in "<[]{" for c in normalized[record.start + 4 : record.end - 3])
+            and "--" not in normalized[record.start + 4 : record.end - 3]
+        ]
+    )
+    skippable_starts = [start for start, _ in skippable]
+
+    def shaped_at(at: int) -> tuple[int, int] | None:
+        index = bisect.bisect_right(shaped_starts, at) - 1
+        if index >= 0 and at < shaped[index][1]:
+            return shaped[index]
+        return None
+
+    def skippable_at(at: int) -> tuple[int, int] | None:
+        index = bisect.bisect_right(skippable_starts, at) - 1
+        if index >= 0 and at < skippable[index][1]:
+            return skippable[index]
+        return None
+
+    def opens_before(line: str, start: int, left: int, right: int) -> bool:
+        """Whether line[left:right] holds, outside every marker-shaped string, a
+        character that can start a construct CommonMark or MDX reads before a
+        backtick: `<` (a tag or an autolink), `{` (an MDX expression), or a `]`
+        followed by `(`, `[` or `:` (a link or image destination, a reference
+        label, a link reference definition)."""
+        at = left
+        while at < right:
+            found = skippable_at(start + at)
+            if found is not None:
+                at = found[1] - start
+                continue
+            char = line[at]
+            if char == "]" and line[at + 1 : at + 2] in ("(", "["):
+                # A destination or label holding none of these characters, closed
+                # before the next run, consumes nothing a span could need, so an
+                # ordinary link is passed over rather than stopping the scan.
+                close = line.find(")" if line[at + 1] == "(" else "]", at + 2, right)
+                if close >= 0 and not any(c in _LINK_UNSAFE for c in line[at + 2 : close]):
+                    # Past a destination's `)`, but back ON a label's closing `]`,
+                    # which may itself open a destination: `[a][b](`)`.
+                    at = close + 1 if line[at + 1] == "(" else close
+                    continue
+            if char in "<{" or (char == "]" and line[at + 1 : at + 2] in ("(", "[", ":")):
+                return True
+            if char == "[":
+                # A link label left open past the next run. markdown-it-py scans
+                # such a label ahead and can leave a span unclosed that
+                # CommonMark closes, so a comment after it stays live there. A
+                # label counts as closed only by a `]` with no `[` or backslash
+                # before it, since a nested or escaped bracket closes nothing.
+                close = line.find("]", at + 1, right)
+                if close < 0 or any(c in "[\\" for c in line[at + 1 : close]):
+                    return True
+            at += 1
+        return False
+
+    spans: dict[int, list[tuple[int, int]]] = {}
+    scanning = True
+    html_open = False  # inside what may be an HTML block
+    pending: list[re.Pattern] = []  # end conditions of types 1 to 5 still unmet
+    offset = 0
+    for number, line in enumerate(normalized.split("\n"), 1):
+        start = offset
+        offset += len(line) + 1
+        blank = line.strip(" \t") == ""
+        # A byte-order mark opening the document is no text to a renderer that
+        # strips it, as pandoc does, so it must not hide an HTML block opener.
+        content = line[1:] if number == 1 and line.startswith("\ufeff") else line
+        while (prefix := _SPAN_CONTAINER_RE.match(content)) and prefix.end() > 0:
+            content = content[prefix.end():]
+        content = content.lstrip(" \t")
+        opener = (
+            next((close for open_, close in _SPAN_HTML_BLOCKS if open_.match(content)), None)
+            if content.startswith("<")
+            else None
+        )
+        if html_open:
+            # A container can end under an open block and a new block start
+            # after it, so every opener met here is tracked too. The scan
+            # resumes only once every end condition seen has been met and a
+            # blank line follows.
+            if opener is not None and not opener.search(line):
+                pending.append(opener)
+            pending = [end for end in pending if not end.search(line)]
+            if blank and not pending:
+                html_open = False
+                scanning = True
+            continue
+        if number in fence or blank:
+            scanning = True
+            continue
+        if content.startswith("<"):
+            html_open = True
+            pending = [opener] if opener is not None and not opener.search(line) else []
+            continue
+        if not scanning:
+            continue
+        runs = [(m.start(), m.end()) for m in _BACKTICK_RUN_RE.finditer(line)]
+        found: list[tuple[int, int]] = []
+        pos = 0
+        i = 0
+        while i < len(runs):
+            left, right = runs[i]
+            if (
+                opens_before(line, start, pos, left)
+                or shaped_at(start + left) is not None
+                or (left > 0 and line[left - 1] == "\\")
+            ):
+                scanning = False
+                break
+            width = right - left
+            j = i + 1
+            while j < len(runs) and runs[j][1] - runs[j][0] != width:
+                j += 1
+            if j == len(runs) or any(
+                shaped_at(start + runs[k][0]) is not None for k in range(i + 1, j + 1)
+            ):
+                # No closer on this line, or a run up to and including the closer
+                # sits inside a marker-shaped string. CommonMark pairs the latter,
+                # but markdown-it-py does not always: scanning a link label it
+                # skips the comment and will not close a span inside it later.
+                scanning = False
+                break
+            close_left, close_right = runs[j]
+            if "|" in line[right:close_left]:
+                # GFM splits a table row's cells before any inline scan, so a pair
+                # of runs in different cells is no span, and pairing the runs
+                # after it would follow a split this scan cannot see.
+                scanning = False
+                break
+            if not line.startswith(_RAW_HTML_ATTRIBUTE, close_right):
+                found.append((right, close_left))
+            pos = close_right
+            i = j + 1
+        else:
+            if opens_before(line, start, pos, len(line)):
+                scanning = False
+        if found:
+            spans[number] = found
+    return spans
+
+
+def code_lines(text: str) -> "CodeMask":
+    """The 1-based line numbers inside a fenced code block (SPEC.md §3.3), as a
+    :class:`CodeMask` that also carries the closed inline code spans of §3.5.
+    Text in either is content: a marker-shaped string there identifies no block,
+    is hashed with the body (§8), and does not make its block stamped."""
+    fence = fence_state(text)[0]
+    return CodeMask(fence, _inline_code_spans(text, fence))
 
 
 def marker_outside_code(marker: Marker, code: set[int] | None) -> bool:
@@ -664,7 +942,14 @@ def marker_outside_code(marker: Marker, code: set[int] | None) -> bool:
     lines and close inside a fence it opened outside. Every path that separates
     active markers from marker-shaped content asks here, so the reading is one
     decision rather than a copy of the same expression at each seam."""
-    return not code or marker.line not in code
+    if not code:
+        return True
+    if marker.line in code:
+        return False
+    spans = getattr(code, "spans", None)
+    return not spans or not any(
+        start <= marker.column < end for start, end in spans.get(marker.line, ())
+    )
 
 
 def strip_markers_outside_code(text: str, code: set[int], line_offset: int = 0) -> str:
@@ -940,7 +1225,20 @@ def child_body(
     fence, but the parameter is threaded from both.
     """
     if kind == "row":
-        cells = _row_cells(text)
+        # §3.5: a marker quoted in a cell's code span is content. It stays an
+        # opaque token for finding cell boundaries, like every marker-shaped
+        # string, and stays in the cell text, so the row hashes over it.
+        content = (
+            {
+                (record.start, record.end)
+                for record in _scan_marker_records(text, line_offset)
+                if not record.marker.malformed
+                and not marker_outside_code(record.marker, code)
+            }
+            if code
+            else set()
+        )
+        cells = _row_cells(text, content)
         if cells is None:
             return ""
         return "|".join(
@@ -1010,8 +1308,14 @@ def _remove_spans(text: str, spans: list[tuple[int, int]]) -> str:
     return "".join(out)
 
 
-def _row_cells(line: str) -> list[str] | None:
-    """Return §5.6 cells after fixing boundaries around opaque marker tokens."""
+def _row_cells(
+    line: str, content: set[tuple[int, int]] | frozenset = frozenset()
+) -> list[str] | None:
+    """Return §5.6 cells after fixing boundaries around opaque marker tokens.
+
+    ``content`` holds the ``(start, end)`` offsets in ``line`` of marker-shaped
+    strings that §3.3 or §3.5 makes content: they still bound no cell, and they are
+    kept in the cell text rather than removed."""
     leading_spaces = len(line) - len(line.lstrip(" "))
     if leading_spaces > 3:
         return None
@@ -1053,6 +1357,7 @@ def _row_cells(line: str) -> list[str] | None:
             )
             for marker_start, marker_end in spans
             if start < marker_start and marker_end <= end
+            and (marker_start + leading_spaces, marker_end + leading_spaces) not in content
         ]
         cell = _remove_spans(working[start + 1 : end], cell_spans)
         cells.append(cell.strip(" \t\f\v"))

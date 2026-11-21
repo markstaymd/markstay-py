@@ -377,6 +377,48 @@
           }
         ]
       }
+    },
+    {
+      "name": "stamp-gives-a-paragraph-quoting-a-marker-a-stay-of-its-own",
+      "op": "stamp",
+      "input": "Shows `<!-- stay:demo hash=sha256:7a9c -->` inline.\n",
+      "options": {},
+      "ids": [
+        "n0"
+      ],
+      "expected": {
+        "text": "Shows `<!-- stay:demo hash=sha256:7a9c -->` inline.\n<!-- stay:n0 hash=sha256:678cd1130f37 -->\n",
+        "minted": [
+          {
+            "id": "n0",
+            "line": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "restamp-leaves-a-quoted-example-alone",
+      "op": "restamp",
+      "input": "Shows `<!-- stay:demo hash=sha256:7a9c -->` inline.\n<!-- stay:live hash=sha256:0000 -->\n",
+      "options": {},
+      "expected": {
+        "text": "Shows `<!-- stay:demo hash=sha256:7a9c -->` inline.\n<!-- stay:live hash=sha256:678c -->\n",
+        "refreshed": [
+          "live"
+        ]
+      }
+    },
+    {
+      "name": "repair-leaves-two-quotes-of-one-example-alone",
+      "op": "repair",
+      "input": "Quote `<!-- stay:demo -->` and `<!-- stay:demo -->` here.\n",
+      "ids": [
+        "n0"
+      ],
+      "expected": {
+        "text": "Quote `<!-- stay:demo -->` and `<!-- stay:demo -->` here.\n",
+        "renamed": []
+      }
     }
   ]
 }

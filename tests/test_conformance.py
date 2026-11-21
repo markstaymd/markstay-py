@@ -360,10 +360,10 @@ VERIFIERS = {
 KNOWN_PROFILES = {"rows", "items"}
 ADVERTISED_PROFILES = {"rows", "items"}
 PROFILE_CATEGORIES = {"rows": "rows", "items": "items"}
-CORE_VECTORS = 531
+CORE_VECTORS = 580
 # Advertised profiles are pinned too. A count that is only reported cannot
 # catch a vector going missing, because the denominator shrinks with it.
-PROFILE_VECTORS = {"rows": 32, "items": 9}
+PROFILE_VECTORS = {"rows": 34, "items": 9}
 
 
 # --- discover every vector at collection time -----------------------------

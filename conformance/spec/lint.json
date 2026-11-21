@@ -123,6 +123,48 @@
           "line": 11
         }
       ]
+    },
+    {
+      "name": "two-quotes-of-one-example-in-code-spans-are-not-a-duplicate",
+      "doc": "Quote `<!-- stay:Nested01 -->` and `<!-- stay:Nested01 -->` here.\n",
+      "findings": []
+    },
+    {
+      "name": "a-quoted-example-and-an-identical-real-marker-are-not-a-duplicate",
+      "doc": "The form is `<!-- stay:aaaa -->` as written. <!-- stay:aaaa -->\n",
+      "findings": []
+    },
+    {
+      "name": "a-span-quoting-a-marker-is-hashed-with-the-body",
+      "doc": "Shows `<!-- stay:demo -->` inline.\n<!-- stay:live hash=sha256:dabda8892c99 -->\n",
+      "findings": []
+    },
+    {
+      "name": "a-span-quoting-a-marker-drifts-against-a-stripped-hash",
+      "doc": "Shows `<!-- stay:demo -->` inline.\n<!-- stay:live hash=sha256:7eacac213106 -->\n",
+      "findings": [
+        {
+          "level": "warn",
+          "code": "HASH_DRIFT",
+          "id": "live",
+          "line": 2
+        }
+      ]
+    },
+    {
+      "name": "two-raw-html-spans-sharing-an-id-are-a-duplicate",
+      "doc": "Raw `<!-- stay:dup -->`{=html} and `<!-- stay:dup -->`{=html}.\n",
+      "relation": "diverges",
+      "note": "\u00a73.5 keeps a span followed by `{=html}` live, so the two quotes are one id twice. A CommonMark parser reads two ordinary code spans, so a tree adapter sees no marker and reports nothing.",
+      "findings": [
+        {
+          "level": "error",
+          "code": "DUPLICATE_ID",
+          "id": "dup",
+          "line": 1
+        }
+      ],
+      "treeFindings": []
     }
   ]
 }

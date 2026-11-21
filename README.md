@@ -3,11 +3,11 @@
 [![PyPI](https://img.shields.io/pypi/v/markstay)](https://pypi.org/project/markstay/)
 [![Python versions](https://img.shields.io/pypi/pyversions/markstay)](https://pypi.org/project/markstay/)
 [![tests](https://img.shields.io/github/actions/workflow/status/markstaymd/markstay-py/test.yml?label=tests)](https://github.com/markstaymd/markstay-py/actions/workflows/test.yml)
-[![spec](https://img.shields.io/badge/spec-v1.11-blue)](https://markstay.org)
+[![spec](https://img.shields.io/badge/spec-v1.12-blue)](https://markstay.org)
 ![License](https://img.shields.io/pypi/l/markstay)
 
 The Python reference implementation of the [markstay spec](https://markstay.org)
-(v1.11). markstay is a source-level identity primitive for Markdown blocks: an id
+(v1.12). markstay is a source-level identity primitive for Markdown blocks: an id
 token that **stays** bound to its block across edits (marker `stay:`), so a
 reference to a block survives the document being rewritten, including by an LLM.
 
@@ -25,6 +25,14 @@ or accepted GFM table body row may carry its own stay under the reserved `subhas
 key, resolved through the §9.2 ladder. It is opt-in because §16 makes segmenting and
 resolving child blocks optional. The read/write safety rules §16 makes mandatory are
 unconditional here, as they are in every implementation.
+
+**Code is content (§3.3, §3.5).** A marker-shaped string inside a fenced code
+block, or opening inside a closed inline code span (v1.12), identifies no block, is
+hashed with the body, and is never rewritten. `code_lines` returns a `CodeMask`
+carrying both, and `Marker.column` is what the span half is judged by. The span
+scan stops wherever a renderer (CommonMark, markdown-it, MDX) could read the marker
+as a live comment, so a quote it cannot be sure of stays a marker rather than a stay
+being lost.
 
 **Write safety (§3.4, v1.8).** Child markers are inserted only at carriers that
 pass the plain-text predicate. It scans the container's original source prefix
@@ -286,7 +294,7 @@ and finds each document's baseline itself, which is what a hook actually wants.
 # .pre-commit-config.yaml
 repos:
   - repo: https://github.com/markstaymd/markstay-py
-    rev: v0.15.0
+    rev: v0.16.0
     hooks:
       - id: markstay                  # or markstay-collections, to include table
                                       # rows and list bullets
@@ -338,9 +346,9 @@ reported as a move rather than a loss, so reorganising documents does not block.
 ## The conformance corpus (the actual deliverable)
 
 The corpus under [`conformance/`](conformance) is shared with the JavaScript
-reference. **531 core vectors** across two tiers, plus two optional profiles
-this package advertises (32 `rows` and 9 `items` vectors), so its own runner
-reports **572**. The `check`
+reference. **580 core vectors** across two tiers, plus two optional profiles
+this package advertises (34 `rows` and 9 `items` vectors), so its own runner
+reports **623**. The `check`
 category supplies 20 commit-shaped cases with paths, statuses, before/after text,
 expected baseline pairings, findings, move/deletion/tracking-departure notes, and
 scope behavior.
@@ -352,9 +360,9 @@ scope behavior.
 - **`rows/`** , the optional profiles: `rows` (SPEC.md §5.6 table-row identity)
   and `items` (SPEC.md §5.5 list-item recovery, §9.2 tier 0, and the §5.3 write refusal per
   item). §16 keeps child segmentation optional, so a conforming runner MAY
-  decline them; the JavaScript and Rust references do, and run the 531 core
+  decline them; the JavaScript and Rust references do, and run the 580 core
   vectors alone. This package implements §5.5 and §5.6, so it advertises both
-  and runs all 572.
+  and runs all 623.
   A runner that meets a profile it has never heard of fails rather than skipping
   it, which is what stops a new category going missing quietly.
 

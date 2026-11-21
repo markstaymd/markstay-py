@@ -1,4 +1,4 @@
-"""markstay , Python reference implementation of the markstay spec (v1.11).
+"""markstay , Python reference implementation of the markstay spec (v1.12).
 
 A source-level identity primitive for Markdown blocks: an id token that *stays*
 bound to its block across edits. This package is the parser-free core (everything
@@ -11,7 +11,8 @@ names are experimental Python-only):
 
   hashing (§8)    normalize_body, body_hash
   markers (§3/§4) Marker, find_markers, strip_markers
-  code (§3.3)     code_lines, fence_state, strip_markers_outside_code
+  code (§3.3/3.5) code_lines (a CodeMask: fence lines and span columns), fence_state,
+                  strip_markers_outside_code
   segment (§5)    segment_blank_line, segment_commonmark
   parse (§5)      Block, parse_document
   lint (§7/§11)   Finding, lint_document, lint_diff, sort_findings, has_errors
@@ -99,7 +100,7 @@ from .preserve import (
 )
 from .staged import CommitEntry, StagedCheck, check_entries
 
-__version__ = "0.15.0"
+__version__ = "0.16.0"
 
 __all__ = [
     "__version__",

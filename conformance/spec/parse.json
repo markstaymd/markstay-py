@@ -813,23 +813,6 @@
       ]
     },
     {
-      "name": "inline-code-span-still-carries-a-marker",
-      "doc": "A line showing `<!-- stay:live -->` inline.\n",
-      "relation": "diverges",
-      "note": "The one marker-in-code divergence §3.3 deliberately leaves open: the string core binds a marker inside backticks, the tree leaves it literal.",
-      "blocks": [
-        {
-          "content": "A line showing `` inline.",
-          "index": 0,
-          "ids": [
-            "live"
-          ],
-          "line": 1,
-          "orphan": false
-        }
-      ]
-    },
-    {
       "name": "marker-opening-outside-a-fence-and-closing-inside-it",
       "doc": "Intro. <!-- stay:live x-note=\"start\n```txt\nlisting\" -->\nmore\n```\n",
       "relation": "diverges",
@@ -984,6 +967,740 @@
             "live"
           ],
           "line": 5,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "inline-code-span-marker-is-content",
+      "doc": "A line showing `<!-- stay:live -->` inline.\n",
+      "blocks": [
+        {
+          "content": "A line showing `<!-- stay:live -->` inline.",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "inline-code-span-mdx-marker-is-content",
+      "doc": "A line showing `{/* stay:live */}` inline.\n",
+      "blocks": [
+        {
+          "content": "A line showing `{/* stay:live */}` inline.",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "inline-code-span-longer-run-contains-a-shorter-one",
+      "doc": "Shows ``a ` <!-- stay:demo --> b`` with a longer run.\n",
+      "blocks": [
+        {
+          "content": "Shows ``a ` <!-- stay:demo --> b`` with a longer run.",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "inline-code-span-in-a-list-item-is-content",
+      "doc": "- an item quoting `<!-- stay:demo -->` here\n",
+      "blocks": [
+        {
+          "content": "- an item quoting `<!-- stay:demo -->` here",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "inline-code-span-crlf-twin-is-content",
+      "doc": "Shows `<!-- stay:demo -->` inline.\r\n",
+      "blocks": [
+        {
+          "content": "Shows `<!-- stay:demo -->` inline.",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "inline-code-span-a-closer-inside-a-marker-stops-the-scan",
+      "doc": "Shows `<!-- stay:demo quote=\"`\" --> after.\n",
+      "relation": "diverges",
+      "note": "CommonMark closes the span on the backtick inside the marker's quoted value, so the comment never opens. §3.5 stops instead, because markdown-it-py, scanning a link label ahead, does not always close a span inside a comment; a marker whose evidence carries a backtick stays a marker.",
+      "blocks": [
+        {
+          "content": "Shows ` after.",
+          "index": 0,
+          "ids": [
+            "demo"
+          ],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "inline-code-span-a-real-marker-after-a-span-counts",
+      "doc": "Shows `<!-- stay:demo -->` then a real one. <!-- stay:live -->\n",
+      "blocks": [
+        {
+          "content": "Shows `<!-- stay:demo -->` then a real one.",
+          "index": 0,
+          "ids": [
+            "live"
+          ],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "inline-code-span-blank-line-restarts-the-scan",
+      "doc": "A lone ` here\n\nthen `<!-- stay:demo -->` there.\n",
+      "blocks": [
+        {
+          "content": "A lone ` here",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        },
+        {
+          "content": "then `<!-- stay:demo -->` there.",
+          "index": 1,
+          "ids": [],
+          "line": 3,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "inline-code-span-unpaired-run-stops-the-scan",
+      "doc": "A lone ` here\nthen `<!-- stay:live -->` there.\n",
+      "note": "Not a divergence but the reason for the stop: CommonMark closes the first line's run with the second line's FIRST run, which leaves the comment outside any span and live. A scan pairing the second line on its own would hide it.",
+      "blocks": [
+        {
+          "content": "A lone ` here\nthen `` there.",
+          "index": 0,
+          "ids": [
+            "live"
+          ],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "inline-code-span-escaped-backtick-stops-the-scan",
+      "doc": "Shows \\`<!-- stay:live -->` escaped.\n",
+      "blocks": [
+        {
+          "content": "Shows \\`` escaped.",
+          "index": 0,
+          "ids": [
+            "live"
+          ],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "inline-code-span-an-html-tag-opening-first-stops-the-scan",
+      "doc": "Text <a title=\"`\"> <!-- stay:live --> ` end.\n",
+      "note": "The tag opens before either backtick and takes the first one, so the comment is live and the last backtick is literal. Pairing the two runs without the stop would hide it.",
+      "blocks": [
+        {
+          "content": "Text <a title=\"`\">  ` end.",
+          "index": 0,
+          "ids": [
+            "live"
+          ],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "inline-code-span-an-autolink-opening-first-stops-the-scan",
+      "doc": "Text <http://x.y/`> <!-- stay:live --> ` end.\n",
+      "note": "The autolink takes the first backtick, as the tag does in the vector above.",
+      "blocks": [
+        {
+          "content": "Text <http://x.y/`>  ` end.",
+          "index": 0,
+          "ids": [
+            "live"
+          ],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "inline-code-span-raw-html-attribute-stays-a-marker",
+      "doc": "Shows `<!-- stay:live -->`{=html} raw.\n",
+      "relation": "diverges",
+      "note": "pandoc's raw-inline syntax, the shape its native markdown writer gives a trailing marker. §3.5 keeps it a marker; a CommonMark parser reads an ordinary code span followed by text.",
+      "blocks": [
+        {
+          "content": "Shows ``{=html} raw.",
+          "index": 0,
+          "ids": [
+            "live"
+          ],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "inline-code-span-holding-a-pipe-stays-a-marker",
+      "doc": "Shows `a | <!-- stay:live -->` with a pipe.\n",
+      "relation": "diverges",
+      "note": "§3.5 leaves a span holding a `|` live, because GFM splits a table row before any inline scan. Outside a table a parser reads it as code.",
+      "blocks": [
+        {
+          "content": "Shows `a | ` with a pipe.",
+          "index": 0,
+          "ids": [
+            "live"
+          ],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "inline-code-span-a-backtick-inside-a-marker-stops-the-scan",
+      "doc": "A <!-- stay:live quote=\"`\" --> then `<!-- stay:demo -->`\n",
+      "relation": "diverges",
+      "note": "The first marker is a comment holding a backtick, so the scan stops there and reads the quoted example after it as a marker. A parser reads the comment, then a code span.",
+      "blocks": [
+        {
+          "content": "A  then ``",
+          "index": 0,
+          "ids": [
+            "live",
+            "demo"
+          ],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "inline-code-span-an-html-block-line-is-not-scanned",
+      "doc": "Para.\n<!-- stay:live --> `<!-- stay:demo -->`\n",
+      "relation": "diverges",
+      "note": "A line starting with a comment opens an HTML block, which has no inline content, so the backticks pair nothing and both comments are live. The tree makes the line a block of its own.",
+      "blocks": [
+        {
+          "content": "Para.\n ``",
+          "index": 0,
+          "ids": [
+            "live",
+            "demo"
+          ],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "inline-code-span-closed-before-a-stop-stands",
+      "doc": "Shows `<!-- stay:demo -->` then <b> `<!-- stay:live -->`\n",
+      "relation": "diverges",
+      "note": "The first span closes before the `<` that stops the scan, so it stands; the second is never scanned. A parser reads both as code.",
+      "blocks": [
+        {
+          "content": "Shows `<!-- stay:demo -->` then <b> ``",
+          "index": 0,
+          "ids": [
+            "live"
+          ],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "inline-code-span-across-lines-is-left-live",
+      "doc": "A `x\ny <!-- stay:live --> z` w\n",
+      "relation": "diverges",
+      "note": "A span that crosses a line is deliberately not recognised: the scan stops at the first line's unpaired run. A parser pairs the two runs across the line break and reads the comment as code.",
+      "blocks": [
+        {
+          "content": "A `x\ny  z` w",
+          "index": 0,
+          "ids": [
+            "live"
+          ],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "inline-code-span-an-unpaired-run-stops-even-where-a-later-pair-closes",
+      "doc": "A `` lone ` <!-- stay:live --> ` x\n",
+      "relation": "diverges",
+      "note": "The two-backtick run has no closer on its line, so the scan stops rather than skip it and pair the two single runs after it, which is what a parser does here. It stops because the run could close on a later line.",
+      "blocks": [
+        {
+          "content": "A `` lone `  ` x",
+          "index": 0,
+          "ids": [
+            "live"
+          ],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "inline-code-span-backticks-paired-inside-a-marker-still-stop-the-scan",
+      "doc": "A <!-- stay:live quote=\"`a`\" --> `<!-- stay:demo -->`\n",
+      "relation": "diverges",
+      "note": "Two runs inside a marker-shaped string pair with each other, but a run inside one stops the scan whatever it would pair with. A parser reads the comment, then a code span.",
+      "blocks": [
+        {
+          "content": "A  ``",
+          "index": 0,
+          "ids": [
+            "live",
+            "demo"
+          ],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "inline-code-span-an-html-block-in-a-list-item-is-not-scanned",
+      "doc": "- <!-- stay:live --> `<!-- stay:demo -->`\n",
+      "relation": "diverges",
+      "note": "The list marker is set aside before the line is tested, so the comment opens an HTML block inside the item and both comments are live.",
+      "blocks": [
+        {
+          "content": "-  ``",
+          "index": 0,
+          "ids": [
+            "live",
+            "demo"
+          ],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "inline-code-span-an-html-block-ended-by-its-list-item",
+      "doc": "- <!-- stay:one x-note=\"a\nb\" --> ` x\n`<!-- stay:two -->` y\n",
+      "relation": "diverges",
+      "note": "The HTML block ends with its list item, so the line holding `-->` is paragraph text whose backtick pairs with the next line's first one, leaving the second comment live. The scan stays off until a blank line rather than resume after the end condition. The tree splits the list from the paragraph.",
+      "blocks": [
+        {
+          "content": "-  ` x\n`` y",
+          "index": 0,
+          "ids": [
+            "one",
+            "two"
+          ],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "inline-code-span-a-pre-block-runs-across-blank-lines",
+      "doc": "Intro.\n\n<pre>\n\n`<!-- stay:demo -->`\n\n</pre>\n",
+      "relation": "diverges",
+      "note": "A `<pre>` block runs to `</pre>` across blank lines and has no inline content, so the comment is live. The tree makes the block one node, which §5.4 already lists as a divergence.",
+      "blocks": [
+        {
+          "content": "Intro.",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        },
+        {
+          "content": "<pre>",
+          "index": 1,
+          "ids": [],
+          "line": 3,
+          "orphan": false
+        },
+        {
+          "content": "``",
+          "index": 2,
+          "ids": [
+            "demo"
+          ],
+          "line": 5,
+          "orphan": false
+        },
+        {
+          "content": "</pre>",
+          "index": 3,
+          "ids": [],
+          "line": 7,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "inline-code-span-a-link-destination-stops-the-scan",
+      "doc": "[x](`) <!-- stay:live --> `\n",
+      "note": "The link destination takes the first backtick before any span is looked for, so the comment is live and the last backtick is literal. Pairing the two runs would hide it.",
+      "blocks": [
+        {
+          "content": "[x](`)  `",
+          "index": 0,
+          "ids": [
+            "live"
+          ],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "inline-code-span-a-link-title-stops-the-scan",
+      "doc": "[x](u \"`\") <!-- stay:live --> `\n",
+      "note": "A quoted title takes the backtick the same way.",
+      "blocks": [
+        {
+          "content": "[x](u \"`\")  `",
+          "index": 0,
+          "ids": [
+            "live"
+          ],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "inline-code-span-an-ordinary-link-is-passed-over",
+      "doc": "See [doc](u) and `<!-- stay:demo -->` here.\n",
+      "blocks": [
+        {
+          "content": "See [doc](u) and `<!-- stay:demo -->` here.",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "inline-code-span-a-checkbox-does-not-stop-the-scan",
+      "doc": "- [ ] an item quoting `<!-- stay:demo -->` here\n",
+      "blocks": [
+        {
+          "content": "- [ ] an item quoting `<!-- stay:demo -->` here",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "inline-code-span-an-open-link-label-stops-the-scan",
+      "doc": "[ `<!-- stay:live -->`\n",
+      "relation": "diverges",
+      "note": "A `[` with no `]` before the next run is a link label still open. CommonMark reads a code span here, but markdown-it-py scans such a label ahead and can leave a later span unclosed, so §3.5 stops.",
+      "blocks": [
+        {
+          "content": "[ ``",
+          "index": 0,
+          "ids": [
+            "live"
+          ],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "inline-code-span-a-reference-definition-stops-the-scan",
+      "doc": "[a]: /u `<!-- stay:live -->`\n",
+      "relation": "diverges",
+      "note": "A `]:` may open a link reference definition, whose title can take a backtick. This line is not one, so a parser reads a code span; §3.5 stops without deciding.",
+      "blocks": [
+        {
+          "content": "[a]: /u ``",
+          "index": 0,
+          "ids": [
+            "live"
+          ],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "inline-code-span-an-mdx-expression-stops-the-scan",
+      "doc": "{/* ` */} {/* stay:live */} {/* ` */}\n",
+      "note": "An MDX parser reads three comment expressions, the middle one the marker, and no backtick inside them is a delimiter. A plain CommonMark parser would read two code spans. §3.5 stops at the first `{`, so it agrees with an MDX tree, which is how a tree adapter reads a document carrying an MDX marker.",
+      "blocks": [
+        {
+          "content": "{/* ` */}  {/* ` */}",
+          "index": 0,
+          "ids": [
+            "live"
+          ],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "inline-code-span-a-block-opened-after-its-container-ends",
+      "doc": "- <div>\n<pre>\n\n`<!-- stay:live -->`\n",
+      "relation": "diverges",
+      "note": "The `<div>` block ends with its list item, and `<pre>` opens a new block that runs to `</pre>` across the blank line, so the comment is raw HTML and live. Every type 1 to 5 opener met while a block is open is tracked for that reason. The tree makes the `<pre>` block one node.",
+      "blocks": [
+        {
+          "content": "- <div>\n<pre>",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        },
+        {
+          "content": "``",
+          "index": 1,
+          "ids": [
+            "live"
+          ],
+          "line": 4,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "inline-code-span-a-nested-bracket-leaves-a-label-open",
+      "doc": "[[]`<!-- stay:live -->`x`\n",
+      "relation": "diverges",
+      "note": "The inner `]` closes the inner `[`, so the outer label is still open when the first run comes. markdown-it-py keeps the comment live here and CommonMark reads a span; §3.5 counts a label closed only by a `]` with no `[` or backslash before it.",
+      "blocks": [
+        {
+          "content": "[[]``x`",
+          "index": 0,
+          "ids": [
+            "live"
+          ],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "inline-code-span-an-escaped-bracket-leaves-a-label-open",
+      "doc": "[a\\]`<!-- stay:live -->`x`\n",
+      "relation": "diverges",
+      "note": "An escaped `]` closes nothing, so the label is still open, as in the vector above, and CommonMark reads a span here too.",
+      "blocks": [
+        {
+          "content": "[a\\]``x`",
+          "index": 0,
+          "ids": [
+            "live"
+          ],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "inline-code-span-a-destination-holding-a-brace-stops-the-scan",
+      "doc": "[x]({/* foo) ` */} {/* stay:live */} `\n",
+      "note": "Not an ordinary link: the destination holds `{`, so the MDX comment it opens is not passed over. An MDX parser reads the comment, so its backtick is no delimiter and the marker is live. A tree adapter reads a document carrying an MDX marker through an MDX parser, so it agrees.",
+      "blocks": [
+        {
+          "content": "[x]({/* foo) ` */}  `",
+          "index": 0,
+          "ids": [
+            "live"
+          ],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "inline-code-span-a-link-after-a-label-is-examined",
+      "doc": "[a][x](`) <!-- stay:live --> `\n",
+      "note": "Passing over the label `[x]` ends ON its closing `]`, which then opens a destination that takes the backtick.",
+      "blocks": [
+        {
+          "content": "[a][x](`)  `",
+          "index": 0,
+          "ids": [
+            "live"
+          ],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "inline-code-span-a-pipe-in-a-span-stops-the-scan",
+      "doc": "a ` | x ` ` <!-- stay:live --> `\n|---|---|\n",
+      "relation": "diverges",
+      "note": "A GFM table header: the cells split at the `|` before any inline scan, so the second cell pairs its first two runs and the comment is live. Leaving the `|`-holding pair live but pairing on after it would mask the comment, which the differential found; §3.5 stops instead. CommonMark without tables reads one paragraph and two spans.",
+      "blocks": [
+        {
+          "content": "a ` | x ` `  `\n|---|---|",
+          "index": 0,
+          "ids": [
+            "live"
+          ],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "inline-code-span-a-tag-inside-an-mdx-marker-stops-the-scan",
+      "doc": "{/* stay:x a=\"<a b='\" */}`'> <!-- stay:live --> `\n",
+      "relation": "diverges",
+      "note": "An MDX-form marker is ordinary text to CommonMark, so the `<a b='` in its quoted value opens a tag that takes the first backtick, and the comment after it is live. §3.5 passes over only an HTML-form marker whose body could open nothing; this one is read, and its own `{` stops the scan.",
+      "blocks": [
+        {
+          "content": "`'>  `",
+          "index": 0,
+          "ids": [
+            "x",
+            "live"
+          ],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "inline-code-span-a-bracket-inside-an-mdx-marker-stops-the-scan",
+      "doc": "{/* stay:x a=[ */}`<!-- stay:live -->`x`\n",
+      "relation": "diverges",
+      "note": "The `[` in the MDX marker's value is a label still open to CommonMark, which is where markdown-it-py leaves the span after it unclosed.",
+      "blocks": [
+        {
+          "content": "``x`",
+          "index": 0,
+          "ids": [
+            "x",
+            "live"
+          ],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "inline-code-span-a-raw-text-tag-before-a-no-break-space-opens-a-block",
+      "doc": "<pre >\n\n`<!-- stay:live -->`\n",
+      "relation": "diverges",
+      "note": "CommonMark wants a space, tab, `>` or line end after `<pre`, and markdown-it-py accepts any Unicode whitespace, so it reads a `<pre>` block running across the blank line with the comment live in it. §3.5 recognises any of the four names not continued by a tag-name character.",
+      "blocks": [
+        {
+          "content": "<pre >",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        },
+        {
+          "content": "``",
+          "index": 1,
+          "ids": [
+            "live"
+          ],
+          "line": 3,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "inline-code-span-a-marker-body-holding-a-double-hyphen-is-read",
+      "doc": "Text <!-- stay:x a=\"b--c\" --> `<!-- stay:y -->`\n",
+      "relation": "diverges",
+      "note": "A comment body holding `--` was not a comment before CommonMark 0.31, and a renderer that still follows the older rule reads its `<` as text that can open a tag. §3.5 passes over only a marker whose body holds no `--`; this one is read, and its own `<` stops the scan. A current parser reads the comment, then a code span.",
+      "blocks": [
+        {
+          "content": "Text  ``",
+          "index": 0,
+          "ids": [
+            "x",
+            "y"
+          ],
+          "line": 1,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "inline-code-span-a-raw-text-name-folded-by-unicode-opens-a-block",
+      "doc": "<ſcript>\n\n`<!-- stay:live -->`\n",
+      "relation": "diverges",
+      "note": "markdown-it-py matches the four raw-text names case-insensitively by Unicode, under which U+017F LONG S matches `s`, so it reads a `<script>` block running across the blank line and the comment is live. §3.5 spells out U+017F for `s` and U+0130 and U+0131 for `i`, the only non-ASCII characters that fold onto these names.",
+      "blocks": [
+        {
+          "content": "<ſcript>",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        },
+        {
+          "content": "``",
+          "index": 1,
+          "ids": [
+            "live"
+          ],
+          "line": 3,
+          "orphan": false
+        }
+      ]
+    },
+    {
+      "name": "inline-code-span-a-byte-order-mark-does-not-hide-a-block-opener",
+      "doc": "﻿<pre>\n\n`<!-- stay:live -->`\n",
+      "relation": "diverges",
+      "note": "pandoc strips a byte-order mark opening the document, so `<pre>` opens a block that runs across the blank line and the comment is live. §3.5 sets such a mark aside on the first line when it looks for an HTML block.",
+      "blocks": [
+        {
+          "content": "﻿<pre>",
+          "index": 0,
+          "ids": [],
+          "line": 1,
+          "orphan": false
+        },
+        {
+          "content": "``",
+          "index": 1,
+          "ids": [
+            "live"
+          ],
+          "line": 3,
           "orphan": false
         }
       ]

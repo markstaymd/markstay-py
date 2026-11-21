@@ -642,6 +642,50 @@
     ],
     "drifted": []
    }
+  },
+  {
+   "name": "a-quoted-marker-in-a-cell-stays-in-the-row-body",
+   "note": "SPEC.md §3.5 and §5.6 (v1.12): a marker quoted in a cell's code span is content. It bounds no cell, and it stays in the body the row hashes over, so changing the quote drifts the row.",
+   "op": "children",
+   "doc": "| a | b |\n|---|---|\n| x `<!-- stay:q -->` | y<!-- stay:r1 subhash=sha256:1122 --> |\n\n<!-- stay:tb1 -->\n",
+   "expected": {
+    "blockIds": [
+     "tb1"
+    ],
+    "childIds": [
+     "r1"
+    ],
+    "rows": [
+     {
+      "container": 0,
+      "ordinal": 1,
+      "body": "x `<!-- stay:q -->`|y",
+      "ids": [
+       "r1"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "a-quoted-subhash-marker-in-a-cell-owns-no-row",
+   "note": "SPEC.md §5.6 rule 0 (v1.12): a `subhash` marker inside a closed inline code span §3.5 recognises addresses no row.",
+   "op": "children",
+   "doc": "| a | b |\n|---|---|\n| x `<!-- stay:q subhash=sha256:1122 -->` | y |\n\n<!-- stay:tb1 -->\n",
+   "expected": {
+    "blockIds": [
+     "tb1"
+    ],
+    "childIds": [],
+    "rows": [
+     {
+      "container": 0,
+      "ordinal": 1,
+      "body": "x `<!-- stay:q subhash=sha256:1122 -->`|y",
+      "ids": []
+     }
+    ]
+   }
   }
  ]
 }
